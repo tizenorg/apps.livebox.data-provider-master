@@ -1,0 +1,31 @@
+<manifest>
+	<!-- Provider master label -->
+	<define>
+		<domain name="org.tizen.data-provider-master" policy="restricted" />
+		<provide>
+			<label name="org.tizen.data-provider-master::log" />
+			<label name="org.tizen.data-provider-master::db" />
+			<label name="org.tizen.data-provider-master::data" />
+		</provide>
+	</define>
+	<request>
+		<domain name="_" />
+	</request>
+
+	<assign>
+		<!-- Executable file -->
+		<filesystem path="/usr/bin/data-provider-master" label="org.tizen.data-provider-master" exec_label="org.tizen.data-provider-master" />
+		<filesystem path="/usr/bin/liveinfo" label="org.tizen.data-provider-master" exec_label="org.tizen.data-provider-master" />
+
+		<!-- Configuration data -->
+		<filesystem path="/usr/share/data-provider-master" label="org.tizen.data-provider-master::data" />
+		<filesystem path="/usr/share/data-provider-master/abi.ini" label="org.tizen.data-provider-master::data" />
+
+		<!-- Package manager & Init script -->
+		<filesystem path="/etc/rc.d/init.d/data-provider-master" label="_" />
+		<filesystem path="/usr/lib/systemd/user/data-provider.service" label="_" />
+
+		<!-- Package manager plugin -->
+		<filesystem path="/usr/etc/package-manager/parserlib/liblivebox.so" label="_" />
+	</assign>
+</manifest>

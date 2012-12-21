@@ -26,7 +26,6 @@ pkg_check_modules(pkg REQUIRED
 	dri2proto
 	xext
 	xdamage
-	capi-context
 	pkgmgr
 	livebox-service
 )
@@ -42,6 +41,9 @@ INCLUDE_DIRECTORIES(${CMAKE_CURRENT_SOURCE_DIR}/include)
 ADD_DEFINITIONS("-DPATH_MAX=256")
 ADD_DEFINITIONS("-DPACKAGE=\"${PACKAGE}\"")
 ADD_DEFINITIONS("-DLOCALEDIR=\"${LOCALEDIR}\"")
+
+
+
 
 ADD_DEFINITIONS("-DINFO_SOCKET=\"/opt/usr/share/live_magazine/.live.socket\"")
 ADD_DEFINITIONS("-DCLIENT_SOCKET=\"/opt/usr/share/live_magazine/.client.socket\"")
@@ -61,7 +63,6 @@ ADD_EXECUTABLE(${PROJECT_NAME}
 	src/parser.c
 	src/conf.c
 	src/dead_monitor.c
-	src/ctx_client.c
 	src/group.c
 	src/fb.c
 	src/script_handler.c
@@ -79,7 +80,6 @@ ADD_EXECUTABLE(${PROJECT_NAME}
 	src/abi.c
 	src/critical_log.c
 	src/liveinfo.c
-	src/ctx_wrapper.c
 	src/pkgmgr.c
 )
 

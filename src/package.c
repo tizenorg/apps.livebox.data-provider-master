@@ -40,7 +40,6 @@
 #include "abi.h"
 #include "io.h"
 #include "pkgmgr.h"
-#include "ctx_client.h"
 #include "xmonitor.h"
 
 int errno;
@@ -271,12 +270,6 @@ static int slave_resumed_cb(struct slave_node *slave, void *data)
 
 static inline void destroy_package(struct pkg_info *info)
 {
-	struct context_info *ctx_info;
-
-	EINA_LIST_FREE(info->ctx_list, ctx_info) {
-		ctx_disable_event_handler(ctx_info);
-	}
-
 	group_del_livebox(info->pkgname);
 	package_clear_fault(info);
 
@@ -461,8 +454,6 @@ static inline int load_conf(struct pkg_info *info)
 HAPI struct pkg_info *package_create(const char *pkgname)
 {
 	struct pkg_info *pkginfo;
-	Eina_List *l;
-	struct context_info *ctx_info;
 
 	pkginfo = calloc(1, sizeof(*pkginfo));
 	if (!pkginfo) {
@@ -500,10 +491,6 @@ HAPI struct pkg_info *package_create(const char *pkgname)
 	package_ref(pkginfo);
 
 	s_info.pkg_list = eina_list_append(s_info.pkg_list, pkginfo);
-
-	EINA_LIST_FOREACH(pkginfo->ctx_list, l, ctx_info) {
-		ctx_enable_event_handler(ctx_info);
-	}
 
 	return pkginfo;
 }
@@ -1220,16 +1207,11 @@ static int io_uninstall_cb(const char *pkgname, int prime, void *data)
 
 static inline void reload_package_info(struct pkg_info *info)
 {
-	struct context_info *ctx_info;
 	Eina_List *l;
 	Eina_List *n;
 	struct inst_info *inst;
 
 	DbgPrint("Already exists, try to update it\n");
-	EINA_LIST_FREE(info->ctx_list, ctx_info) {
-		ctx_disable_event_handler(ctx_info);
-	}
-
 	/*!
 	 * \note
 	 * Without "is_uninstalled", the package will be kept
@@ -1246,10 +1228,6 @@ static inline void reload_package_info(struct pkg_info *info)
 	 * Nested DB I/O
 	 */
 	io_load_package_db(info);
-
-	EINA_LIST_FOREACH(info->ctx_list, l, ctx_info) {
-		ctx_enable_event_handler(ctx_info);
-	}
 }
 
 static int io_install_cb(const char *pkgname, int prime, void *data)

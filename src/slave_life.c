@@ -36,7 +36,6 @@
 #include "slave_rpc.h"
 #include "client_life.h"
 #include "fault_manager.h"
-#include "ctx_client.h"
 #include "debug.h"
 #include "conf.h"
 #include "setting.h"

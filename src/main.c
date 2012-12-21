@@ -42,7 +42,6 @@
 #include "group.h"
 #include "dead_monitor.h"
 #include "conf.h"
-#include "ctx_client.h"
 #include "io.h"
 #include "xmonitor.h"
 #include "setting.h"
@@ -100,9 +99,6 @@ static inline int app_create(void)
 	ret = xmonitor_init();
 	DbgPrint("XMonitor init is done: %d\n", ret);
 
-	ret = ctx_client_init();
-	DbgPrint("Context engine is initialized: %d\n", ret);
-
 	ret = buffer_handler_init();
 	DbgPrint("Buffer handler init is done: %d\n", ret);
 
@@ -123,9 +119,6 @@ static inline int app_terminate(void)
 
 	ret = setting_fini();
 	DbgPrint("Finalize setting : %d\n", ret);
-
-	ret = ctx_client_fini();
-	DbgPrint("ctx_client_fini returns %d\n", ret);
 
 	xmonitor_fini();
 

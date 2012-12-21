@@ -72,8 +72,6 @@ HAPI struct conf g_conf = {
 
 	.ping_time = 240.0f,
 	.slave_max_load = 30,
-	.vconf_sys_cluster = "file/private/org.tizen.data-provider-master/cluster",
-	.max_pended_ctx_events = 256,
 
 	.use_sw_backend = 0,
 	.provider_method = "pixmap",
@@ -285,21 +283,6 @@ static void slave_max_loader(char *buffer)
 	DbgPrint("Max load: %d\n", g_conf.slave_max_load);
 }
 
-static void vconf_sys_cluster_handler(char *buffer)
-{
-	g_conf.vconf_sys_cluster = strdup(buffer);
-	if (!g_conf.vconf_sys_cluster)
-		ErrPrint("Heap %s\n", strerror(errno));
-	DbgPrint("System cluster vconf key: %s\n", g_conf.vconf_sys_cluster);
-}
-
-static void max_pended_ctx_event_handler(char *buffer)
-{
-	if (sscanf(buffer, "%d", &g_conf.max_pended_ctx_events) != 1)
-		ErrPrint("Failed to parse the max_pended_ctx_events\n");
-	DbgPrint("Maximum pended event: %d\n", g_conf.max_pended_ctx_events);
-}
-
 HAPI int conf_loader(void)
 {
 	FILE *fp;
@@ -410,14 +393,6 @@ HAPI int conf_loader(void)
 		{
 			.name = "slave_max_load",
 			.handler = slave_max_loader,
-		},
-		{
-			.name = "vconf_sys_cluster",
-			.handler = vconf_sys_cluster_handler,
-		},
-		{
-			.name = "max_pended_ctx_event",
-			.handler = max_pended_ctx_event_handler,
 		},
 		{
 			.name = "use_sw_backend",

@@ -1,6 +1,6 @@
 Name: org.tizen.data-provider-master
 Summary: Master data provider
-Version: 0.13.21
+Version: 0.13.24
 Release: 1
 Group: main/app
 License: Flora License
@@ -19,7 +19,6 @@ BuildRequires: pkgconfig(ecore-x)
 BuildRequires: pkgconfig(ecore)
 BuildRequires: pkgconfig(evas)
 BuildRequires: pkgconfig(ecore-evas)
-BuildRequires: pkgconfig(capi-context)
 BuildRequires: pkgconfig(com-core)
 BuildRequires: pkgconfig(heynoti)
 BuildRequires: pkgconfig(libxml-2.0)

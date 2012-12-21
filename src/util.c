@@ -337,6 +337,11 @@ static inline void compensate_timer(Ecore_Timer *timer)
 	double delay;
 	double pending;
 
+	if (ecore_timer_interval_get(timer) <= 1.0f) {
+		DbgPrint("Doesn't need to sync the timer to start from ZERO sec\n");
+		return;
+	}
+
 	if (gettimeofday(&tv, NULL) < 0) {
 		ErrPrint("Error: %s\n", strerror(errno));
 		return;
@@ -368,6 +373,42 @@ HAPI void util_timer_interval_set(void *timer, double interval)
 {
 	ecore_timer_interval_set(timer, interval);
 	compensate_timer(timer);
+}
+
+HAPI char *util_get_file_kept_in_safe(const char *id)
+{
+	const char *path;
+	char *new_path;
+	int len;
+	int base_idx;
+
+	path = util_uri_to_path(id);
+	if (!path) {
+		ErrPrint("Invalid URI(%s)\n", id);
+		return NULL;
+	}
+
+	/*!
+	 * TODO: Remove me
+	 */
+	if (OVERWRITE_CONTENT)
+		return strdup(path);
+
+	len = strlen(path);
+	base_idx = len - 1;
+
+	while (base_idx > 0 && path[base_idx] != '/') base_idx--;
+	base_idx += (path[base_idx] == '/');
+
+	new_path = malloc(len + 10);
+	if (!new_path) {
+		ErrPrint("Heap: %s\n", strerror(errno));
+		return NULL;
+	}
+
+	strncpy(new_path, path, base_idx);
+	snprintf(new_path + base_idx, len + 10 - base_idx, "reader/%s", path + base_idx);
+	return new_path;
 }
 
 /* End of a file */

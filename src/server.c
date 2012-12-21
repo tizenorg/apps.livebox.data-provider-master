@@ -2692,42 +2692,6 @@ out:
 	return NULL;
 }
 
-static inline char *get_file_kept_in_safe(const char *id)
-{
-	const char *path;
-	char *new_path;
-	int len;
-	int base_idx;
-
-	path = util_uri_to_path(id);
-	if (!path) {
-		ErrPrint("Invalid URI(%s)\n", id);
-		return NULL;
-	}
-
-	/*!
-	 * TODO: Remove me
-	 */
-	if (OVERWRITE_CONTENT)
-		return strdup(path);
-
-	len = strlen(path);
-	base_idx = len - 1;
-
-	while (base_idx > 0 && path[base_idx] != '/') base_idx--;
-	base_idx += (path[base_idx] == '/');
-
-	new_path = malloc(len + 10);
-	if (!new_path) {
-		ErrPrint("Heap: %s\n", strerror(errno));
-		return NULL;
-	}
-
-	strncpy(new_path, path, base_idx);
-	snprintf(new_path + base_idx, len + 10 - base_idx, "reader/%s", path + base_idx);
-	return new_path;
-}
-
 static struct packet *slave_updated(pid_t pid, int handle, const struct packet *packet) /* slave_name, pkgname, filename, width, height, priority, ret */
 {
 	struct slave_node *slave;
@@ -2776,7 +2740,7 @@ static struct packet *slave_updated(pid_t pid, int handle, const struct packet *
 		case LB_TYPE_SCRIPT:
 			script_handler_resize(instance_lb_script(inst), w, h);
 
-			filename = get_file_kept_in_safe(id);
+			filename = util_get_file_kept_in_safe(id);
 			if (filename) {
 				ret = script_handler_parse_desc(pkgname, id,
 								filename, 0);

@@ -60,7 +60,6 @@
  * = box_type = { text | buffer | script | image }
  * = pd_type = { text | buffer | script }
  * = network = { 1 | 0 }
- * = auto_launch = { 1 | 0 }
  * = secured = { 1 | 0 }
  *
  *
@@ -70,9 +69,9 @@
  * +-------+------+---------+-------------+---------+---------+-----------+-------+
  * |   -   |   -  |    -    |      -      |    -    |    -    |     -     |   -   |
  * +-------+------+---------+-------------+---------+---------+-----------+-------+
- * CREATE TABLE client ( pkgid TEXT PRIMARY KEY NOT NULL, icon TEXT, name TEXT, auto_launch INTEGER, pd_size TEXT, content TEXT DEFAULT "default", nodisplay INTEGER, setup TEXT, FOREIGN KEY(pkgid) REFERENCES pkgmap(pkgid) )
+ * CREATE TABLE client ( pkgid TEXT PRIMARY KEY NOT NULL, icon TEXT, name TEXT, auto_launch TEXT, pd_size TEXT, content TEXT DEFAULT "default", nodisplay INTEGER, setup TEXT, FOREIGN KEY(pkgid) REFERENCES pkgmap(pkgid) )
  *
- * = auto_launch = { 1 | 0 }
+ * = auto_launch = UI-APPID
  * = pd_size = WIDTHxHEIGHT
  *
  *
@@ -163,8 +162,8 @@ enum lb_size {
 struct livebox {
 	xmlChar *pkgid;
 	int secured;
-	int auto_launch;
 	int network;
+	xmlChar *auto_launch;
 	xmlChar *abi;
 	xmlChar *name; /* Default name */
 	xmlChar *icon; /* Default icon */
@@ -608,7 +607,7 @@ static inline int db_create_client(void)
 
 	ddl = "CREATE TABLE client (" \
 		"pkgid TEXT PRIMARY KEY NOT NULL, icon TEXT, name TEXT, " \
-		"auto_launch INTEGER, pd_size TEXT, content TEXT DEFAULT 'default', nodisplay INTEGER, setup TEXT, FOREIGN KEY(pkgid) REFERENCES pkgmap(pkgid) ON DELETE CASCADE)";
+		"auto_launch TEXT, pd_size TEXT, content TEXT DEFAULT 'default', nodisplay INTEGER, setup TEXT, FOREIGN KEY(pkgid) REFERENCES pkgmap(pkgid) ON DELETE CASCADE)";
 	if (sqlite3_exec(s_info.handle, ddl, NULL, NULL, &err) != SQLITE_OK) {
 		ErrPrint("Failed to execute the DDL (%s)\n", err);
 		return -EIO;
@@ -654,7 +653,7 @@ static inline int db_insert_client(struct livebox *livebox)
 		goto out;
 	}
 
-	ret = sqlite3_bind_int(stmt, 4, livebox->auto_launch);
+	ret = sqlite3_bind_text(stmt, 4, (char *)livebox->auto_launch, -1, NULL);
 	if (ret != SQLITE_OK) {
 		DbgPrint("Error: %s\n", sqlite3_errmsg(s_info.handle));
 		ret = -EIO;
@@ -1462,6 +1461,7 @@ static inline int livebox_destroy(struct livebox *livebox)
 	struct dlist *il;
 	struct dlist *in;
 
+	xmlFree(livebox->auto_launch);
 	xmlFree(livebox->pkgid);
 	xmlFree(livebox->abi);
 	xmlFree(livebox->name);
@@ -1614,6 +1614,22 @@ static inline void update_i18n_icon(struct livebox *livebox, xmlNodePtr node)
 	i18n->lang = lang;
 	DbgPrint("Icon[%s] - [%s] added\n", i18n->lang, i18n->icon);
 	livebox->i18n_list = dlist_append(livebox->i18n_list, i18n);
+}
+
+static inline void update_launch(struct livebox *livebox, xmlNodePtr node)
+{
+	xmlChar *launch;
+	launch = xmlNodeGetContent(node);
+	if (!launch) {
+		DbgPrint("Has no launch\n");
+		return;
+	}
+
+	livebox->auto_launch = xmlStrdup(launch);
+	if (!livebox->auto_launch) {
+		ErrPrint("Failed to duplicate string: %s\n", (char *)launch);
+		return;
+	}
 }
 
 static inline void update_setup(struct livebox *livebox, xmlNodePtr node)
@@ -2163,14 +2179,6 @@ static inline int do_install(xmlNodePtr node, const char *appid)
 		xmlFree(tmp);
 	}
 
-	if (xmlHasProp(node, (const xmlChar *)"auto_launch")) {
-		tmp = xmlGetProp(node, (const xmlChar *)"auto_launch");
-		livebox->auto_launch = tmp && !xmlStrcasecmp(tmp, (const xmlChar *)"true");
-		xmlFree(tmp);
-	} else {
-		livebox->auto_launch = 1; /* Default value */
-	}
-
 	if (xmlHasProp(node, (const xmlChar *)"network")) {
 		tmp = xmlGetProp(node, (const xmlChar *)"network");
 		livebox->network = tmp && !xmlStrcasecmp(tmp, (const xmlChar *)"true");
@@ -2260,6 +2268,11 @@ static inline int do_install(xmlNodePtr node, const char *appid)
 
 		if (!xmlStrcasecmp(node->name, (const xmlChar *)"setup")) {
 			update_setup(livebox, node);
+			continue;
+		}
+
+		if (!xmlStrcasecmp(node->name, (const xmlChar *)"launch")) {
+			update_launch(livebox, node);
 			continue;
 		}
 	}

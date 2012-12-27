@@ -21,7 +21,7 @@ extern int parser_unload(struct parser *handle);
 extern double parser_period(struct parser *handle);
 extern int parser_network(struct parser *handle);
 extern int parser_timeout(struct parser *handle);
-extern int parser_auto_launch(struct parser *handle);
+extern const char *parser_auto_launch(struct parser *handle);
 extern unsigned int parser_size(struct parser *handle);
 extern void parser_get_pdsize(struct parser *handle, unsigned int *width, unsigned int *height);
 extern const char *parser_group_str(struct parser *handle);

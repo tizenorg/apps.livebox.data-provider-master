@@ -169,7 +169,7 @@ extern const char * const instance_content(const struct inst_info *inst);
 extern const char * const instance_category(const struct inst_info *inst);
 extern const char * const instance_cluster(const struct inst_info *inst);
 extern const char * const instance_title(const struct inst_info *inst);
-extern const int const instance_auto_launch(const struct inst_info *inst);
+extern const char * const instance_auto_launch(const struct inst_info *inst);
 extern const int const instance_priority(const struct inst_info *inst);
 extern const struct client_node * const instance_client(const struct inst_info *inst);
 extern const double const instance_period(const struct inst_info *inst);

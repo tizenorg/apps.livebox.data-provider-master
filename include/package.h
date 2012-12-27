@@ -71,7 +71,7 @@ extern const char * const package_lb_group(const struct pkg_info *info);
 extern const char * const package_pd_path(const struct pkg_info *info);
 extern const char * const package_pd_group(const struct pkg_info *info);
 extern const int const package_pinup(const struct pkg_info *info);
-extern const int const package_auto_launch(const struct pkg_info *info);
+extern const char * const package_auto_launch(const struct pkg_info *info);
 extern const unsigned int const package_size_list(const struct pkg_info *info);
 extern const int const package_pd_width(const struct pkg_info *info);
 extern const int const package_pd_height(const struct pkg_info *info);
@@ -82,7 +82,7 @@ extern Eina_List *package_ctx_info(struct pkg_info *pkginfo);
 
 extern int package_set_libexec(struct pkg_info *info, const char *libexec);
 extern void package_set_pinup(struct pkg_info *info, int pinup);
-extern void package_set_auto_launch(struct pkg_info *info, int auto_launch);
+extern void package_set_auto_launch(struct pkg_info *info, const char *auto_launch);
 extern void package_set_size_list(struct pkg_info *info, unsigned int size_list);
 extern void package_set_lb_type(struct pkg_info *info, enum lb_type type);
 extern void package_set_pd_type(struct pkg_info *info, enum pd_type type);

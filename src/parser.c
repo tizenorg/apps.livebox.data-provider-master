@@ -45,7 +45,7 @@ struct parser {
 	double period;
 	int timeout;
 	int network;
-	int auto_launch;
+	char *auto_launch;
 	unsigned int size;
 	unsigned int pd_width;
 	unsigned int pd_height;
@@ -83,7 +83,7 @@ HAPI int parser_timeout(struct parser *handle)
 	return handle->timeout;
 }
 
-HAPI int parser_auto_launch(struct parser *handle)
+HAPI const char *parser_auto_launch(struct parser *handle)
 {
 	return handle->auto_launch;
 }
@@ -390,7 +390,11 @@ static void auto_launch_handler(struct parser *item, char *buffer)
 	if (!rtrim(buffer))
 		return;
 
-	item->auto_launch = !!atoi(buffer);
+	item->auto_launch = strdup(buffer);
+	if (!item->auto_launch) {
+		ErrPrint("Heap: %s\n", strerror(errno));
+		return;
+	}
 }
 
 static void size_handler(struct parser *item, char *buffer)
@@ -647,7 +651,7 @@ HAPI struct parser *parser_load(const char *pkgname)
 	item->lb_group = NULL;
 	item->pd_width = 0;
 	item->pd_height = 0;
-	item->auto_launch = 1;
+	item->auto_launch = NULL;
 	item->size = 0x00000001;
 	item->group = NULL;
 	item->secured = 0;
@@ -827,6 +831,7 @@ HAPI int parser_unload(struct parser *item)
 {
 	s_list = eina_list_remove(s_list, item);
 
+	DbgFree(item->auto_launch);
 	DbgFree(item->abi);
 	DbgFree(item->script);
 	DbgFree(item->group);

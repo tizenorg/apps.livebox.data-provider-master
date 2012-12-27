@@ -80,7 +80,7 @@ struct pkg_info {
 		} info;
 
 		unsigned int size_list;
-		int auto_launch;
+		char *auto_launch;
 		int pinup;
 	} lb;
 
@@ -289,6 +289,7 @@ static inline void destroy_package(struct pkg_info *info)
 	DbgFree(info->abi);
 	DbgFree(info->pkgname);
 	DbgFree(info->libexec);
+	DbgFree(info->lb.auto_launch);
 
 	DbgFree(info);
 }
@@ -437,7 +438,27 @@ static inline int load_conf(struct pkg_info *info)
 		info->period = MINIMUM_PERIOD;
 
 	info->lb.size_list = parser_size(parser);
-	info->lb.auto_launch = parser_auto_launch(parser);
+
+	str = parser_auto_launch(parser);
+	str = str ? str : "";
+	info->lb.auto_launch = strdup(str);
+	if (!info->lb.auto_launch) {
+		ErrPrint("Heap: %s\n", strerror(errno));
+		DbgFree(info->abi);
+		DbgFree(info->script);
+		if (info->pd.type == PD_TYPE_SCRIPT) {
+			DbgFree(info->pd.info.script.path);
+			DbgFree(info->pd.info.script.group);
+		}
+
+		if (info->lb.type == LB_TYPE_SCRIPT) {
+			DbgFree(info->lb.info.script.path);
+			DbgFree(info->lb.info.script.group);
+		}
+		parser_unload(parser);
+		return -ENOMEM;
+	}
+
 	info->secured = parser_secured(parser);
 	info->lb.pinup = parser_pinup(parser);
 
@@ -867,14 +888,18 @@ HAPI void package_set_pinup(struct pkg_info *info, int pinup)
 	info->lb.pinup = pinup;
 }
 
-HAPI const int const package_auto_launch(const struct pkg_info *info)
+HAPI const char * const package_auto_launch(const struct pkg_info *info)
 {
 	return info->lb.auto_launch;
 }
 
-HAPI void package_set_auto_launch(struct pkg_info *info, int auto_launch)
+HAPI void package_set_auto_launch(struct pkg_info *info, const char *auto_launch)
 {
-	info->lb.auto_launch = auto_launch;
+	info->lb.auto_launch = strdup(auto_launch);
+	if (!info->lb.auto_launch) {
+		ErrPrint("Heap: %s\n", strerror(errno));
+		return;
+	}
 }
 
 HAPI const unsigned int const package_size_list(const struct pkg_info *info)

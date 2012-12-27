@@ -241,7 +241,8 @@ static inline int build_client_info(struct pkg_info *info)
 		return -EIO;
 	}
 
-	package_set_auto_launch(info, sqlite3_column_int(stmt, 0));
+	package_set_auto_launch(info, (const char *)sqlite3_column_text(stmt, 0));
+
 	tmp = (const char *)sqlite3_column_text(stmt, 1);
 	if (tmp && strlen(tmp)) {
 		if (sscanf(tmp, "%dx%d", &width, &height) != 2) {

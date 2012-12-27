@@ -101,7 +101,7 @@ struct inst_info {
 			struct buffer_info *buffer;
 		} canvas;
 
-		int auto_launch;
+		const char *auto_launch;
 	} lb;
 
 	struct {
@@ -284,7 +284,7 @@ HAPI int instance_unicast_created_event(struct inst_info *inst, struct client_no
 	else
 		pd_file = "";
 
-	packet = packet_create_noack("created", "dsssiiiissssidiiiiidsi",
+	packet = packet_create_noack("created", "dsssiiiisssssdiiiiidsi",
 			inst->timestamp,
 			package_name(inst->info), inst->id, inst->content,
 			inst->lb.width, inst->lb.height,
@@ -344,7 +344,7 @@ static int instance_broadcast_created_event(struct inst_info *inst)
 	if (!inst->client)
 		client_browse_list(inst->cluster, inst->category, update_client_list, inst);
 
-	packet = packet_create_noack("created", "dsssiiiissssidiiiiidsi", 
+	packet = packet_create_noack("created", "dsssiiiisssssdiiiiidsi", 
 			inst->timestamp,
 			package_name(inst->info), inst->id, inst->content,
 			inst->lb.width, inst->lb.height,
@@ -471,6 +471,14 @@ static inline void destroy_instance(struct inst_info *inst)
 	if (inst->update_timer)
 		ecore_timer_del(inst->update_timer);
 
+	/*!
+	 * \note
+	 *
+	 * inst->lb.auto_launch
+	 *
+	 * will be released by the package object
+	 * it is readonly value for instances
+	 */
 	DbgFree(inst->category);
 	DbgFree(inst->cluster);
 	DbgFree(inst->content);
@@ -2054,7 +2062,7 @@ HAPI int instance_change_group(struct inst_info *inst, const char *cluster, cons
 	return slave_rpc_async_request(package_slave(inst->info), package_name(inst->info), packet, change_group_cb, cbdata, 0);
 }
 
-HAPI const int const instance_auto_launch(const struct inst_info *inst)
+HAPI const char * const instance_auto_launch(const struct inst_info *inst)
 {
 	return inst->lb.auto_launch;
 }

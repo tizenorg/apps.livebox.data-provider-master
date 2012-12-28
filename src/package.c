@@ -895,6 +895,9 @@ HAPI const char * const package_auto_launch(const struct pkg_info *info)
 
 HAPI void package_set_auto_launch(struct pkg_info *info, const char *auto_launch)
 {
+	if (!auto_launch)
+		auto_launch = "";
+
 	info->lb.auto_launch = strdup(auto_launch);
 	if (!info->lb.auto_launch) {
 		ErrPrint("Heap: %s\n", strerror(errno));

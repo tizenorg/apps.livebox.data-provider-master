@@ -2943,6 +2943,7 @@ static struct packet *slave_acquire_buffer(pid_t pid, int handle, const struct p
 
 			ret = buffer_handler_load(info);
 			if (ret == 0) {
+				instance_set_lb_info(inst, w, h, -1.0f, NULL, NULL);
 				id = buffer_handler_id(info);
 				DbgPrint("Buffer handler ID: %s\n", id);
 			} else {
@@ -2976,6 +2977,7 @@ static struct packet *slave_acquire_buffer(pid_t pid, int handle, const struct p
 
 			ret = buffer_handler_load(info);
 			if (ret == 0) {
+				instance_set_pd_info(inst, w, h);
 				id = buffer_handler_id(info);
 				DbgPrint("Buffer handler ID: %s\n", id);
 			} else {
@@ -3063,26 +3065,37 @@ static struct packet *slave_resize_buffer(pid_t pid, int handle, const struct pa
 	if (type == TYPE_LB) {
 		if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
 			struct buffer_info *info;
+
 			info = instance_lb_buffer(inst);
-			ret = buffer_handler_resize(info, w, h);
-			/*!
-			 * \note
-			 * id is resued for newly assigned ID
-			 */
-			if (!ret)
-				id = buffer_handler_id(info);
+			if (info) {
+				ret = buffer_handler_resize(info, w, h);
+				/*!
+				 * \note
+				 * id is resued for newly assigned ID
+				 */
+				if (!ret) {
+					id = buffer_handler_id(info);
+					instance_set_lb_info(inst, w, h, -1.0f, NULL, NULL);
+				}
+			}
 		}
 	} else if (type == TYPE_PD) {
 		if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
 			struct buffer_info *info;
+
 			info = instance_pd_buffer(inst);
-			ret = buffer_handler_resize(info, w, h);
-			/*!
-			 * \note
-			 * id is resued for newly assigned ID
-			 */
-			if (!ret)
-				id = buffer_handler_id(info);
+			if (info) {
+				ret = buffer_handler_resize(info, w, h);
+				/*!
+				 * \note
+				 * id is resued for newly assigned ID
+				 */
+				if (!ret) {
+					id = buffer_handler_id(info);
+					DbgPrint("Set PD Info: %dx%d\n", w, h);
+					instance_set_pd_info(inst, w, h);
+				}
+			}
 		}
 	}
 

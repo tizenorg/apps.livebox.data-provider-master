@@ -521,8 +521,7 @@ static inline int fork_package(struct inst_info *inst, const char *pkgname)
 	snprintf(inst->id, len, SCHEMA_FILE "%s%s_%d_%lf.png", IMAGE_PATH, package_name(info), client_pid(inst->client), inst->timestamp);
 	inst->lb.auto_launch = package_auto_launch(info);
 
-	inst->pd.width = package_pd_width(info);
-	inst->pd.height = package_pd_height(info);
+	instance_set_pd_info(inst, package_pd_width(info), package_pd_height(info));
 
 	inst->timeout = package_timeout(info);
 	inst->period = package_period(info);
@@ -1021,10 +1020,8 @@ static void activate_cb(struct slave_node *slave, const struct packet *packet, v
 			}
 
 			if (package_pd_type(inst->info) == PD_TYPE_SCRIPT) {
-				if (inst->pd.width == 0 && inst->pd.height == 0) {
-					inst->pd.width = package_pd_width(inst->info);
-					inst->pd.height = package_pd_height(inst->info);
-				}
+				if (inst->pd.width == 0 && inst->pd.height == 0)
+					instance_set_pd_info(inst, package_pd_width(inst->info), package_pd_height(inst->info));
 
 				inst->pd.canvas.script = script_handler_create(inst,
 								package_pd_path(inst->info),
@@ -1058,10 +1055,8 @@ out:
 
 HAPI int instance_create_pd_buffer(struct inst_info *inst)
 {
-	if (inst->pd.width == 0 && inst->pd.height == 0) {
-		inst->pd.width = package_pd_width(inst->info);
-		inst->pd.height = package_pd_height(inst->info);
-	}
+	if (inst->pd.width == 0 && inst->pd.height == 0)
+		instance_set_pd_info(inst, package_pd_width(inst->info), package_pd_height(inst->info));
 
 	if (!inst->pd.canvas.buffer) {
 		inst->pd.canvas.buffer = buffer_handler_create(inst, s_info.env_buf_type, inst->pd.width, inst->pd.height, sizeof(int));

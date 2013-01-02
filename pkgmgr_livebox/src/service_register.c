@@ -124,7 +124,7 @@
 #undef LOG_TAG
 #endif
 
-#define LOG_TAG "pkgmgr_livebox"
+#define LOG_TAG "PKGMGR_LIVEBOX"
 
 int errno;
 

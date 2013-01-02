@@ -39,6 +39,6 @@ extern FILE *__file_log_fp;
 #undef LOG_TAG
 #endif
 
-#define LOG_TAG "DATA-PROVIDER-MASTER"
+#define LOG_TAG "DATA_PROVIDER_MASTER"
 
 /* End of a file */

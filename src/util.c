@@ -21,6 +21,8 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <sys/statvfs.h>
+#include <sys/types.h>
+#include <dirent.h>
 
 #include <dlog.h>
 #include <Eina.h>
@@ -409,6 +411,55 @@ HAPI char *util_get_file_kept_in_safe(const char *id)
 	strncpy(new_path, path, base_idx);
 	snprintf(new_path + base_idx, len + 10 - base_idx, "reader/%s", path + base_idx);
 	return new_path;
+}
+
+HAPI int util_unlink_files(const char *folder)
+{
+	struct stat info;
+	DIR *handle;
+	struct dirent *entry;
+	char *abspath;
+	int len;
+
+	if (lstat(folder, &info) < 0) {
+		ErrPrint("Error: %s\n", strerror(errno));
+		return -EIO;
+	}
+
+	if (!S_ISDIR(info.st_mode)) {
+		ErrPrint("Error: %s is not a folder", folder);
+		return -EINVAL;
+	}
+
+	handle = opendir(folder);
+	if (!handle) {
+		ErrPrint("Error: %s\n", strerror(errno));
+		return -EIO;
+	}
+
+	while ((entry = readdir(handle))) {
+		if (!strcmp(entry->d_name, "."))
+			continue;
+
+		if (!strcmp(entry->d_name, ".."))
+			continue;
+
+		len = strlen(folder) + strlen(entry->d_name) + 3;
+		abspath = calloc(1, len);
+		if (!abspath) {
+			ErrPrint("Heap: %s\n", strerror(errno));
+			continue;
+		}
+		snprintf(abspath, len - 1, "%s/%s", folder, entry->d_name);
+
+		if (unlink(abspath) < 0)
+			DbgPrint("unlink: %s - %s\n", abspath, strerror(errno));
+
+		free(abspath);
+	}
+
+	closedir(handle);
+	return 0;
 }
 
 /* End of a file */

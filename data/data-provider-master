@@ -34,9 +34,6 @@ launch_provider()
 
 start ()
 {
-	rm /opt/usr/share/live_magazine/*
-	rm /opt/usr/share/live_magazine/reader/*
-	rm /opt/usr/share/live_magazine/log/*
 	rm /tmp/.stop.provider
 	launch_provider &
 }

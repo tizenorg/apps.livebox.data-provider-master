@@ -1,6 +1,6 @@
 Name: org.tizen.data-provider-master
 Summary: Master data provider
-Version: 0.13.29
+Version: 0.13.30
 Release: 1
 Group: main/app
 License: Flora License
@@ -73,6 +73,9 @@ chown 5000:5000 /opt/usr/share/live_magazine/log
 mkdir -p /opt/usr/share/live_magazine/reader
 chown 5000:5000 /opt/usr/share/live_magazine/reader
 
+mkdir -p /opt/usr/share/live_magazine/always
+chown 5000:5000 /opt/usr/share/live_magazine/always
+
 # End of a list of affected folder by the transmute attribute
 
 if [ ! -f "/opt/dbspace/livebox.db" ]; then
@@ -125,3 +128,5 @@ echo "%{_sysconfdir}/init.d/data-provider-master start"
 %{_datarootdir}/data-provider-master/*
 %{_libdir}/systemd/user/data-provider-master.service
 %{_datarootdir}/license/*
+
+# End of a file

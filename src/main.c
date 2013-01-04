@@ -226,6 +226,15 @@ int main(int argc, char *argv[])
 
 	conf_loader();
 
+	/*!
+	 * \note
+	 * Clear old contents files before start the master provider.
+	 */
+	(void)util_unlink_files(ALWAYS_PATH);
+	(void)util_unlink_files(READER_PATH);
+	(void)util_unlink_files(IMAGE_PATH);
+	(void)util_unlink_files(SLAVE_LOG_PATH);
+
 	script_init();
 
 	app_create();

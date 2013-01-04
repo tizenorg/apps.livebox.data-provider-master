@@ -64,6 +64,8 @@ HAPI struct conf g_conf = {
 		.conf = "/opt/usr/live/%s/etc/%s.conf",
 		.image = "/opt/usr/share/live_magazine/",
 		.slave_log = "/opt/usr/share/live_magazine/log",
+		.reader = "/opt/usr/share/live_magazine/reader",
+		.always = "/opt/usr/share/live_magazine/always",
 		.script = "/opt/usr/live/%s/res/script/%s.edj",
 		.root = "/opt/usr/live/",
 		.script_port = "/opt/usr/live/script_port/",
@@ -245,6 +247,22 @@ static void db_path_handler(char *buffer)
 	DbgPrint("DB Path: %s\n", g_conf.path.db);
 }
 
+static void reader_path_handler(char *buffer)
+{
+	g_conf.path.reader = strdup(buffer);
+	if (!g_conf.path.reader)
+		ErrPrint("Heap: %s\n", strerror(errno));
+	DbgPrint("Reader Path: %s\n", g_conf.path.reader);
+}
+
+static void always_path_handler(char *buffer)
+{
+	g_conf.path.always = strdup(buffer);
+	if (!g_conf.path.always)
+		ErrPrint("Heap: %s\n", strerror(errno));
+	DbgPrint("Always Path: %s\n", g_conf.path.always);
+}
+
 static void log_path_handler(char *buffer)
 {
 	g_conf.path.slave_log = strdup(buffer);
@@ -377,6 +395,14 @@ HAPI int conf_loader(void)
 		{
 			.name = "log_path",
 			.handler = log_path_handler,
+		},
+		{
+			.name = "reader_path",
+			.handler = reader_path_handler,
+		},
+		{
+			.name = "always_path",
+			.handler = always_path_handler,
 		},
 		{
 			.name = "share_path",

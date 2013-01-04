@@ -14,34 +14,15 @@
 # limitations under the License.
 #
 
-
-# Developer's NOTE: (Not related with the license)
-# This description is not revised by the system team.
-# So I cannot guarantees these are OK or not.
-
 [Unit]
 Description=Data Provider daemon
 After=xorg.target
 
-[Kill]
-KillSignal=SIGTERM
-
-[Exec]
+[Service]
 Environment=BUFMGR_LOCK_TYPE="once"
 Environment=BUFMGR_MAP_CACHE="true"
-Environment=PROVIDER_DEBUG_PROVIDER="false"
-Environment=PROVIDER_METHOD="pixmap"
-Environment=PROVIDER_COM_CORE_THREAD="true"
-StandardInput=/dev/null
-StandardOutput=/dev/null
-StandardError=/dev/null
-
-[Service]
-Type=forking
-ExecStartPre=
+Type=simple
 ExecStart=/usr/bin/data-provider-master
-ExecStop=kill -TERM `cat /tmp/.master.pid`
-PIDFile=/tmp/.master.pid
 RestartSec=1
 
 [Install]

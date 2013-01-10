@@ -1144,7 +1144,7 @@ HAPI int script_init(void)
 		}
 
 		DbgPrint("Open SCRIPT PORT: %s\n", path);
-		item->handle = dlopen(path, RTLD_LOCAL | RTLD_LAZY);
+		item->handle = dlopen(path, RTLD_GLOBAL | RTLD_NOW | RTLD_DEEPBIND);
 		DbgFree(path);
 		if (!item->handle) {
 			ErrPrint("Error: %s\n", dlerror());

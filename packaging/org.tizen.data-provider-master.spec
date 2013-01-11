@@ -1,6 +1,6 @@
 Name: org.tizen.data-provider-master
 Summary: Master data provider
-Version: 0.13.31
+Version: 0.14.0
 Release: 1
 Group: main/app
 License: Flora License
@@ -61,7 +61,7 @@ mkdir -p /opt/usr/share/live_magazine
 chown 5000:5000 /opt/usr/share/live_magazine
 if [ -f %{_libdir}/rpm-plugins/msm.so ]; then
 	echo "Update smack for CONTENT SHARING FOLDER"
-	chsmack -a "_" /opt/usr/share/live_magazine
+	chsmack -a "org.tizen.data-provider-master::share" /opt/usr/share/live_magazine
 	chsmack -t /opt/usr/share/live_magazine
 fi
 
@@ -78,7 +78,7 @@ chown 5000:5000 /opt/usr/share/live_magazine/always
 
 # End of a list of affected folder by the transmute attribute
 
-if [ ! -f "/opt/dbspace/livebox.db" ]; then
+if [ ! -f "/opt/dbspace/.livebox.db" ]; then
 	echo "Create a new livebox DB"
 	touch /opt/dbspace/.livebox.db
 	chown 0:5000 /opt/dbspace/.livebox.db
@@ -89,7 +89,7 @@ if [ ! -f "/opt/dbspace/livebox.db" ]; then
 	fi
 fi
 
-if [ ! -f "/opt/dbspace/livebox.db-journal" ]; then
+if [ ! -f "/opt/dbspace/.livebox.db-journal" ]; then
 	echo "Create a new livebox DB - journal file"
 	touch /opt/dbspace/.livebox.db-journal
 	chown 0:5000 /opt/dbspace/.livebox.db-journal

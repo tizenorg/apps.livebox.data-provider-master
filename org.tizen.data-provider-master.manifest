@@ -6,6 +6,7 @@
 			<label name="org.tizen.data-provider-master::log" />
 			<label name="org.tizen.data-provider-master::db" />
 			<label name="org.tizen.data-provider-master::data" />
+			<label name="org.tizen.data-provider-master::share" />
 		</provide>
 	</define>
 	<request>
@@ -20,6 +21,12 @@
 		<!-- Configuration data -->
 		<filesystem path="/usr/share/data-provider-master" label="org.tizen.data-provider-master::data" />
 		<filesystem path="/usr/share/data-provider-master/abi.ini" label="org.tizen.data-provider-master::data" />
+
+		<!-- livebox-service is able to access the resolution.ini file -->
+		<filesystem path="/usr/share/data-provider-master/resolution.ini" label="_" />
+
+		<!-- slave provider and the master provider are able to access the conf.ini file -->
+		<filesystem path="/usr/share/data-provider-master/conf.ini" label="_" />
 
 		<!-- Package manager & Init script -->
 		<filesystem path="/etc/rc.d/init.d/data-provider-master" label="_" />

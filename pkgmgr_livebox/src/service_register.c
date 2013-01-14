@@ -81,7 +81,7 @@
  * +-------+------+------+------+
  * | pkgid |   -  |   -  |   -  |
  * +-------+------+------+------+
- * CREATE TABLE i18n ( pkgid TEXT NOT NULL, lang TEXT, name TEXT, icon TEXT, FOREIGN KEY(pkgid) REFERENCES pkgmap(pkgid) )
+ * CREATE TABLE i18n ( pkgid TEXT NOT NULL, lang TEXT COLLATE NOCASE, name TEXT, icon TEXT, FOREIGN KEY(pkgid) REFERENCES pkgmap(pkgid) )
  *
  *
  * box_size
@@ -739,7 +739,7 @@ static inline int db_create_i18n(void)
 	char *err;
 	static const char *ddl;
 
-	ddl = "CREATE TABLE i18n ( pkgid TEXT NOT NULL, lang TEXT, name TEXT, " \
+	ddl = "CREATE TABLE i18n ( pkgid TEXT NOT NULL, lang TEXT COLLATE NOCASE, name TEXT, " \
 		"icon TEXT, FOREIGN KEY(pkgid) REFERENCES pkgmap(pkgid) ON DELETE CASCADE)";
 	if (sqlite3_exec(s_info.handle, ddl, NULL, NULL, &err) != SQLITE_OK) {
 		ErrPrint("Failed to execute the DDL (%s)\n", err);

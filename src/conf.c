@@ -68,7 +68,7 @@ HAPI struct conf g_conf = {
 		.always = "/opt/usr/share/live_magazine/always",
 		.script = "/opt/usr/live/%s/res/script/%s.edj",
 		.root = "/opt/usr/live/",
-		.script_port = "/opt/usr/live/script_port/",
+		.script_port = "/usr/share/data-provider-master/plugin-script/",
 		.db = "/opt/dbspace/.livebox.db",
 	},
 

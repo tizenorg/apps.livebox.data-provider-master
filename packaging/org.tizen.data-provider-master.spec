@@ -1,6 +1,6 @@
 Name: org.tizen.data-provider-master
 Summary: Master data provider
-Version: 0.14.1
+Version: 0.14.2
 Release: 1
 Group: main/app
 License: Flora License

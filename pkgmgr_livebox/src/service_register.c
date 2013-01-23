@@ -64,12 +64,12 @@
  *
  *
  * client
- * +-------+------+---------+-------------+---------+---------+-----------+-------+
- * | pkgid | Icon |  Name   | auto_launch | pd_size | content | nodisplay | setup |
- * +-------+------+---------+-------------+---------+---------+-----------+-------+
- * |   -   |   -  |    -    |      -      |    -    |    -    |     -     |   -   |
- * +-------+------+---------+-------------+---------+---------+-----------+-------+
- * CREATE TABLE client ( pkgid TEXT PRIMARY KEY NOT NULL, icon TEXT, name TEXT, auto_launch TEXT, pd_size TEXT, content TEXT DEFAULT "default", nodisplay INTEGER, setup TEXT, FOREIGN KEY(pkgid) REFERENCES pkgmap(pkgid) )
+ * +-------+------+---------+-------------+---------+---------+-----------+-------+-------------+
+ * | pkgid | Icon |  Name   | auto_launch | pd_size | content | nodisplay | setup | mouse_event |
+ * +-------+------+---------+-------------+---------+---------+-----------+-------+-------------+
+ * |   -   |   -  |    -    |      -      |    -    |    -    |     -     |   -   |      -      }
+ * +-------+------+---------+-------------+---------+---------+-----------+-------+-------------+
+ * CREATE TABLE client ( pkgid TEXT PRIMARY KEY NOT NULL, icon TEXT, name TEXT, auto_launch TEXT, pd_size TEXT, content TEXT DEFAULT "default", nodisplay INTEGER, setup TEXT, mouse_event INTEGER, FOREIGN KEY(pkgid) REFERENCES pkgmap(pkgid) )
  *
  * = auto_launch = UI-APPID
  * = pd_size = WIDTHxHEIGHT
@@ -177,6 +177,7 @@ struct livebox {
 	int pinup; /* Is this support the pinup feature? */
 	int primary; /* Is this primary livebox? */
 	int nodisplay;
+	int mouse_event; /* Mouse event processing option for livebox */
 
 	enum lb_type lb_type;
 	xmlChar *lb_src;
@@ -607,7 +608,7 @@ static inline int db_create_client(void)
 
 	ddl = "CREATE TABLE client (" \
 		"pkgid TEXT PRIMARY KEY NOT NULL, icon TEXT, name TEXT, " \
-		"auto_launch TEXT, pd_size TEXT, content TEXT DEFAULT 'default', nodisplay INTEGER, setup TEXT, FOREIGN KEY(pkgid) REFERENCES pkgmap(pkgid) ON DELETE CASCADE)";
+		"auto_launch TEXT, pd_size TEXT, content TEXT DEFAULT 'default', nodisplay INTEGER, setup TEXT, mouse_event INTEGER, FOREIGN KEY(pkgid) REFERENCES pkgmap(pkgid) ON DELETE CASCADE)";
 	if (sqlite3_exec(s_info.handle, ddl, NULL, NULL, &err) != SQLITE_OK) {
 		ErrPrint("Failed to execute the DDL (%s)\n", err);
 		return -EIO;
@@ -625,7 +626,7 @@ static inline int db_insert_client(struct livebox *livebox)
 	int ret;
 	sqlite3_stmt *stmt;
 
-	dml = "INSERT INTO client ( pkgid, icon, name, auto_launch, pd_size, content, nodisplay, setup ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
+	dml = "INSERT INTO client ( pkgid, icon, name, auto_launch, pd_size, content, nodisplay, setup, mouse_event ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
 	ret = sqlite3_prepare_v2(s_info.handle, dml, -1, &stmt, NULL);
 	if (ret != SQLITE_OK) {
 		DbgPrint("Error: %s\n", sqlite3_errmsg(s_info.handle));
@@ -682,6 +683,13 @@ static inline int db_insert_client(struct livebox *livebox)
 	}
 
 	ret = sqlite3_bind_text(stmt, 8, livebox->setup ? (char *)livebox->setup : "", -1, NULL);
+	if (ret != SQLITE_OK) {
+		DbgPrint("Error: %s\n", sqlite3_errmsg(s_info.handle));
+		ret = -EIO;
+		goto out;
+	}
+
+	ret = sqlite3_bind_int(stmt, 9, livebox->mouse_event);
 	if (ret != SQLITE_OK) {
 		DbgPrint("Error: %s\n", sqlite3_errmsg(s_info.handle));
 		ret = -EIO;
@@ -1686,6 +1694,21 @@ static inline void update_box(struct livebox *livebox, xmlNodePtr node)
 				livebox->lb_type = LB_TYPE_FILE;
 
 			xmlFree(type);
+		}
+	}
+
+	if (!xmlHasProp(node, (const xmlChar *)"mouse_event")) {
+		livebox->mouse_event = 0;
+	} else {
+		xmlChar *mouse_event;
+
+		mouse_event = xmlGetProp(node, (const xmlChar *)"mouse_event");
+		if (!mouse_event) {
+			ErrPrint("mouse_event is NIL\n");
+			livebox->mouse_event = 0;
+		} else {
+			livebox->mouse_event = !xmlStrcasecmp(mouse_event, (const xmlChar *)"true");
+			xmlFree(mouse_event);
 		}
 	}
 

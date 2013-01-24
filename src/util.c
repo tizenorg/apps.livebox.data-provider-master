@@ -232,7 +232,7 @@ HAPI char *util_replace_string(const char *src, const char *pattern, const char 
 	int matched;
 
 	bufsz = strlen(src);
-	incsz = bufsz;
+	incsz = bufsz + 1; /* Including the NULL byte */
 	ret = malloc(bufsz + 1);
 	if (!ret) {
 		ErrPrint("Heap: %s\n", strerror(errno));

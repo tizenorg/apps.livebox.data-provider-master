@@ -69,8 +69,8 @@ static inline int load_abi_table(void)
 	};
 	const char *ptr;
 
-	char group[MAX_ABI];
-	char pkgname[MAX_PKGNAME];
+	char group[MAX_ABI + 1];
+	char pkgname[MAX_PKGNAME + 1];
 
 	fp = fopen("/usr/share/"PACKAGE"/abi.ini", "rt");
 	if (!fp)

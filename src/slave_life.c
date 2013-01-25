@@ -369,7 +369,6 @@ static inline void invoke_activate_cb(struct slave_node *slave)
 
 HAPI int slave_activate(struct slave_node *slave)
 {
-	bundle *param;
 
 	/*!
 	 * \note
@@ -383,25 +382,32 @@ HAPI int slave_activate(struct slave_node *slave)
 	if (slave->pid != (pid_t)-1)
 		return -EALREADY;
 
-	param = bundle_create();
-	if (!param) {
-		ErrPrint("Failed to create a bundle\n");
-		return -EFAULT;
-	}
+	if (DEBUG_MODE) {
+		DbgPrint("Debug Mode enabled. name[%s] secured[%d] abi[%s]\n", slave->name, slave->secured, slave->abi);
+	} else {
+		bundle *param;
+		param = bundle_create();
+		if (!param) {
+			ErrPrint("Failed to create a bundle\n");
+			return -EFAULT;
+		}
 
-	bundle_add(param, BUNDLE_SLAVE_NAME, slave->name);
-	bundle_add(param, BUNDLE_SLAVE_SECURED, slave->secured ? "true" : "false");
-	bundle_add(param, BUNDLE_SLAVE_ABI, slave->abi);
-	DbgPrint("Launch the slave package: %s\n", slave->pkgname);
-	slave->pid = (pid_t)aul_launch_app(slave->pkgname, param);
-	bundle_free(param);
+		bundle_add(param, BUNDLE_SLAVE_NAME, slave->name);
+		bundle_add(param, BUNDLE_SLAVE_SECURED, slave->secured ? "true" : "false");
+		bundle_add(param, BUNDLE_SLAVE_ABI, slave->abi);
 
-	if (slave->pid < 0) {
-		ErrPrint("Failed to launch a new slave %s (%d)\n", slave->name, slave->pid);
-		slave->pid = (pid_t)-1;
-		return -EFAULT;
+		DbgPrint("Launch the slave package: %s\n", slave->pkgname);
+		slave->pid = (pid_t)aul_launch_app(slave->pkgname, param);
+
+		bundle_free(param);
+
+		if (slave->pid < 0) {
+			ErrPrint("Failed to launch a new slave %s (%d)\n", slave->name, slave->pid);
+			slave->pid = (pid_t)-1;
+			return -EFAULT;
+		}
+		DbgPrint("Slave launched %d for %s\n", slave->pid, slave->name);
 	}
-	DbgPrint("Slave launched %d for %s\n", slave->pid, slave->name);
 
 	slave->state = SLAVE_REQUEST_TO_LAUNCH;
 	/*!

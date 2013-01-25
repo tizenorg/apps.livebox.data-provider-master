@@ -474,7 +474,6 @@ HAPI int group_add_livebox(const char *group, const char *pkgname)
 	struct context_info *info;
 	struct context_item *item;
 	char *key;
-	char *value;
 	char *name;
 	char *ptr;
 	int len;
@@ -493,7 +492,6 @@ HAPI int group_add_livebox(const char *group, const char *pkgname)
 	ptr = (char *)group;
 	len = 0;
 	key = NULL;
-	value = NULL;
 
 	/* Skip the first space characters */
 	while (*ptr && isspace(*ptr)) ptr++;

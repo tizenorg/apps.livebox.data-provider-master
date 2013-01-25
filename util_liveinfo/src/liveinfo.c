@@ -21,6 +21,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <termios.h>
 
 #include <glib.h>
 #include <glib-object.h>
@@ -31,23 +32,26 @@
 
 #include <Ecore.h>
 
+#define PROMPT "liveinfo) "
+
 static struct info {
 	int fifo_handle;
 	int fd;
 	Ecore_Fd_Handler *fd_handler;
 	Ecore_Fd_Handler *in_handler;
+	int input_fd;
 } s_info = {
 	.fifo_handle = -EINVAL,
 	.fd = -EINVAL,
 	.fd_handler = NULL,
 	.in_handler = NULL,
+	.input_fd = -1,
 };
 
 static void send_slave_list(void)
 {
 	struct packet *packet;
 
-	printf("Send request SLAVE LIST\n");
 	packet = packet_create_noack("slave_list", "d", 0.0f);
 	if (!packet) {
 		fprintf(stderr, "Failed to create a packet\n");
@@ -56,14 +60,35 @@ static void send_slave_list(void)
 
 	com_core_packet_send_only(s_info.fd, packet);
 	packet_destroy(packet);
+
+	printf("----------------------------------------------------------------------[Slave List]------------------------------------------------------------------------------\n");
+	printf("    pid          slave name                     package name                   abi     secured   refcnt   fault           state           inst   pkg     ttl    \n");
+	printf("----------------------------------------------------------------------------------------------------------------------------------------------------------------\n");
 }
 
 static void send_pkg_list(void)
 {
 	struct packet *packet;
 
-	printf("Send request PACKAGE LIST\n");
 	packet = packet_create_noack("pkg_list", "d", 0.0f);
+	if (!packet) {
+		fprintf(stderr, "Failed to create a packet\n");
+		return;
+	}
+
+	com_core_packet_send_only(s_info.fd, packet);
+	packet_destroy(packet);
+
+	printf("+----------------------------------------------[Package List]------------------------------------------------+\n");
+	printf("    pid          slave name                     package name                   abi     refcnt   fault   inst  \n");
+	printf("+------------------------------------------------------------------------------------------------------------+\n");
+}
+
+static void send_toggle_debug(void)
+{
+	struct packet *packet;
+
+	packet = packet_create_noack("toggle_debug", "d", 0.0f);
 	if (!packet) {
 		fprintf(stderr, "Failed to create a packet\n");
 		return;
@@ -77,7 +102,6 @@ static void send_slave_load(pid_t pid)
 {
 	struct packet *packet;
 
-	printf("Send request Loaded package list\n");
 	packet = packet_create_noack("slave_load", "i", pid);
 	if (!packet) {
 		fprintf(stderr, "Failed to create a packet\n");
@@ -92,7 +116,6 @@ static void send_inst_list(const char *pkgname)
 {
 	struct packet *packet;
 
-	printf("Send request instance list\n");
 	packet = packet_create_noack("inst_list", "s", pkgname);
 	if (!packet) {
 		fprintf(stderr, "Failed to create a packet\n");
@@ -101,6 +124,10 @@ static void send_inst_list(const char *pkgname)
 
 	com_core_packet_send_only(s_info.fd, packet);
 	packet_destroy(packet);
+
+	printf("-----------------------------------------------[Instance List]---------------------------------------\n");
+	printf("         ID         |      Cluster ID    |   Sub cluster ID   | Period | Visibility | Width | Height \n");
+	printf("-----------------------------------------------------------------------------------------------------\n");
 }
 
 static inline void help(void)
@@ -111,6 +138,7 @@ static inline void help(void)
 	printf("[33mslave_list[0m - Display the slave list\n");
 	printf("[33minst_list[0m [37mLIVEBOX_PKGNAME[0m - Display the instance list of this LIVEBOX_PKGNAME\n");
 	printf("[33mslave_load[0m [37mSLAVE_PID[0m - Display the loaded livebox instance list on the given slave\n");
+	printf("[33mtoggle_debug[0m - Enable/Disable debug mode\n");
 	printf("[32mexit - [0m\n");
 	printf("[32mquit - [0m\n");
 	printf("----------------------------------------------------------------------------\n");
@@ -119,30 +147,40 @@ static inline void help(void)
 static inline void do_command(const char *cmd)
 {
 	char command[256];
-	char argument[256];
+	char argument[256] = { '\0', };
 
-	if (sscanf(cmd, "%255[^ ] %255s", command, argument) == 2) {
-		if (!strcasecmp(command, "inst_list")) {
-			send_inst_list(argument);
-		} else if (!strcasecmp(command, "slave_load")) {
-			pid_t pid;
-			if (sscanf(argument, "%d", &pid) == 1)
-				send_slave_load(pid);
-		} else {
-			help();
-		}
+	if (sscanf(cmd, "%255[^ ] %255s", command, argument) == 2)
+		cmd = command;
+
+	if (!strcasecmp(cmd, "inst_list") && *argument) {
+		send_inst_list(argument);
+	} else if (!strcasecmp(cmd, "slave_load") && *argument) {
+		pid_t pid;
+
+		if (sscanf(argument, "%d", &pid) == 1)
+			send_slave_load(pid);
+		else
+			goto errout;
+	} else if (!strcasecmp(cmd, "pkg_list")) {
+		send_pkg_list();
+	} else if (!strcasecmp(cmd, "slave_list")) {
+		send_slave_list();
+	} else if (!strcasecmp(cmd, "exit") || !strcasecmp(cmd, "quit")) {
+		ecore_main_loop_quit();
+	} else if (!strcasecmp(cmd, "toggle_debug")) {
+		send_toggle_debug();
+	} else if (!strcasecmp(cmd, "help")) {
+		goto errout;
 	} else {
-		if (!strcasecmp(cmd, "pkg_list"))
-			send_pkg_list();
-		else if (!strcasecmp(cmd, "slave_list"))
-			send_slave_list();
-		else if (!strcasecmp(cmd, "exit"))
-			ecore_main_loop_quit();
-		else if (!strcasecmp(cmd, "quit"))
-			ecore_main_loop_quit();
-		else if (!strcasecmp(cmd, "help"))
-			help();
+		printf("Unknown command - \"help\"\n");
+		fputs(PROMPT, stdout);
 	}
+
+	return;
+
+errout:
+	help();
+	fputs(PROMPT, stdout);
 }
 
 static Eina_Bool input_cb(void *data, Ecore_Fd_Handler *fd_handler)
@@ -171,19 +209,25 @@ static Eina_Bool input_cb(void *data, Ecore_Fd_Handler *fd_handler)
 
 	switch (ch) {
 	case 0x08: /* BKSP */
-		printf("\033[3D");
+		cmd_buffer[idx] = '\0';
 		if (idx > 0)
 			idx--;
+		cmd_buffer[idx] = ' ';
+		printf("\r"PROMPT"%s", cmd_buffer); /* Cleare the last bytes */
+		cmd_buffer[idx] = '\0';
+		printf("\r"PROMPT"%s", cmd_buffer); /* Cleare the last bytes */
 		break;
 	case '\n':
 	case '\r':
 		cmd_buffer[idx] = '\0';
 		idx = 0;
-		printf("\n");
+		putc((int)'\n', stdout);
 		do_command(cmd_buffer);
+		memset(cmd_buffer, 0, sizeof(cmd_buffer));
 		break;
 	default:
 		cmd_buffer[idx++] = ch;
+		putc((int)ch, stdout);
 		if (idx == sizeof(cmd_buffer) - 1) {
 			cmd_buffer[idx] = '\0';
 			printf("\nCommand buffer is overflow: %s\n", cmd_buffer);
@@ -198,8 +242,8 @@ static Eina_Bool input_cb(void *data, Ecore_Fd_Handler *fd_handler)
 static Eina_Bool read_cb(void *data, Ecore_Fd_Handler *fd_handler)
 {
 	int fd;
-	char buffer[1024];
-	int len;
+	static const char *eod = "EOD\n";
+	char ch;
 
 	fd = ecore_main_fd_handler_fd_get(fd_handler);
 	if (fd < 0) {
@@ -207,12 +251,18 @@ static Eina_Bool read_cb(void *data, Ecore_Fd_Handler *fd_handler)
 		return ECORE_CALLBACK_RENEW;
 	}
 
-	while ((len = read(fd, buffer, sizeof(buffer) - 1)) > 0) {
-		buffer[len] = '\0';
-		fputs(buffer, stdout);
-	}
+	read(fd, &ch, sizeof(ch));
+	if (ch == *eod)
+		eod++;
+	else
+		eod = "EOD\n";
 
-	fflush(stdout);
+	putc(ch, stdout);
+
+	if (*eod == '\0') {
+		fputs(PROMPT, stdout);
+		eod = "EOD\n";
+	}
 
 	return ECORE_CALLBACK_RENEW;
 }
@@ -250,6 +300,10 @@ static int ret_cb(pid_t pid, int handle, const struct packet *packet, void *data
 		ecore_main_loop_quit();
 		return -EFAULT;
 	}
+
+	fputs(PROMPT, stdout);
+        if (fcntl(STDIN_FILENO, F_SETFL, O_NONBLOCK) < 0)
+                fprintf(stderr, "Error: %s\n", strerror(errno));
 
 	s_info.in_handler = ecore_main_fd_handler_add(STDIN_FILENO, ECORE_FD_READ, input_cb, NULL, NULL, NULL);
 	if (!s_info.in_handler) {
@@ -298,6 +352,7 @@ static int connected_cb(int handle, void *data)
 
 int main(int argc, char *argv[])
 {
+	struct termios ttystate;
 	static struct method s_table[] = {
 		{
 			.cmd = NULL,
@@ -319,7 +374,24 @@ int main(int argc, char *argv[])
 
 	printf("Type your command on below empty line\n");
 
+	if (tcgetattr(STDIN_FILENO, &ttystate) < 0) {
+		fprintf(stderr, "Error: %s\n", strerror(errno));
+	} else {
+		ttystate.c_lflag &= ~(ICANON | ECHO);
+		ttystate.c_cc[VMIN] = 1;
+
+		if (tcsetattr(STDIN_FILENO, TCSANOW, &ttystate) < 0)
+			fprintf(stderr, "Error: %s\n", strerror(errno));
+	}
+
+	if (setvbuf(stdout, (char *)NULL, _IONBF, 0) != 0)
+		fprintf(stderr, "Error: %s\n", strerror(errno));
+
 	ecore_main_loop_begin();
+
+	ttystate.c_lflag |= ICANON | ECHO;
+	if (tcsetattr(STDIN_FILENO, TCSANOW, &ttystate) < 0)
+		fprintf(stderr, "Error: %s\n", strerror(errno));
 
 	if (s_info.fd > 0) {
 		com_core_packet_client_fini(s_info.fd);

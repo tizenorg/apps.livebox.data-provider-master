@@ -2194,7 +2194,6 @@ HAPI int instance_destroyed(struct inst_info *inst)
  */
 HAPI int instance_recover_state(struct inst_info *inst)
 {
-	struct pkg_info *info;
 	int ret = 0;
 
 	if (inst->changing_state) {
@@ -2215,7 +2214,6 @@ HAPI int instance_recover_state(struct inst_info *inst)
 			break;
 		case INST_DESTROYED:
 			DbgPrint("Req. to DESTROYED (%s)\n", package_name(inst->info));
-			info = inst->info;
 			instance_state_reset(inst);
 			instance_destroy(inst);
 			break;
@@ -2263,11 +2261,8 @@ HAPI int instance_recover_state(struct inst_info *inst)
 HAPI int instance_need_slave(struct inst_info *inst)
 {
 	int ret = 0;
-	struct pkg_info *info;
 
 	if (inst->client && client_is_faulted(inst->client)) {
-		info = inst->info;
-
 		/*!
 		 * \note
 		 * In this case, the client is faulted(disconnected)
@@ -2276,7 +2271,7 @@ HAPI int instance_need_slave(struct inst_info *inst)
 		 * remove it and don't try to recover its states
 		 */
 
-		DbgPrint("CLIENT FAULT: Req. to DESTROYED (%s)\n", package_name(info));
+		DbgPrint("CLIENT FAULT: Req. to DESTROYED (%s)\n", package_name(inst->info));
 		switch (inst->state) {
 		case INST_INIT:
 		case INST_ACTIVATED:
@@ -2305,7 +2300,6 @@ HAPI int instance_need_slave(struct inst_info *inst)
 			break;
 		case INST_DESTROYED:
 			DbgPrint("Req. to DESTROYED (%s)\n", package_name(inst->info));
-			info = inst->info;
 			instance_state_reset(inst);
 			instance_destroy(inst);
 			break;

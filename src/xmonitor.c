@@ -119,8 +119,7 @@ static Eina_Bool create_cb(void *data, int type, void *event)
 
 static Eina_Bool destroy_cb(void *data, int type, void *event)
 {
-	Ecore_X_Event_Window_Destroy * info;
-	info = event;
+	// Ecore_X_Event_Window_Destroy *info = event;
 	return ECORE_CALLBACK_PASS_ON;
 }
 

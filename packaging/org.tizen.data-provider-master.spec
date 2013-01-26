@@ -1,8 +1,8 @@
 Name: org.tizen.data-provider-master
-Summary: Master data provider
+Summary: Master service provider for liveboxes.
 Version: 0.14.5
 Release: 1
-Group: main/app
+Group: framework/livebox
 License: Flora License
 Source0: %{name}-%{version}.tar.gz
 BuildRequires: cmake, gettext-tools, smack, coreutils
@@ -34,7 +34,8 @@ BuildRequires: pkgconfig(pkgmgr)
 BuildRequires: pkgconfig(livebox-service)
 
 %description
-Manage the slave data provider and communicate with client applications.
+Manage the 2nd stage livebox service provider and communicate with the viewer application.
+Keep trace on the life-cycle of the livebox and status of the service providers, viewer applications.
 
 %prep
 %setup -q

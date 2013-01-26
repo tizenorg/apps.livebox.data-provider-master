@@ -10,6 +10,7 @@ pkg_check_modules(info_pkgs REQUIRED
 	ecore
 	glib-2.0
 	gio-2.0
+	livebox-service
 )
 
 FOREACH(flag ${info_pkgs_CFLAGS})
@@ -23,6 +24,7 @@ ADD_DEFINITIONS("-DSOCKET_FILE=\"/opt/usr/share/live_magazine/.live.socket\"")
 
 ADD_EXECUTABLE(${PROJECT_NAME}
 	src/liveinfo.c
+	src/node.c
 )
 
 TARGET_LINK_LIBRARIES(${PROJECT_NAME} ${info_pkgs_LDFLAGS})

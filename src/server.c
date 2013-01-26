@@ -4685,19 +4685,20 @@ static struct packet *liveinfo_slave_list(pid_t pid, int handle, const struct pa
 	}
 
 	liveinfo_open_fifo(info);
-
 	fp = liveinfo_fifo(info);
-	if (!fp)
+	if (!fp) {
+		liveinfo_close_fifo(info);
 		goto out;
+	}
 
 	list = (Eina_List *)slave_list();
 	EINA_LIST_FOREACH(list, l, slave) {
-		fprintf(fp, "  %7d   %20s   %39s   %7s   %7s   %6d   %5d   %21s   %4d   %3d   %3.4lf  \n", 
+		fprintf(fp, "%d %s %s %s %d %d %d %s %d %d %lf\n", 
 			slave_pid(slave),
 			slave_name(slave),
 			slave_pkgname(slave),
 			slave_abi(slave),
-			slave_is_secured(slave) ? "true" : "false",
+			slave_is_secured(slave),
 			slave_refcnt(slave),
 			slave_fault_count(slave),
 			slave_state_string(slave),
@@ -4706,55 +4707,9 @@ static struct packet *liveinfo_slave_list(pid_t pid, int handle, const struct pa
 			slave_ttl(slave)
 		);
 	}
+
 	fprintf(fp, "EOD\n");
 	liveinfo_close_fifo(info);
-
-out:
-	return NULL;
-}
-
-static struct packet *liveinfo_slave_load(pid_t pid, int handle, const struct packet *packet)
-{
-	struct liveinfo *info;
-	pid_t slave_pid;
-	struct slave_node *slave;
-	struct pkg_info *pkg;
-	Eina_List *pkg_list;
-	Eina_List *l;
-	FILE *fp;
-
-	if (packet_get(packet, "i", &slave_pid) != 1) {
-		ErrPrint("Invalid argument\n");
-		goto out;
-	}
-
-	info = liveinfo_find_by_pid(pid);
-	if (!info) {
-		ErrPrint("Invalid request\n");
-		goto out;
-	}
-
-	slave = slave_find_by_pid(slave_pid);
-	if (!slave) {
-		ErrPrint("Slave is not exists\n");
-		goto out;
-	}
-
-	liveinfo_open_fifo(info);
-	fp = liveinfo_fifo(info);
-	if (!fp)
-		goto out;
-
-	fprintf(fp, "%s = { ", slave_name(slave));
-	pkg_list = (Eina_List *)package_list();
-	EINA_LIST_FOREACH(pkg_list, l, pkg) {
-		if (package_slave(pkg) == slave)
-			fprintf(fp, "%s, ", package_name(pkg));
-	}
-	fprintf(fp, "}\nEOD\n");
-
-	liveinfo_close_fifo(info);
-
 out:
 	return NULL;
 }
@@ -4790,17 +4745,6 @@ static struct packet *liveinfo_inst_list(pid_t pid, int handle, const struct pac
 		goto out;
 	}
 
-	if (!package_is_lb_pkgname(pkgname)) {
-		ErrPrint("Invalid package name\n");
-		goto out;
-	}
-
-	pkg = package_find(pkgname);
-	if (!pkg) {
-		ErrPrint("Package is not exists\n");
-		goto out;
-	}
-
 	info = liveinfo_find_by_pid(pid);
 	if (!info) {
 		ErrPrint("Invalid request\n");
@@ -4808,25 +4752,37 @@ static struct packet *liveinfo_inst_list(pid_t pid, int handle, const struct pac
 	}
 
 	liveinfo_open_fifo(info);
-
 	fp = liveinfo_fifo(info);
 	if (!fp) {
 		ErrPrint("Invalid fp\n");
+		liveinfo_close_fifo(info);
 		goto out;
+	}
+
+	if (!package_is_lb_pkgname(pkgname)) {
+		ErrPrint("Invalid package name\n");
+		goto close_out;
+	}
+
+	pkg = package_find(pkgname);
+	if (!pkg) {
+		ErrPrint("Package is not exists\n");
+		goto close_out;
 	}
 
 	inst_list = package_instance_list(pkg);
 	EINA_LIST_FOREACH(inst_list, l, inst) {
-		fprintf(fp, " %18s %18s %18s %3.3lf %10s %5d %6d\n",
-						instance_id(inst),
-						instance_cluster(inst),
-						instance_category(inst),
-						instance_period(inst),
-						visible_state_string(instance_visible_state(inst)),
-						instance_lb_width(inst),
-						instance_lb_height(inst));
+		fprintf(fp, "%s %s %s %lf %s %d %d\n",
+			instance_id(inst),
+			instance_cluster(inst),
+			instance_category(inst),
+			instance_period(inst),
+			visible_state_string(instance_visible_state(inst)),
+			instance_lb_width(inst),
+			instance_lb_height(inst));
 	}
 
+close_out:
 	fprintf(fp, "EOD\n");
 	liveinfo_close_fifo(info);
 
@@ -4858,10 +4814,11 @@ static struct packet *liveinfo_pkg_list(pid_t pid, int handle, const struct pack
 	}
 
 	liveinfo_open_fifo(info);
-
 	fp = liveinfo_fifo(info);
-	if (!fp)
+	if (!fp) {
+		liveinfo_close_fifo(info);
 		goto out;
+	}
 
 	list = (Eina_List *)package_list();
 	EINA_LIST_FOREACH(list, l, pkg) {
@@ -4876,10 +4833,9 @@ static struct packet *liveinfo_pkg_list(pid_t pid, int handle, const struct pack
 		}
 
 		inst_list = (Eina_List *)package_instance_list(pkg);
-
-		fprintf(fp, "  %7d   %20s   %39s   %7s   %6d   %5d   %4d  \n",
+		fprintf(fp, "%d %s %s %s %d %d %d\n",
 			pid,
-			slavename,
+			strlen(slavename) ? slavename : "(none)",
 			package_name(pkg),
 			package_abi(pkg),
 			package_refcnt(pkg),
@@ -4887,9 +4843,9 @@ static struct packet *liveinfo_pkg_list(pid_t pid, int handle, const struct pack
 			eina_list_count(inst_list)
 		);
 	}
+
 	fprintf(fp, "EOD\n");
 	liveinfo_close_fifo(info);
-
 out:
 	return NULL;
 }
@@ -4923,11 +4879,13 @@ static struct packet *liveinfo_toggle_debug(pid_t pid, int handle, const struct 
 
 	liveinfo_open_fifo(info);
 	fp = liveinfo_fifo(info);
-	if (!fp)
+	if (!fp) {
+		liveinfo_close_fifo(info);
 		goto out;
+	}
 
 	g_conf.debug_mode = !g_conf.debug_mode;
-	fprintf(fp, "Debug mode is %s\nEOD\n", g_conf.debug_mode ? "enabled" : "disabled");
+	fprintf(fp, "%d\nEOD\n", g_conf.debug_mode);
 	liveinfo_close_fifo(info);
 
 out:
@@ -4950,10 +4908,6 @@ static struct method s_info_table[] = {
 	{
 		.cmd = "inst_list",
 		.handler = liveinfo_inst_list,
-	},
-	{
-		.cmd = "slave_load",
-		.handler = liveinfo_slave_load,
 	},
 	{
 		.cmd = "slave_ctrl",

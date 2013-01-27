@@ -8,6 +8,7 @@ pkg_check_modules(bin_pkgs REQUIRED
 	sqlite3
 	libxml-2.0
 	db-util
+	livebox-service
 )
 
 FOREACH(flag ${bin_pkgs_CFLAGS})

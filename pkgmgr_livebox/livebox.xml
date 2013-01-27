@@ -13,13 +13,18 @@
 	<setup>org.tizen.nicesj</setup>
 
 	<box type="image" mouse_event="false">
-		<size>1x1</size>
-		<size>2x1</size>
+		<size preview="ABSPATH">1x1</size>
+		<size preview="ABSPATH">2x1</size>
 		<size>2x2</size>
 		<size>4x1</size>
 		<size>4x2</size>
 		<size>4x3</size>
 		<size>4x4</size>
+
+		<!-- Easy home -->
+		<size>21x21</size>
+		<size preview="ABSPATH">23x21</size>
+		<size>23x23</size>
 
 		<script src="/opt/usr/apps/org.tizen.myapp/res/script/my.edj" group="my_group" />
 	</box>

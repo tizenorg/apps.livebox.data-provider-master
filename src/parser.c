@@ -22,20 +22,12 @@
 #include <Eina.h>
 #include <dlog.h>
 
+#include <livebox-service.h>
+
 #include "util.h"
 #include "debug.h"
 #include "conf.h"
 #include "parser.h"
-
-enum lb_size {
-	LB_SIZE_1x1 = 0x01,
-	LB_SIZE_2x1 = 0x02,
-	LB_SIZE_2x2 = 0x04,
-	LB_SIZE_4x1 = 0x08,
-	LB_SIZE_4x2 = 0x10,
-	LB_SIZE_4x3 = 0x20,
-	LB_SIZE_4x4 = 0x40,
-};
 
 static Eina_List *s_list;
 int errno;
@@ -286,19 +278,25 @@ static inline int parse_size(const char *buffer, unsigned int *size)
 			break;
 		case STOP:
 			if (w == 1 && h == 1) {
-				*size |= LB_SIZE_1x1;
+				*size |= LB_SIZE_TYPE_1x1;
 			} else if (w == 2 && h == 1) {
-				*size |= LB_SIZE_2x1;
+				*size |= LB_SIZE_TYPE_2x1;
 			} else if (w == 2 && h == 2) {
-				*size |= LB_SIZE_2x2;
+				*size |= LB_SIZE_TYPE_2x2;
 			} else if (w == 4 && h == 1) {
-				*size |= LB_SIZE_4x1;
+				*size |= LB_SIZE_TYPE_4x1;
 			} else if (w == 4 && h == 2) {
-				*size |= LB_SIZE_4x2;
+				*size |= LB_SIZE_TYPE_4x2;
 			} else if (w == 4 && h == 3) {
-				*size |= LB_SIZE_4x3;
+				*size |= LB_SIZE_TYPE_4x3;
 			} else if (w == 4 && h == 4) {
-				*size |= LB_SIZE_4x4;
+				*size |= LB_SIZE_TYPE_4x4;
+			} else if (w == 21 && h == 21) {
+				*size |= LB_SIZE_TYPE_EASY_1x1;
+			} else if (w == 23 && h == 21) {
+				*size |= LB_SIZE_TYPE_EASY_3x1;
+			} else if (w == 23 && h == 23) {
+				*size |= LB_SIZE_TYPE_EASY_3x3;
 			} else {
 				ErrPrint("Invalid size type: %dx%d\n", w, h);
 			}

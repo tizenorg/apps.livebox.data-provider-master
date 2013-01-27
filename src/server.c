@@ -4857,16 +4857,13 @@ static struct packet *liveinfo_slave_ctrl(pid_t pid, int handle, const struct pa
 
 static struct packet *liveinfo_pkg_ctrl(pid_t pid, int handle, const struct packet *packet)
 {
-	return NULL;
-}
-
-static struct packet *liveinfo_toggle_debug(pid_t pid, int handle, const struct packet *packet)
-{
-	double timestamp;
 	struct liveinfo *info;
 	FILE *fp;
+	char *cmd;
+	char *pkgname;
+	char *id;
 
-	if (packet_get(packet, "d", &timestamp) != 1) {
+	if (packet_get(packet, "sss", &cmd, &pkgname, &id) != 3) {
 		ErrPrint("Invalid argument\n");
 		goto out;
 	}
@@ -4884,7 +4881,58 @@ static struct packet *liveinfo_toggle_debug(pid_t pid, int handle, const struct 
 		goto out;
 	}
 
-	g_conf.debug_mode = !g_conf.debug_mode;
+	if (!strcmp(cmd, "rmpack")) {
+		fprintf(fp, "%d\n", ENOSYS);
+	} else if (!strcmp(cmd, "rminst")) {
+		struct inst_info *inst;
+		inst = package_find_instance_by_id(pkgname, id);
+		if (!inst) {
+			fprintf(fp, "%d\n", ENOENT);
+		} else {
+			instance_destroy(inst);
+			fprintf(fp, "%d\n", 0);
+		}
+	}
+
+	fprintf(fp, "EOD\n");
+	liveinfo_close_fifo(info);
+
+out:
+	return NULL;
+}
+
+static struct packet *liveinfo_master_ctrl(pid_t pid, int handle, const struct packet *packet)
+{
+	struct liveinfo *info;
+	char *cmd;
+	char *var;
+	char *val;
+	FILE *fp;
+
+	if (packet_get(packet, "sss", &cmd, &var, &val) != 3) {
+		ErrPrint("Invalid argument\n");
+		goto out;
+	}
+
+	info = liveinfo_find_by_pid(pid);
+	if (!info) {
+		ErrPrint("Invalid request\n");
+		goto out;
+	}
+
+	if (!strcmp(var, "debug")) {
+		if (!strcmp(cmd, "set")) {
+			g_conf.debug_mode = !strcmp(val, "true");
+		} else if (!strcmp(cmd, "get")) {
+		}
+	}
+
+	liveinfo_open_fifo(info);
+	fp = liveinfo_fifo(info);
+	if (!fp) {
+		liveinfo_close_fifo(info);
+		goto out;
+	}
 	fprintf(fp, "%d\nEOD\n", g_conf.debug_mode);
 	liveinfo_close_fifo(info);
 
@@ -4918,8 +4966,8 @@ static struct method s_info_table[] = {
 		.handler = liveinfo_pkg_ctrl,
 	},
 	{
-		.cmd = "toggle_debug",
-		.handler = liveinfo_toggle_debug,
+		.cmd = "master_ctrl",
+		.handler = liveinfo_master_ctrl,
 	},
 	{
 		.cmd = NULL,

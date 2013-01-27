@@ -28,6 +28,8 @@
 #include <libxml/tree.h>
 #include <dlog.h>
 
+#include <livebox-service.h>
+
 #include "dlist.h"
 
 #if !defined(FLOG)
@@ -149,16 +151,6 @@ enum pd_type {
 	PD_TYPE_BUFFER,
 };
 
-enum lb_size {
-	LB_SIZE_1x1 = 0x01,
-	LB_SIZE_2x1 = 0x02,
-	LB_SIZE_2x2 = 0x04,
-	LB_SIZE_4x1 = 0x08,
-	LB_SIZE_4x2 = 0x10,
-	LB_SIZE_4x3 = 0x20,
-	LB_SIZE_4x4 = 0x40,
-};
-
 struct livebox {
 	xmlChar *pkgid;
 	int secured;
@@ -184,7 +176,7 @@ struct livebox {
 	xmlChar *lb_group;
 	int size_list; /* 1x1, 2x1, 2x2, 4x1, 4x2, 4x3, 4x4 */
 
-	xmlChar *preview[7];
+	xmlChar *preview[10];
 
 	enum pd_type pd_type;
 	xmlChar *pd_src;
@@ -1491,6 +1483,9 @@ static inline int livebox_destroy(struct livebox *livebox)
 	xmlFree(livebox->preview[4]); /* 4x2 */
 	xmlFree(livebox->preview[5]); /* 4x3 */
 	xmlFree(livebox->preview[6]); /* 4x4 */
+	xmlFree(livebox->preview[7]); /* 21x21 */
+	xmlFree(livebox->preview[8]); /* 23x21 */
+	xmlFree(livebox->preview[9]); /* 23x23 */
 
 	dlist_foreach_safe(livebox->i18n_list, l, n, i18n) {
 		livebox->i18n_list = dlist_remove(livebox->i18n_list, l);
@@ -1723,39 +1718,54 @@ static inline void update_box(struct livebox *livebox, xmlNodePtr node)
 			}
 
 			if (!xmlStrcasecmp(size, (const xmlChar *)"1x1")) {
-				livebox->size_list |= LB_SIZE_1x1;
+				livebox->size_list |= LB_SIZE_TYPE_1x1;
 				if (xmlHasProp(node, (const xmlChar *)"preview")) {
 					livebox->preview[0] = xmlGetProp(node, (const xmlChar *)"preview");
 				}
 			} else if (!xmlStrcasecmp(size, (const xmlChar *)"2x1")) {
-				livebox->size_list |= LB_SIZE_2x1;
+				livebox->size_list |= LB_SIZE_TYPE_2x1;
 				if (xmlHasProp(node, (const xmlChar *)"preview")) {
 					livebox->preview[1] = xmlGetProp(node, (const xmlChar *)"preview");
 				}
 			} else if (!xmlStrcasecmp(size, (const xmlChar *)"2x2")) {
-				livebox->size_list |= LB_SIZE_2x2;
+				livebox->size_list |= LB_SIZE_TYPE_2x2;
 				if (xmlHasProp(node, (const xmlChar *)"preview")) {
 					livebox->preview[2] = xmlGetProp(node, (const xmlChar *)"preview");
 				}
 			} else if (!xmlStrcasecmp(size, (const xmlChar *)"4x1")) {
-				livebox->size_list |= LB_SIZE_4x1;
+				livebox->size_list |= LB_SIZE_TYPE_4x1;
 				if (xmlHasProp(node, (const xmlChar *)"preview")) {
 					livebox->preview[3] = xmlGetProp(node, (const xmlChar *)"preview");
 				}
 			} else if (!xmlStrcasecmp(size, (const xmlChar *)"4x2")) {
-				livebox->size_list |= LB_SIZE_4x2;
+				livebox->size_list |= LB_SIZE_TYPE_4x2;
 				if (xmlHasProp(node, (const xmlChar *)"preview")) {
 					livebox->preview[4] = xmlGetProp(node, (const xmlChar *)"preview");
 				}
 			} else if (!xmlStrcasecmp(size, (const xmlChar *)"4x3")) {
-				livebox->size_list |= LB_SIZE_4x3;
+				livebox->size_list |= LB_SIZE_TYPE_4x3;
 				if (xmlHasProp(node, (const xmlChar *)"preview")) {
 					livebox->preview[5] = xmlGetProp(node, (const xmlChar *)"preview");
 				}
 			} else if (!xmlStrcasecmp(size, (const xmlChar *)"4x4")) {
-				livebox->size_list |= LB_SIZE_4x4;
+				livebox->size_list |= LB_SIZE_TYPE_4x4;
 				if (xmlHasProp(node, (const xmlChar *)"preview")) {
 					livebox->preview[6] = xmlGetProp(node, (const xmlChar *)"preview");
+				}
+			} else if (!xmlStrcasecmp(size, (const xmlChar *)"21x21")) {
+				livebox->size_list |= LB_SIZE_TYPE_EASY_1x1;
+				if (xmlHasProp(node, (const xmlChar *)"preview")) {
+					livebox->preview[7] = xmlGetProp(node, (const xmlChar *)"preview");
+				}
+			} else if (!xmlStrcasecmp(size, (const xmlChar *)"23x21")) {
+				livebox->size_list |= LB_SIZE_TYPE_EASY_3x1;
+				if (xmlHasProp(node, (const xmlChar *)"preview")) {
+					livebox->preview[8] = xmlGetProp(node, (const xmlChar *)"preview");
+				}
+			} else if (!xmlStrcasecmp(size, (const xmlChar *)"23x23")) {
+				livebox->size_list |= LB_SIZE_TYPE_EASY_3x3;
+				if (xmlHasProp(node, (const xmlChar *)"preview")) {
+					livebox->preview[9] = xmlGetProp(node, (const xmlChar *)"preview");
 				}
 			} else {
 				ErrPrint("Invalid size tag (%s)\n", size);
@@ -2037,45 +2047,63 @@ static inline int db_insert_livebox(struct livebox *livebox, const char *appid)
 			goto errout;
 	}
 
-	if (livebox->size_list & LB_SIZE_1x1) {
-		ret = db_insert_box_size((char *)livebox->pkgid, LB_SIZE_1x1, (char *)livebox->preview[0]);
+	if (livebox->size_list & LB_SIZE_TYPE_1x1) {
+		ret = db_insert_box_size((char *)livebox->pkgid, LB_SIZE_TYPE_1x1, (char *)livebox->preview[0]);
 		if (ret < 0)
 			goto errout;
 	}
 
-	if (livebox->size_list & LB_SIZE_2x1) {
-		ret = db_insert_box_size((char *)livebox->pkgid, LB_SIZE_2x1, (char *)livebox->preview[1]);
+	if (livebox->size_list & LB_SIZE_TYPE_2x1) {
+		ret = db_insert_box_size((char *)livebox->pkgid, LB_SIZE_TYPE_2x1, (char *)livebox->preview[1]);
 		if (ret < 0)
 			goto errout;
 	}
 
-	if (livebox->size_list & LB_SIZE_2x2) {
-		ret = db_insert_box_size((char *)livebox->pkgid, LB_SIZE_2x2, (char *)livebox->preview[2]);
+	if (livebox->size_list & LB_SIZE_TYPE_2x2) {
+		ret = db_insert_box_size((char *)livebox->pkgid, LB_SIZE_TYPE_2x2, (char *)livebox->preview[2]);
 		if (ret < 0)
 			goto errout;
 	}
 
-	if (livebox->size_list & LB_SIZE_4x1) {
-		ret = db_insert_box_size((char *)livebox->pkgid, LB_SIZE_4x1, (char *)livebox->preview[3]);
+	if (livebox->size_list & LB_SIZE_TYPE_4x1) {
+		ret = db_insert_box_size((char *)livebox->pkgid, LB_SIZE_TYPE_4x1, (char *)livebox->preview[3]);
 		if (ret < 0)
 			goto errout;
 	}
 
-	if (livebox->size_list & LB_SIZE_4x2) {
-		ret = db_insert_box_size((char *)livebox->pkgid, LB_SIZE_4x2, (char *)livebox->preview[4]);
+	if (livebox->size_list & LB_SIZE_TYPE_4x2) {
+		ret = db_insert_box_size((char *)livebox->pkgid, LB_SIZE_TYPE_4x2, (char *)livebox->preview[4]);
 		if (ret < 0)
 			goto errout;
 	}
 
-	if (livebox->size_list & LB_SIZE_4x3) {
-		ret = db_insert_box_size((char *)livebox->pkgid, LB_SIZE_4x3, (char *)livebox->preview[5]);
+	if (livebox->size_list & LB_SIZE_TYPE_4x3) {
+		ret = db_insert_box_size((char *)livebox->pkgid, LB_SIZE_TYPE_4x3, (char *)livebox->preview[5]);
 		if (ret < 0)
 			goto errout;
 	}
 
-	if (livebox->size_list & LB_SIZE_4x4) {
-		ret = db_insert_box_size((char *)livebox->pkgid, LB_SIZE_4x4, (char *)livebox->preview[6]);
+	if (livebox->size_list & LB_SIZE_TYPE_4x4) {
+		ret = db_insert_box_size((char *)livebox->pkgid, LB_SIZE_TYPE_4x4, (char *)livebox->preview[6]);
 		if (ret < 0)
+			goto errout;
+	}
+
+	if (livebox->size_list & LB_SIZE_TYPE_EASY_1x1) {
+		ret = db_insert_box_size((char *)livebox->pkgid, LB_SIZE_TYPE_EASY_1x1, (char *)livebox->preview[7]);
+		if (ret < 0)
+			goto errout;
+	}
+
+	if (livebox->size_list & LB_SIZE_TYPE_EASY_3x1) {
+		ret = db_insert_box_size((char *)livebox->pkgid, LB_SIZE_TYPE_EASY_3x1, (char *)livebox->preview[8]);
+		if (ret < 0)
+			goto errout;
+	}
+
+	if (livebox->size_list & LB_SIZE_TYPE_EASY_3x3) {
+		ret = db_insert_box_size((char *)livebox->pkgid, LB_SIZE_TYPE_EASY_3x3, (char *)livebox->preview[9]);
+		if (ret < 9)
 			goto errout;
 	}
 
@@ -2448,34 +2476,5 @@ int PKGMGR_PARSER_PLUGIN_UNINSTALL(xmlDocPtr docPtr, const char *appid)
 
 	return 0;
 }
-
-/*
-int main(int argc, char *argv[])
-{
-	xmlDoc *doc;
-	xmlNode *root;
-
-	if (argc != 2) {
-		ErrPRint("Invalid argument: %s XML_FILENAME\n", argv[0]);
-		return -EINVAL;
-	}
-
-	doc = xmlReadFile(argv[1], NULL, 0);
-	if (!doc) {
-		ErrPrint("Failed to parse %s\n", argv[1]);
-		return -EIO;
-	}
-
-	root = xmlDocGetRootElement(doc);
-
-	db_init();
-	install_shortcut("", root);
-	db_fini();
-
-	xmlFreeDoc(doc);
-	xmlCleanupParser();
-	return 0;
-}
-*/
 
 /* End of a file */

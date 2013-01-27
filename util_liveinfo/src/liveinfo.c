@@ -16,6 +16,7 @@
 
 #include <stdio.h>
 #include <unistd.h>
+#include <getopt.h>
 #include <errno.h>
 #include <libgen.h>
 #include <sys/types.h>
@@ -52,6 +53,7 @@ struct package {
 };
 
 struct instance {
+	char *id;
 	char *cluster;
 	char *category;
 	double period;
@@ -77,8 +79,10 @@ enum command {
 	NOP,
 	PKG_LIST,
 	INST_LIST,
-	TOGGLE_DEBUG,
 	SLAVE_LIST,	
+	INST_CTRL,
+	SLAVE_CTRL,
+	MASTER_CTRL,
 };
 
 static struct info {
@@ -86,22 +90,56 @@ static struct info {
 	int fd;
 	Ecore_Fd_Handler *fd_handler;
 	Ecore_Fd_Handler *in_handler;
-	int input_fd;
 
 	struct node *rootdir;
 	struct node *curdir;
+	struct node *targetdir;
 
 	enum command cmd;
+
+	int input_fd;
+	int verbose;
 } s_info = {
 	.fifo_handle = -EINVAL,
 	.fd = -EINVAL,
 	.fd_handler = NULL,
 	.in_handler = NULL,
-	.input_fd = -1,
 	.rootdir = NULL,
 	.curdir = NULL,
+	.targetdir = NULL,
 	.cmd = NOP,
+	.input_fd = STDIN_FILENO,
+	.verbose = 0,
 };
+
+char *optarg;
+int errno;
+int optind;
+int optopt;
+int opterr;
+
+static Eina_Bool input_cb(void *data, Ecore_Fd_Handler *fd_handler);
+
+static Eina_Bool process_line_cb(void *data)
+{
+	input_cb(NULL, NULL);
+	return ECORE_CALLBACK_CANCEL;
+}
+
+static inline void prompt(const char *cmdline)
+{
+	char *path;
+
+	if (s_info.input_fd != STDIN_FILENO) {
+		/* To prevent recursive call, add function to the main loop (idler) */
+		ecore_idler_add(process_line_cb, NULL);
+		return;
+	}
+
+	path = node_to_abspath(s_info.curdir);
+	printf(PROMPT"%s # %s", path, cmdline ? cmdline : "");
+	free(path);
+}
 
 static inline void ls(void)
 {
@@ -110,13 +148,17 @@ static inline void ls(void)
 	int is_package;
 	int is_provider;
 	int is_instance;
-	char *path;
 
-	is_package = node_name(s_info.curdir) && !strcmp(node_name(s_info.curdir), "package");
-	is_provider = !is_package && node_name(s_info.curdir) && !strcmp(node_name(s_info.curdir), "provider");
-	is_instance = !is_package && !is_provider && node_parent(s_info.curdir) && node_name(node_parent(s_info.curdir)) && !strcmp(node_name(node_parent(s_info.curdir)), "package");
+	if (!(node_mode(s_info.targetdir) & NODE_READ)) {
+		printf("Access denied\n");
+		return;
+	}
 
-	node = node_child(s_info.curdir);
+	is_package = node_name(s_info.targetdir) && !strcmp(node_name(s_info.targetdir), "package");
+	is_provider = !is_package && node_name(s_info.targetdir) && !strcmp(node_name(s_info.targetdir), "provider");
+	is_instance = !is_package && !is_provider && node_parent(s_info.targetdir) && node_name(node_parent(s_info.targetdir)) && !strcmp(node_name(node_parent(s_info.targetdir)), "package");
+
+	node = node_child(s_info.targetdir);
 	while (node) {
 		if (is_package) {
 			struct package *info;
@@ -137,7 +179,7 @@ static inline void ls(void)
 			if (lstat(buf, &stat) < 0)
 				printf("%3d ERR ", errno);
 			else
-				printf("%2.2lf MB ", (double)stat.st_size / 1024.0f / 1024.0f);
+				printf("%2.2lf KB ", (double)stat.st_size / 1024.0f);
 		}
 
 		if (node_type(node) == NODE_DIR)
@@ -150,9 +192,6 @@ static inline void ls(void)
 		cnt++;
 	}
 	printf("Total: %d\n", cnt);
-	path = node_to_abspath(s_info.curdir);
-	printf(PROMPT"%s # ", path);
-	free(path);
 }
 
 static void send_slave_list(void)
@@ -195,24 +234,43 @@ static void send_pkg_list(void)
 	s_info.cmd = PKG_LIST;
 }
 
-static void send_toggle_debug(void)
+static void send_inst_delete(void)
 {
 	struct packet *packet;
+	struct node *parent;
+	const char *name;
+	struct instance *inst;
 
 	if (s_info.cmd != NOP) {
 		printf("Previous command is not finished\n");
 		return;
 	}
 
-	packet = packet_create_noack("toggle_debug", "d", 0.0f);
-	if (!packet) {
-		printf("Failed to create a packet\n");
+	parent = node_parent(s_info.targetdir);
+	if (!parent) {
+		printf("Invalid argument\n");
 		return;
 	}
 
+	if (!node_parent(parent)) {
+		printf("Invalid argument\n");
+		return;
+	}
+
+	name = node_name(node_parent(parent));
+	if (!name || strcmp(name, "package")) {
+		printf("Invalid argument\n");
+		return;
+	}
+
+	inst = node_data(s_info.targetdir);
+	name = node_name(parent);
+
+	packet = packet_create_noack("pkg_ctrl", "sss", "rminst", name, inst->id);
 	com_core_packet_send_only(s_info.fd, packet);
 	packet_destroy(packet);
-	s_info.cmd = TOGGLE_DEBUG;
+
+	s_info.cmd = INST_CTRL;
 }
 
 static void send_inst_list(const char *pkgname)
@@ -239,9 +297,11 @@ static inline void help(void)
 {
 	printf("liveinfo - Livebox utility\n");
 	printf("------------------------------ [Command list] ------------------------------\n");
-	printf("[32cd - Change directory[0m\n");
-	printf("[32ls - List up content as a file[0m\n");
-	printf("[32cat - Open a file to get some detail information[0m\n");
+	printf("[32mcd [PATH] - Change directory[0m\n");
+	printf("[32mls [ | PATH] - List up content as a file[0m\n");
+	printf("[32mrm [PKG_ID|INST_ID] - Delete package or instance[0m\n");
+	printf("[32mcat [FILE] - Open a file to get some detail information[0m\n");
+	printf("[32mpull [FILE] - Pull given file to host dir[0m\n");
 	printf("[32mexit - [0m\n");
 	printf("[32mquit - [0m\n");
 	printf("----------------------------------------------------------------------------\n");
@@ -286,6 +346,7 @@ static inline void init_directory(void)
 	s_info.rootdir = node_create(NULL, NULL, NODE_DIR);
 	if (!s_info.rootdir)
 		return;
+	node_set_mode(s_info.rootdir, NODE_READ | NODE_EXEC);
 
 	node = node_create(s_info.rootdir, "provider", NODE_DIR);
 	if (!node) {
@@ -317,13 +378,9 @@ static inline void do_command(const char *cmd)
 {
 	char command[256];
 	char argument[4096] = { '\0', };
-	char *path;
 
-	if (!strlen(cmd)) {
-		char *path;
-		path = node_to_abspath(s_info.curdir);
-		printf(PROMPT"%s # ", path);
-		free(path);
+	if (!strlen(cmd) || *cmd == '#') {
+		prompt(NULL);
 		return;
 	}
 
@@ -332,111 +389,132 @@ static inline void do_command(const char *cmd)
 
 	if (!strcasecmp(cmd, "exit") || !strcasecmp(cmd, "quit")) {
 		ecore_main_loop_quit();
-	} else if (!strcasecmp(cmd, "toggle_debug")) {
-		if (s_info.cmd != NOP) {
-			printf("Waiting the server response\n");
-			return;
+	} else if (!strcasecmp(cmd, "ls")) {
+		const char *name;
+		struct node *parent;
+
+		if (*argument) {
+			s_info.targetdir = (*argument == '/') ? s_info.rootdir : s_info.curdir;
+			s_info.targetdir = node_find(s_info.targetdir, argument);
+		} else {
+			s_info.targetdir = s_info.curdir;
 		}
 
-		send_toggle_debug();
-	} else if (!strcasecmp(cmd, "ls")) {
-		if (node_name(s_info.curdir)) {
-			if (!strcmp(node_name(s_info.curdir), "package")) {
-				if (s_info.cmd != NOP) {
-					printf("Waiting the server response\n");
+		if (!s_info.targetdir) {
+			printf("%s is not exists\n", argument);
+			goto out;
+		}
+
+		name = node_name(s_info.targetdir);
+		if (name) {
+			if (!strcmp(name, "package")) {
+				if (s_info.cmd == NOP) {
+					send_pkg_list();
 					return;
 				}
-				send_pkg_list();
-				return;
-			} else if (!strcmp(node_name(s_info.curdir), "provider")) {
-				if (s_info.cmd != NOP) {
-					printf("Waiting the server response\n");
+
+				printf("Waiting the server response\n");
+				goto out;
+			} else if (!strcmp(name, "provider")) {
+				if (s_info.cmd == NOP) {
+					send_slave_list();
 					return;
 				}
-				send_slave_list();
-				return;
+
+				printf("Waiting the server response\n");
+				goto out;
 			}
 		}
 
-		if (node_parent(s_info.curdir) && node_name(node_parent(s_info.curdir))) {
-			if (!strcmp(node_name(node_parent(s_info.curdir)), "package")) {
+		parent = node_parent(s_info.targetdir);
+		if (parent && node_name(parent)) {
+			if (!strcmp(node_name(parent), "package")) {
 				if (s_info.cmd != NOP) {
 					printf("Waiting the server response\n");
-					return;
+					goto out;
 				}
-				send_inst_list(node_name(s_info.curdir));
+				send_inst_list(name);
 				return;
 			}
 		}
 
 		ls();
 	} else if (!strcasecmp(cmd, "cd")) {
-		struct node *node;
-
-		if (!strcmp(argument, "."))
-			return;
+		if (!*argument)
+			goto out;
 
 		if (s_info.cmd != NOP) {
 			printf("Waiting the server response\n");
-			return;
+			goto out;
 		}
 
-		if (!strcmp(argument, "..")) {
-			if (node_parent(s_info.curdir) == NULL)
-				return;
-
-			s_info.curdir = node_parent(s_info.curdir);
+		s_info.targetdir = (*argument == '/') ? s_info.rootdir : s_info.curdir;
+		s_info.targetdir = node_find(s_info.targetdir, argument);
+		if (!s_info.targetdir) {
+			printf("%s is not exists\n", argument);
+			goto out;
 		}
 
-		node = node_child(s_info.curdir);
-		while (node) {
-			if (!strcmp(node_name(node), argument)) {
-				if (node_type(node) != NODE_DIR)
-					printf("Unable to go into the %s\n", node_name(node));
-				else
-					s_info.curdir = node;
-
-				break;
-			}
-
-			node = node_next_sibling(node);
+		if (node_type(s_info.targetdir) != NODE_DIR) {
+			printf("Unable change directory to %s\n", argument);
+			goto out;
 		}
-		if (!node)
-			printf("Not found: %s\n", argument);
 
-		path = node_to_abspath(s_info.curdir);
-		printf(PROMPT"%s # ", path);
-		free(path);
+		if (!(node_mode(s_info.targetdir) & NODE_EXEC)) {
+			printf("Access denied %s\n", argument);
+			goto out;
+		}
+
+		s_info.curdir = s_info.targetdir;
+	} else if (!strcasecmp(cmd, "rm")) {
+		if (!*argument)
+			goto out;
+
+		if (s_info.cmd != NOP) {
+			printf("Waiting the server response\n");
+			goto out;
+		}
+
+		s_info.targetdir = (*argument == '/') ? s_info.rootdir : s_info.curdir;
+		s_info.targetdir = node_find(s_info.targetdir, argument);
+		if (!s_info.targetdir) {
+			printf("%s is not exists\n", argument);
+			goto out;
+		}
+
+		if (!(node_mode(s_info.targetdir) & NODE_WRITE)) {
+			printf("Access denied %s\n", argument);
+			goto out;
+		}
+
+		send_inst_delete();
 	} else if (!strcasecmp(cmd, "help")) {
-		goto errout;
+		help();
 	} else {
 		printf("Unknown command - \"help\"\n");
-		path = node_to_abspath(s_info.curdir);
-		printf(PROMPT"%s # ", path);
-		free(path);
 	}
 
+out:
+	prompt(NULL);
 	return;
-
-errout:
-	help();
-	path = node_to_abspath(s_info.curdir);
-	printf(PROMPT"%s # ", path);
-	free(path);
 }
 
 static Eina_Bool input_cb(void *data, Ecore_Fd_Handler *fd_handler)
 {
 	static int idx = 0;
 	static char cmd_buffer[256];
-	char *path;
 	char ch;
 	int fd;
+	int ret;
 
-	fd = ecore_main_fd_handler_fd_get(fd_handler);
-	if (fd < 0) {
-		printf("FD is not valid: %d\n", fd);
-		return ECORE_CALLBACK_CANCEL;
+	if (fd_handler) {
+		fd = ecore_main_fd_handler_fd_get(fd_handler);
+		if (fd < 0) {
+			printf("FD is not valid: %d\n", fd);
+			return ECORE_CALLBACK_CANCEL;
+		}
+	} else {
+		fd = s_info.input_fd;
 	}
 
 	/*!
@@ -447,41 +525,49 @@ static Eina_Bool input_cb(void *data, Ecore_Fd_Handler *fd_handler)
 	 */
 
 	/* Silly.. Silly */
-	if (read(fd, &ch, sizeof(ch)) != sizeof(ch)) {
-		printf("Failed to get a byte: %s\n", strerror(errno));
-		return ECORE_CALLBACK_CANCEL;
+	while ((ret = read(fd, &ch, sizeof(ch))) == sizeof(ch)) {
+		switch (ch) {
+		case 0x08: /* BKSP */
+			cmd_buffer[idx] = '\0';
+			if (idx > 0) {
+				idx--;
+				cmd_buffer[idx] = ' ';
+				putc('\r', stdout);
+				prompt(cmd_buffer);
+			}
+
+			cmd_buffer[idx] = '\0';
+			putc('\r', stdout);
+			prompt(cmd_buffer);
+			break;
+		case '\n':
+		case '\r':
+			cmd_buffer[idx] = '\0';
+			idx = 0;
+			if (s_info.input_fd == STDIN_FILENO || s_info.verbose)
+				putc((int)'\n', stdout);
+			do_command(cmd_buffer);
+			memset(cmd_buffer, 0, sizeof(cmd_buffer));
+
+			/* Make a main loop processing for command handling */
+			return ECORE_CALLBACK_RENEW;
+		default:
+			cmd_buffer[idx++] = ch;
+
+			if (s_info.input_fd == STDIN_FILENO || s_info.verbose)
+				putc((int)ch, stdout);
+
+			if (idx == sizeof(cmd_buffer) - 1) {
+				cmd_buffer[idx] = '\0';
+				printf("\nCommand buffer is overflow: %s\n", cmd_buffer);
+				idx = 0;
+			}
+			break;
+		}
 	}
 
-	switch (ch) {
-	case 0x08: /* BKSP */
-		cmd_buffer[idx] = '\0';
-		if (idx > 0)
-			idx--;
-		cmd_buffer[idx] = ' ';
-		path = node_to_abspath(s_info.curdir);
-		printf("\r"PROMPT"%s # %s", path, cmd_buffer);
-		cmd_buffer[idx] = '\0';
-		printf("\r"PROMPT"%s # %s", path, cmd_buffer);
-		free(path);
-		break;
-	case '\n':
-	case '\r':
-		cmd_buffer[idx] = '\0';
-		idx = 0;
-		putc((int)'\n', stdout);
-		do_command(cmd_buffer);
-		memset(cmd_buffer, 0, sizeof(cmd_buffer));
-		break;
-	default:
-		cmd_buffer[idx++] = ch;
-		putc((int)ch, stdout);
-		if (idx == sizeof(cmd_buffer) - 1) {
-			cmd_buffer[idx] = '\0';
-			printf("\nCommand buffer is overflow: %s\n", cmd_buffer);
-			idx = 0;
-		}
-		break;
-	}
+	if (ret < 0 && !fd_handler)
+		ecore_main_loop_quit();
 
 	return ECORE_CALLBACK_RENEW;
 }
@@ -506,7 +592,6 @@ static void processing_line_buffer(const char *buffer)
 	double period;
 	int width;
 	int height;
-	int debug;
 	struct node *node;
 	struct package *pkginfo;
 	struct instance *instinfo;
@@ -520,7 +605,7 @@ static void processing_line_buffer(const char *buffer)
 			return;
 		}
 
-		node = node_find(s_info.curdir, pkgname);
+		node = node_find(s_info.targetdir, pkgname);
 		if (!node) {
 			pkginfo = malloc(sizeof(*pkginfo));
 			if (!pkginfo) {
@@ -534,7 +619,7 @@ static void processing_line_buffer(const char *buffer)
 
 			pkginfo->primary = 1;
 
-			node = node_create(s_info.curdir, pkgname, NODE_DIR);
+			node = node_create(s_info.targetdir, pkgname, NODE_DIR);
 			if (!node) {
 				free(pkginfo->pkgid);
 				free(pkginfo);
@@ -542,6 +627,7 @@ static void processing_line_buffer(const char *buffer)
 				return;
 			}
 
+			node_set_mode(node, NODE_READ | NODE_EXEC);
 			node_set_data(node, pkginfo);
 		} else {
 			pkginfo = node_data(node);
@@ -571,7 +657,7 @@ static void processing_line_buffer(const char *buffer)
 			printf("Invalid format : [%s]\n", buffer);
 			return;
 		}
-		node = node_find(s_info.curdir, slavename);
+		node = node_find(s_info.targetdir, slavename);
 		if (!node) {
 			slaveinfo = calloc(1, sizeof(*slaveinfo));
 			if (!slaveinfo) {
@@ -579,12 +665,13 @@ static void processing_line_buffer(const char *buffer)
 				return;
 			}
 
-			node = node_create(s_info.curdir, slavename, NODE_DIR);
+			node = node_create(s_info.targetdir, slavename, NODE_DIR);
 			if (!node) {
 				free(slaveinfo);
 				return;
 			}
 
+			node_set_mode(node, NODE_READ | NODE_EXEC);
 			node_set_data(node, slaveinfo);
 		} else {
 			slaveinfo = node_data(node);
@@ -594,8 +681,16 @@ static void processing_line_buffer(const char *buffer)
 		free(slaveinfo->state);
 
 		slaveinfo->pkgname = strdup(pkgname);
+		if (!slaveinfo->pkgname)
+			printf("Error: %s\n", strerror(errno));
+
 		slaveinfo->abi = strdup(abi);
+		if (!slaveinfo->abi)
+			printf("Error: %s\n", strerror(errno));
+
 		slaveinfo->state = strdup(state);
+		if (!slaveinfo->state)
+			printf("Error: %s\n", strerror(errno));
 
 		slaveinfo->pid = pid;
 		slaveinfo->secured = secured;
@@ -614,7 +709,7 @@ static void processing_line_buffer(const char *buffer)
 		for (i = strlen(inst_id); i > 0 && inst_id[i] != '/'; i--);
 		i += (inst_id[i] == '/');
 
-		node = node_find(s_info.curdir, inst_id + i);
+		node = node_find(s_info.targetdir, inst_id + i);
 		if (!node) {
 			instinfo = calloc(1, sizeof(*instinfo));
 			if (!instinfo) {
@@ -622,20 +717,26 @@ static void processing_line_buffer(const char *buffer)
 				return;
 			}
 
-			node = node_create(s_info.curdir, inst_id + i, NODE_FILE);
+			node = node_create(s_info.targetdir, inst_id + i, NODE_FILE);
 			if (!node) {
 				free(instinfo);
 				return;
 			}
 
+			node_set_mode(node, NODE_READ | NODE_WRITE);
 			node_set_data(node, instinfo);
 		} else {
 			instinfo = node_data(node);
 		}
 
+		free(instinfo->id);
 		free(instinfo->cluster);
 		free(instinfo->category);
 		free(instinfo->state);
+
+		instinfo->id = strdup(inst_id);
+		if (!instinfo->id)
+			printf("Error: %s\n", strerror(errno));
 
 		instinfo->cluster = strdup(cluster);
 		if (!instinfo->cluster)
@@ -646,12 +747,22 @@ static void processing_line_buffer(const char *buffer)
 			printf("Error: %s\n", strerror(errno));
 
 		instinfo->state = strdup(state);
+		if (!instinfo->state)
+			printf("Error: %s\n", strerror(errno));
+
 		instinfo->period = period;
 		instinfo->width = width;
 		instinfo->height = height;
 		break;
-	case TOGGLE_DEBUG:
-		sscanf(buffer, "%d", &debug);
+	case INST_CTRL:
+		sscanf(buffer, "%d", &i);
+		printf("%s\n", strerror(i));
+		break;
+	case SLAVE_CTRL:
+		sscanf(buffer, "%d", &i);
+		break;
+	case MASTER_CTRL:
+		sscanf(buffer, "%d", &i);
 		break;
 	default:
 		break;
@@ -670,11 +781,16 @@ static inline void do_line_command(void)
 	case SLAVE_LIST:
 		ls();
 		break;
-	case TOGGLE_DEBUG:
+	case INST_CTRL:
+		break;
+	case SLAVE_CTRL:
+		break;
+	case MASTER_CTRL:
 		break;
 	default:
 		break;
 	}
+	prompt(NULL);
 }
 
 static Eina_Bool read_cb(void *data, Ecore_Fd_Handler *fd_handler)
@@ -746,7 +862,6 @@ static int ret_cb(pid_t pid, int handle, const struct packet *packet, void *data
 {
 	const char *fifo_name;
 	int ret;
-	char *path;
 
 	if (packet_get(packet, "si", &fifo_name, &ret) != 2) {
 		printf("Invalid packet\n");
@@ -777,18 +892,18 @@ static int ret_cb(pid_t pid, int handle, const struct packet *packet, void *data
 		return -EFAULT;
 	}
 
-	path = node_to_abspath(s_info.curdir);
-	printf(PROMPT"%s # ", path);
-	free(path);
+	prompt(NULL);
 
-        if (fcntl(STDIN_FILENO, F_SETFL, O_NONBLOCK) < 0)
-                printf("Error: %s\n", strerror(errno));
+	if (s_info.input_fd == STDIN_FILENO) {
+		if (fcntl(s_info.input_fd, F_SETFL, O_NONBLOCK) < 0)
+			printf("Error: %s\n", strerror(errno));
 
-	s_info.in_handler = ecore_main_fd_handler_add(STDIN_FILENO, ECORE_FD_READ, input_cb, NULL, NULL, NULL);
-	if (!s_info.in_handler) {
-		printf("Failed to add a input handler\n");
-		ecore_main_loop_quit();
-		return -EFAULT;
+		s_info.in_handler = ecore_main_fd_handler_add(s_info.input_fd, ECORE_FD_READ, input_cb, NULL, NULL, NULL);
+		if (!s_info.in_handler) {
+			printf("Failed to add a input handler\n");
+			ecore_main_loop_quit();
+			return -EFAULT;
+		}
 	}
 
 	return 0;
@@ -838,6 +953,52 @@ int main(int argc, char *argv[])
 			.handler = NULL,
 		},
 	};
+	static struct option long_options[] = {
+		{ "batchmode", required_argument, 0, 'b' },
+		{ "help", no_argument, 0, 'h' },
+		{ "verbose", required_argument, 0, 'v' },
+		{ 0, 0, 0, 0 }
+	};
+	int option_index;
+	int c;
+
+	do {
+		c = getopt_long(argc, argv, "b:hv:", long_options, &option_index);
+		switch (c) {
+		case 'b':
+			if (!optarg || !*optarg) {
+				printf("Invalid argument\n");
+				help();
+				return -EINVAL;
+			}
+
+			if (s_info.input_fd != STDIN_FILENO) {
+				/* Close the previously, opened file */
+				close(s_info.input_fd);
+			}
+
+			s_info.input_fd = open(optarg, O_RDONLY);
+			if (s_info.input_fd < 0) {
+				printf("Unable to access %s (%s)\n", optarg, strerror(errno));
+				return -EIO;
+			}
+			break;
+		case 'h':
+			help();
+			return 0;
+		case 'v':
+			if (!optarg || !*optarg) {
+				printf("Invalid argument\n");
+				help();
+				return -EINVAL;
+			}
+
+			s_info.verbose = !strcmp(optarg, "true");
+			break;
+		default:
+			break;
+		}
+	} while (c != -1);
 
 	ecore_init();
 	g_type_init();
@@ -852,16 +1013,20 @@ int main(int argc, char *argv[])
 		return -EIO;
 	}
 
-	printf("Type your command on below empty line\n");
+	if (s_info.input_fd == STDIN_FILENO) {
+		printf("Type your command on below empty line\n");
 
-	if (tcgetattr(STDIN_FILENO, &ttystate) < 0) {
-		printf("Error: %s\n", strerror(errno));
-	} else {
-		ttystate.c_lflag &= ~(ICANON | ECHO);
-		ttystate.c_cc[VMIN] = 1;
-
-		if (tcsetattr(STDIN_FILENO, TCSANOW, &ttystate) < 0)
+		if (tcgetattr(s_info.input_fd, &ttystate) < 0) {
 			printf("Error: %s\n", strerror(errno));
+		} else {
+			ttystate.c_lflag &= ~(ICANON | ECHO);
+			ttystate.c_cc[VMIN] = 1;
+
+			if (tcsetattr(s_info.input_fd, TCSANOW, &ttystate) < 0)
+				printf("Error: %s\n", strerror(errno));
+		}
+	} else {
+		printf("Batch mode enabled\n");
 	}
 
 	if (setvbuf(stdout, (char *)NULL, _IONBF, 0) != 0)
@@ -874,10 +1039,6 @@ int main(int argc, char *argv[])
 	fini_directory();
 	livebox_service_fini();
 
-	ttystate.c_lflag |= ICANON | ECHO;
-	if (tcsetattr(STDIN_FILENO, TCSANOW, &ttystate) < 0)
-		printf("Error: %s\n", strerror(errno));
-
 	if (s_info.fd > 0) {
 		com_core_packet_client_fini(s_info.fd);
 		s_info.fd = -EINVAL;
@@ -886,6 +1047,14 @@ int main(int argc, char *argv[])
 	if (s_info.fd_handler) {
 		ecore_main_fd_handler_del(s_info.fd_handler);
 		s_info.fd_handler = NULL;
+	}
+
+	if (s_info.input_fd == STDIN_FILENO) {
+		ttystate.c_lflag |= ICANON | ECHO;
+		if (tcsetattr(s_info.input_fd, TCSANOW, &ttystate) < 0)
+			printf("Error: %s\n", strerror(errno));
+	} else {
+		close(s_info.input_fd);
 	}
 
 	if (s_info.fifo_handle > 0) {
@@ -899,6 +1068,7 @@ int main(int argc, char *argv[])
 	}
 
 	ecore_shutdown();
+	putc((int)'\n', stdout);
 	return 0;
 }
 

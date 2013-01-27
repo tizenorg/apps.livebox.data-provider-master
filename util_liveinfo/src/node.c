@@ -33,11 +33,11 @@ char *node_to_abspath(struct node *node)
 
 	tmp = node;
 	while (tmp && node_name(tmp)) {
-		len += strlen(node_name(tmp)) + 1;
+		len += strlen(node_name(tmp)) + 1; /* trail '/' */
 		tmp = node_parent(tmp);
 	}
 
-	path = malloc(len + 2);
+	path = malloc(len + 2); /* '/' and '\0' */
 	if (!path)
 		return NULL;
 
@@ -126,19 +126,42 @@ static inline void abspath(char* pBuffer, char* pRet)
 struct node *node_find(const struct node *node, char *path)
 {
 	int len;
-	char *ptr = path;
+	char *ptr;
+	char *buffer;
+
+	buffer = malloc(strlen(path) + 3); /* add 2 more bytes */
+	if (!buffer)
+		return NULL;
+
+	abspath(path, buffer);
+	ptr = buffer;
 
 	do {
-		node = node->child;
-		if (!node)
-			return NULL;
-
-		if (*ptr == '/') ptr++;
+		ptr += (*ptr == '/');
 		for (len = 0; ptr[len] && ptr[len] != '/'; len++);
+		if (!len)
+			break;
+
+		if (!strncmp("..", ptr, len)) {
+			ptr += len;
+			node = node->parent ? node->parent : node;
+			continue;
+		}
+
+		if (!strncmp(".", ptr, len)) {
+			ptr += len;
+			continue;
+		}
+
+		node = node->child;
+		if (!node) {
+			free(buffer);
+			return NULL;
+		}
+
 		while (node) {
 			if (!strncmp(node->name, ptr, len) && node->name[len] == '\0') {
 				ptr += len;
-				ptr += (*ptr == '/');
 				break;
 			}
 
@@ -146,6 +169,7 @@ struct node *node_find(const struct node *node, char *path)
 		}
 	} while (*ptr && node);
 
+	free(buffer);
 	return (struct node *)node;
 }
 

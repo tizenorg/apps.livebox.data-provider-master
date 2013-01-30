@@ -42,6 +42,7 @@
 #include "conf.h"
 #include "util.h"
 
+#define TYPE_COLOR "color"
 #define TYPE_TEXT "text"
 #define TYPE_IMAGE "image"
 #define TYPE_EDJE "script"
@@ -66,6 +67,7 @@ struct script_port {
 	void *handle;
 
 	const char *(*magic_id)(void);
+	int (*update_color)(void *handle, Evas *e, const char *id, const char *part, const char *rgba);
 	int (*update_text)(void *handle, Evas *e, const char *id, const char *part, const char *text);
 	int (*update_image)(void *handle, Evas *e, const char *id, const char *part, const char *path);
 	int (*update_script)(void *handle, Evas *e, const char *src_id, const char *target_id, const char *part, const char *path, const char *group);
@@ -403,6 +405,36 @@ HAPI void *script_handler_evas(struct script_info *info)
 	return ecore_evas_get(info->ee);
 }
 
+static int update_script_color(struct inst_info *inst, struct block *block, int is_pd)
+{
+	struct script_info *info;
+	Evas *e;
+
+	if (!block || !block->part || !block->data) {
+		ErrPrint("Block or part or data is not valid\n");
+		return -EINVAL;
+	}
+
+	info = is_pd ? instance_pd_script(inst) : instance_lb_script(inst);
+	if (!info) {
+		ErrPrint("info is NIL\n");
+		return -EFAULT;
+	}
+
+	if (!info->port) {
+		ErrPrint("info->port is NIL\n");
+		return -EINVAL;
+	}
+
+	e = script_handler_evas(info);
+	if (e)
+		info->port->update_color(info->port_data, e, block->id, block->part, block->data);
+	else
+		ErrPrint("Evas(nil) id[%s] part[%s] data[%s]\n", block->id, block->part, block->data);
+
+	return 0;
+}
+
 static int update_script_text(struct inst_info *inst, struct block *block, int is_pd)
 {
 	struct script_info *info;
@@ -675,6 +707,10 @@ HAPI int script_handler_parse_desc(const char *pkgname, const char *id, const ch
 		const char *type;
 		int (*handler)(struct inst_info *inst, struct block *block, int is_pd);
 	} handlers[] = {
+		{
+			.type = TYPE_COLOR,
+			.handler = update_script_color,
+		},
 		{
 			.type = TYPE_TEXT,
 			.handler = update_script_text,
@@ -1158,6 +1194,10 @@ HAPI int script_init(void)
 			goto errout;
 
 		DbgPrint("SCRIPT PORT magic id: %s\n", item->magic_id());
+
+		item->update_color = dlsym(item->handle, "script_update_color");
+		if (!item->update_color)
+			goto errout;
 
 		item->update_text = dlsym(item->handle, "script_update_text");
 		if (!item->update_text)

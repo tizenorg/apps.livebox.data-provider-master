@@ -12,7 +12,7 @@
 
 	<setup>org.tizen.nicesj</setup>
 
-	<box type="image" mouse_event="false">
+	<box type="image" mouse_event="false" touch_effect="true">
 		<size preview="ABSPATH">1x1</size>
 		<size preview="ABSPATH">2x1</size>
 		<size>2x2</size>

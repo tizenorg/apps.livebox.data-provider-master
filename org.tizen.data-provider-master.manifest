@@ -39,8 +39,8 @@
 		<filesystem path="/opt/dbspace/.livebox.db-journal" label="data-provider-master::db" />
 
 		<!-- Init script -->
-		<filesystem path="/etc/rc.d/init.d/data-provider-master" label="_" />
-		<filesystem path="/etc/rc.d/rc3.d/S99data-provider-master" label="_" />
+		<filesystem path="/etc/rc.d/init.d/data-provider-master" label="_" exec_label="none" />
+		<filesystem path="/etc/rc.d/rc3.d/S99data-provider-master" label="_" exec_label="none" />
 		<filesystem path="/usr/lib/systemd/user/data-provider-master.service" label="_" />
 		<filesystem path="/usr/lib/systemd/user/tizen-middleware.target.wants/data-provider-master.service" label="_" />
 

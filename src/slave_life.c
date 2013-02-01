@@ -1184,15 +1184,15 @@ HAPI const char *slave_state_string(const struct slave_node *slave)
 {
 	switch (slave->state) {
 	case SLAVE_REQUEST_TO_LAUNCH:
-		return "Request to launch";
+		return "RequestToLaunch";
 	case SLAVE_REQUEST_TO_TERMINATE:
-		return "Request to terminate";
+		return "RequestToTerminate";
 	case SLAVE_TERMINATED:
 		return "Terminated";
 	case SLAVE_REQUEST_TO_PAUSE:
-		return "Request to pause";
+		return "RequestToPause";
 	case SLAVE_REQUEST_TO_RESUME:
-		return "Request to resume";
+		return "RequestToResume";
 	case SLAVE_PAUSED:
 		return "Paused";
 	case SLAVE_RESUMED:

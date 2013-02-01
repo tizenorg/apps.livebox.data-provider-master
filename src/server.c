@@ -3940,16 +3940,19 @@ static struct packet *slave_hello(pid_t pid, int handle, const struct packet *pa
 			const char *abi;
 
 			if (aul_app_get_pkgname_bypid(pid, pkgname, sizeof(pkgname)) != AUL_R_OK) {
-				ErrPrint("pid[%d] is not authroized provider package\n", pid);
-				ret = -EINVAL;
-				goto out;
+				ErrPrint("pid[%d] is not authroized provider package, try to find it using its name[%s]\n", pid, slavename);
+				slave = slave_find_by_name(slavename);
+				pkgname[0] = '\0'; /* Reset the pkgname */
+			} else {
+				slave = slave_find_by_pkgname(pkgname);
 			}
 
-			slave = slave_find_by_pkgname(pkgname);
 			if (!slave) {
 				abi = abi_find_by_pkgname(pkgname);
-				if (!abi)
-					abi = "unknown";
+				if (!abi) {
+					abi = DEFAULT_ABI;
+					DbgPrint("Slave pkgname is invalid, ABI is replaced with '%s'(default)\n", abi);
+				}
 
 				slave = slave_create(slavename, 1, abi, pkgname);
 				if (!slave) {

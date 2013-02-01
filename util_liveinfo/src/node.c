@@ -13,6 +13,7 @@ struct node {
 
 	struct node *parent;
 	unsigned char mode;
+	int age;
 
 	struct {
 		struct node *next;
@@ -24,11 +25,11 @@ struct node {
 
 int errno; /* External symbol */
 
-char *node_to_abspath(struct node *node)
+char *node_to_abspath(const struct node *node)
 {
 	char *path;
 	char *ptr;
-	struct node *tmp;
+	const struct node *tmp;
 	int len = 0;
 
 	tmp = node;
@@ -37,7 +38,7 @@ char *node_to_abspath(struct node *node)
 		tmp = node_parent(tmp);
 	}
 
-	path = malloc(len + 2); /* '/' and '\0' */
+	path = malloc(len + 3); /* '/' and '\0' */
 	if (!path)
 		return NULL;
 
@@ -45,8 +46,10 @@ char *node_to_abspath(struct node *node)
 		path[0] = '/';
 		path[1] = '\0';
 	} else {
-		ptr = path + len;
+		ptr = path + len + 1;
 		*ptr = '\0';
+		ptr--;
+		*ptr = '/';
 		tmp = node;
 		while (tmp && node_name(tmp)) {
 			ptr -= (strlen(node_name(tmp)) + 1);
@@ -63,6 +66,7 @@ static inline int next_state(int from, char ch)
 {
 	switch ( ch )
 	{
+		case '\0':
 		case '/':
 			return 1;
 		case '.':
@@ -73,7 +77,7 @@ static inline int next_state(int from, char ch)
 	return 4;
 }
 
-static inline void abspath(char* pBuffer, char* pRet)
+static inline void abspath(const char* pBuffer, char* pRet)
 {
 	int idx=0;
 	int state = 1;
@@ -96,7 +100,7 @@ static inline void abspath(char* pBuffer, char* pRet)
 				break;
 			case 2:
 				if ( state == 1 ) {
-					if ( idx > 0 ) idx --;
+					if ( idx > 1 ) idx --;
 				} else {
 					pRet[idx] = pBuffer[src_idx];
 					idx ++;
@@ -106,11 +110,11 @@ static inline void abspath(char* pBuffer, char* pRet)
 				// Only can go to the 1 or 4
 				if ( state == 1 ) {
 					idx -= 2;
-					if ( idx < 0 ) idx = 0;
+					if ( idx < 1 ) idx = 1;
 
-					while ( idx > 0 && pRet[idx] != '/' ) idx --;
-					if ( idx > 0 && pRet[idx] == '/' ) idx --;
-					while ( idx > 0 && pRet[idx] != '/' ) idx --;
+					while ( idx > 1 && pRet[idx] != '/' ) idx --; /* Remove .. */
+					if ( idx > 1 && pRet[idx] == '/' ) idx --;
+					while ( idx > 1 && pRet[idx] != '/' ) idx --; /* Remove parent folder */
 				}
 			case 4:
 				pRet[idx] = pBuffer[src_idx];
@@ -123,19 +127,32 @@ static inline void abspath(char* pBuffer, char* pRet)
 	}
 }
 
-struct node *node_find(const struct node *node, char *path)
+struct node *node_find(const struct node *node, const char *path)
 {
-	int len;
+	int len = 0;
 	char *ptr;
 	char *buffer;
 
+	if (*path != '/') {
+		while (node->parent && path[0] == '.' && path[1] == '.') {
+			if (path[2] != '/' && path[2] != '\0')
+				break;
+
+			path += 2;
+			path += (path[2] == '/');
+			node = node->parent;
+		}
+	}
+
 	buffer = malloc(strlen(path) + 3); /* add 2 more bytes */
-	if (!buffer)
+	if (!buffer) {
+		printf("Error: %s\n", strerror(errno));
 		return NULL;
+	}
 
 	abspath(path, buffer);
-	ptr = buffer;
 
+	ptr = buffer;
 	do {
 		ptr += (*ptr == '/');
 		for (len = 0; ptr[len] && ptr[len] != '/'; len++);
@@ -154,10 +171,8 @@ struct node *node_find(const struct node *node, char *path)
 		}
 
 		node = node->child;
-		if (!node) {
-			free(buffer);
-			return NULL;
-		}
+		if (!node)
+			break;
 
 		while (node) {
 			if (!strncmp(node->name, ptr, len) && node->name[len] == '\0') {
@@ -219,10 +234,53 @@ struct node *node_create(struct node *parent, const char *name, enum node_type t
 	return node;
 }
 
-void node_destroy(struct node *node)
+void *node_destroy(struct node *node)
 {
+	void *data;
+
+	data = node->data;
 	free(node->name);
 	free(node);
+
+	return data;
+}
+
+void node_delete(struct node *node, void (del_cb)(struct node *node))
+{
+	struct node *tmp;
+	struct node *next;
+	struct node *parent;
+
+	if (node->sibling.prev)
+		node->sibling.prev->sibling.next = node->sibling.next;
+
+	if (node->sibling.next)
+		node->sibling.next->sibling.prev = node->sibling.prev;
+
+	if (node->parent) {
+		node->parent->child = NULL;
+		node->parent = NULL;
+	}
+
+	tmp = node;
+	while (tmp) {
+		while (tmp->child) tmp = tmp->child;
+
+		parent = tmp->parent;
+		next = tmp->sibling.next;
+
+		if (del_cb)
+			del_cb(tmp);
+
+		node_destroy(tmp);
+
+		if (next)
+			tmp = next;
+		else if (parent)
+			tmp = parent;
+		else
+			tmp = NULL;
+	}
 }
 
 struct node * const node_next_sibling(const struct node *node)
@@ -278,6 +336,16 @@ const enum node_type const node_type(const struct node *node)
 const char * const node_name(const struct node *node)
 {
 	return node->name;
+}
+
+void node_set_age(struct node *node, int age)
+{
+	node->age = age;
+}
+
+int node_age(struct node *node)
+{
+	return node->age;
 }
 
 /* End of a file */

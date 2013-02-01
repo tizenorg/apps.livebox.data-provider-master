@@ -1,6 +1,6 @@
 Name: org.tizen.data-provider-master
 Summary: Master service provider for liveboxes.
-Version: 0.15.5
+Version: 0.15.6
 Release: 1
 Group: framework/livebox
 License: Flora License

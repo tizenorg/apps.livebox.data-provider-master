@@ -99,6 +99,8 @@ static struct info {
 
 	int input_fd;
 	int verbose;
+
+	int age;
 } s_info = {
 	.fifo_handle = -EINVAL,
 	.fd = -EINVAL,
@@ -110,6 +112,7 @@ static struct info {
 	.cmd = NOP,
 	.input_fd = STDIN_FILENO,
 	.verbose = 0,
+	.age = 0,
 };
 
 char *optarg;
@@ -141,6 +144,49 @@ static inline void prompt(const char *cmdline)
 	free(path);
 }
 
+static void provider_del_cb(struct node *node)
+{
+	struct slave *info;
+
+	info = node_data(node);
+	if (!info)
+		return;
+
+	free(info->pkgname);
+	free(info->abi);
+	free(info->state);
+	free(info);
+}
+
+static void package_del_cb(struct node *node)
+{
+	struct package *info;
+
+	info = node_data(node);
+	if (!info)
+		return;
+
+	free(info->pkgid);
+	free(info->slavename);
+	free(info->abi);
+	free(info);
+}
+
+static void inst_del_cb(struct node *node)
+{
+	struct instance *info;
+
+	info = node_data(node);
+	if (!info)
+		return;
+
+	free(info->id);
+	free(info->cluster);
+	free(info->category);
+	free(info->state);
+	free(info);
+}
+
 static inline void ls(void)
 {
 	struct node *node;
@@ -148,6 +194,7 @@ static inline void ls(void)
 	int is_package;
 	int is_provider;
 	int is_instance;
+	struct node *next_node;
 
 	if (!(node_mode(s_info.targetdir) & NODE_READ)) {
 		printf("Access denied\n");
@@ -162,16 +209,41 @@ static inline void ls(void)
 	while (node) {
 		if (is_package) {
 			struct package *info;
+
+			next_node = node_next_sibling(node);
+			if (node_age(node) != s_info.age) {
+				node_delete(node, package_del_cb);
+				node = next_node;
+				continue;
+			}
+
 			info = node_data(node);
 			printf(" %3d %20s %5s ", info->inst_count, info->slavename ? info->slavename : "-", info->abi ? info->abi : "-");
 		} else if (is_provider) {
 			struct slave *info;
+
+			next_node = node_next_sibling(node);
+			if (node_age(node) != s_info.age) {
+				node_delete(node, provider_del_cb);
+				node = next_node;
+				continue;
+			}
+
 			info = node_data(node);
 			printf(" %3d %5s %5.2f ", info->loaded_inst, info->abi ? info->abi : "-", info->ttl);
 		} else if (is_instance) {
 			struct instance *info;
 			struct stat stat;
 			char buf[4096];
+
+			next_node = node_next_sibling(node);
+
+			if (node_age(node) != s_info.age) {
+				node_delete(node, inst_del_cb);
+				node = next_node;
+				continue;
+			}
+
 			info = node_data(node);
 
 			printf(" %5.2f %6s %10s %10s %4dx%-4d ", info->period, info->state, info->cluster, info->category, info->width, info->height);
@@ -191,6 +263,7 @@ static inline void ls(void)
 		node = node_next_sibling(node);
 		cnt++;
 	}
+
 	printf("Total: %d\n", cnt);
 }
 
@@ -212,6 +285,27 @@ static void send_slave_list(void)
 	com_core_packet_send_only(s_info.fd, packet);
 	packet_destroy(packet);
 	s_info.cmd = SLAVE_LIST;
+	s_info.age++;
+}
+
+/*!
+ * var = debug, slave_max_load
+ * cmd = set / get
+ */
+static void send_command(const char *cmd, const char *var, const char *val)
+{
+	struct packet *packet;
+
+	if (s_info.cmd != NOP) {
+		printf("Previous command is not finished\n");
+		return;
+	}
+
+	packet = packet_create_noack("master_ctrl", "sss", cmd, var, val);
+	com_core_packet_send_only(s_info.fd, packet);
+	packet_destroy(packet);
+	s_info.cmd = MASTER_CTRL;
+	s_info.age++;
 }
 
 static void send_pkg_list(void)
@@ -232,6 +326,7 @@ static void send_pkg_list(void)
 	com_core_packet_send_only(s_info.fd, packet);
 	packet_destroy(packet);
 	s_info.cmd = PKG_LIST;
+	s_info.age++;
 }
 
 static void send_inst_delete(void)
@@ -269,8 +364,8 @@ static void send_inst_delete(void)
 	packet = packet_create_noack("pkg_ctrl", "sss", "rminst", name, inst->id);
 	com_core_packet_send_only(s_info.fd, packet);
 	packet_destroy(packet);
-
 	s_info.cmd = INST_CTRL;
+	s_info.age++;
 }
 
 static void send_inst_list(const char *pkgname)
@@ -291,6 +386,7 @@ static void send_inst_list(const char *pkgname)
 	com_core_packet_send_only(s_info.fd, packet);
 	packet_destroy(packet);
 	s_info.cmd = INST_LIST;
+	s_info.age++;
 }
 
 static inline void help(void)
@@ -302,6 +398,7 @@ static inline void help(void)
 	printf("[32mrm [PKG_ID|INST_ID] - Delete package or instance[0m\n");
 	printf("[32mcat [FILE] - Open a file to get some detail information[0m\n");
 	printf("[32mpull [FILE] - Pull given file to host dir[0m\n");
+	printf("[32mset [debug] [on|off] Set the control variable of master provider[0m\n");
 	printf("[32mexit - [0m\n");
 	printf("[32mquit - [0m\n");
 	printf("----------------------------------------------------------------------------\n");
@@ -384,11 +481,23 @@ static inline void do_command(const char *cmd)
 		return;
 	}
 
-	if (sscanf(cmd, "%255[^ ] %4095s", command, argument) == 2)
+	if (sscanf(cmd, "%255[^ ] %4095[^\\0]", command, argument) == 2)
 		cmd = command;
 
 	if (!strcasecmp(cmd, "exit") || !strcasecmp(cmd, "quit")) {
 		ecore_main_loop_quit();
+	} else if (!strcasecmp(cmd, "set")) {
+		char variable[4096] = { '0', };
+		char value[4096] = { '0', };
+
+		if (sscanf(argument, "%4095[^ ] %4095[^ ]", variable, value) != 2) {
+			printf("Invalid argument(%s): set [VAR] [VAL]\n", argument);
+			goto out;
+		}
+
+		send_command(cmd, variable, value);
+	} else if (!strcasecmp(cmd, "get")) {
+		send_command(cmd, argument, "");
 	} else if (!strcasecmp(cmd, "ls")) {
 		const char *name;
 		struct node *parent;
@@ -639,6 +748,8 @@ static void processing_line_buffer(const char *buffer)
 			pkginfo->abi = NULL;
 		}
 
+		node_set_age(node, s_info.age);
+
 		pkginfo->slavename = strdup(slavename);
 		if (!pkginfo->slavename)
 			printf("Error: %s\n", strerror(errno));
@@ -676,6 +787,9 @@ static void processing_line_buffer(const char *buffer)
 		} else {
 			slaveinfo = node_data(node);
 		}
+
+		node_set_age(node, s_info.age);
+
 		free(slaveinfo->pkgname);
 		free(slaveinfo->abi);
 		free(slaveinfo->state);
@@ -729,6 +843,8 @@ static void processing_line_buffer(const char *buffer)
 			instinfo = node_data(node);
 		}
 
+		node_set_age(node, s_info.age);
+
 		free(instinfo->id);
 		free(instinfo->cluster);
 		free(instinfo->category);
@@ -757,12 +873,15 @@ static void processing_line_buffer(const char *buffer)
 	case INST_CTRL:
 		sscanf(buffer, "%d", &i);
 		printf("%s\n", strerror(i));
+		printf("Result: %d\n", i);
 		break;
 	case SLAVE_CTRL:
 		sscanf(buffer, "%d", &i);
+		printf("Result: %d\n", i);
 		break;
 	case MASTER_CTRL:
 		sscanf(buffer, "%d", &i);
+		printf("Result: %d\n", i);
 		break;
 	default:
 		break;

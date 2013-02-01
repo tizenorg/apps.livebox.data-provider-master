@@ -4911,6 +4911,7 @@ static struct packet *liveinfo_master_ctrl(pid_t pid, int handle, const struct p
 	char *var;
 	char *val;
 	FILE *fp;
+	int ret = -EINVAL;
 
 	if (packet_get(packet, "sss", &cmd, &var, &val) != 3) {
 		ErrPrint("Invalid argument\n");
@@ -4923,11 +4924,18 @@ static struct packet *liveinfo_master_ctrl(pid_t pid, int handle, const struct p
 		goto out;
 	}
 
-	if (!strcmp(var, "debug")) {
-		if (!strcmp(cmd, "set")) {
-			g_conf.debug_mode = !strcmp(val, "true");
-		} else if (!strcmp(cmd, "get")) {
+	if (!strcasecmp(var, "debug")) {
+		if (!strcasecmp(cmd, "set")) {
+			g_conf.debug_mode = !strcasecmp(val, "on");
+		} else if (!strcasecmp(cmd, "get")) {
 		}
+		ret = g_conf.debug_mode;
+	} else if (!strcasecmp(var, "slave_max_load")) {
+		if (!strcasecmp(cmd, "set")) {
+			g_conf.slave_max_load = atoi(val);
+		} else if (!strcasecmp(cmd, "get")) {
+		}
+		ret = g_conf.slave_max_load;
 	}
 
 	liveinfo_open_fifo(info);
@@ -4936,7 +4944,7 @@ static struct packet *liveinfo_master_ctrl(pid_t pid, int handle, const struct p
 		liveinfo_close_fifo(info);
 		goto out;
 	}
-	fprintf(fp, "%d\nEOD\n", g_conf.debug_mode);
+	fprintf(fp, "%d\nEOD\n", ret);
 	liveinfo_close_fifo(info);
 
 out:

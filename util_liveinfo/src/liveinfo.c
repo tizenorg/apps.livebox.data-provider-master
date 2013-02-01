@@ -218,7 +218,7 @@ static inline void ls(void)
 			}
 
 			info = node_data(node);
-			printf(" %3d %20s %5s ", info->inst_count, info->slavename ? info->slavename : "-", info->abi ? info->abi : "-");
+			printf(" %3d %20s %5s ", info->inst_count, info->slavename ? info->slavename : "(none)", info->abi ? info->abi : "?");
 		} else if (is_provider) {
 			struct slave *info;
 
@@ -230,7 +230,7 @@ static inline void ls(void)
 			}
 
 			info = node_data(node);
-			printf(" %3d %5s %5.2f ", info->loaded_inst, info->abi ? info->abi : "-", info->ttl);
+			printf(" %3d %5s %5.2f ", info->loaded_inst, info->abi ? info->abi : "?", info->ttl);
 		} else if (is_instance) {
 			struct instance *info;
 			struct stat stat;
@@ -308,6 +308,59 @@ static void send_command(const char *cmd, const char *var, const char *val)
 	s_info.age++;
 }
 
+static int pkglist_cb(const char *appid, const char *lbid, int is_prime, void *data)
+{
+	struct node *parent = data;
+	struct node *node;
+	struct package *info;
+
+	node = node_find(parent, lbid);
+	if (node) {
+		info = node_data(node);
+		if (!info) {
+			printf("Invalid node\n");
+			return -EINVAL;
+		}
+
+		free(info->pkgid);
+		info->pkgid = strdup(appid);
+		if (!info->pkgid) {
+			printf("Error: %s\n", strerror(errno));
+			return -ENOMEM;
+		}
+
+		node_set_age(node, s_info.age);
+		return 0;
+	}
+
+	info = calloc(1, sizeof(*info));
+	if (!info) {
+		printf("Error: %s\n", strerror(errno));
+		return -ENOMEM;
+	}
+
+	info->pkgid = strdup(appid);
+	if (!info->pkgid) {
+		printf("Error: %s\n", strerror(errno));
+		free(info);
+		return -ENOMEM;
+	}
+
+	info->primary = is_prime;
+
+	node = node_create(parent, lbid, NODE_DIR);
+	if (!node) {
+		free(info->pkgid);
+		free(info);
+		return -ENOMEM;
+	}
+
+	node_set_mode(node, NODE_READ | NODE_EXEC);
+	node_set_data(node, info);
+	node_set_age(node, s_info.age);
+	return 0;
+}
+
 static void send_pkg_list(void)
 {
 	struct packet *packet;
@@ -327,6 +380,8 @@ static void send_pkg_list(void)
 	packet_destroy(packet);
 	s_info.cmd = PKG_LIST;
 	s_info.age++;
+
+	livebox_service_get_pkglist(pkglist_cb, s_info.targetdir);
 }
 
 static void send_inst_delete(void)
@@ -404,39 +459,6 @@ static inline void help(void)
 	printf("----------------------------------------------------------------------------\n");
 }
 
-static int pkglist_cb(const char *appid, const char *lbid, int is_prime, void *data)
-{
-	struct node *parent = data;
-	struct node *node;
-	struct package *info;
-
-	info = calloc(1, sizeof(*info));
-	if (!info) {
-		printf("Error: %s\n", strerror(errno));
-		return -ENOMEM;
-	}
-
-	info->pkgid = strdup(appid);
-	if (!info->pkgid) {
-		printf("Error: %s\n", strerror(errno));
-		free(info);
-		return -ENOMEM;
-	}
-
-	info->primary = is_prime;
-
-	node = node_create(parent, lbid, NODE_DIR);
-	if (!node) {
-		free(info->pkgid);
-		free(info);
-		return -ENOMEM;
-	}
-
-	node_set_mode(node, NODE_READ | NODE_EXEC);
-	node_set_data(node, info);
-	return 0;
-}
-
 static inline void init_directory(void)
 {
 	struct node *node;
@@ -463,7 +485,6 @@ static inline void init_directory(void)
 	node_set_mode(node, NODE_READ | NODE_EXEC);
 
 	s_info.curdir = s_info.rootdir;
-	livebox_service_get_pkglist(pkglist_cb, node);
 	return;
 }
 
@@ -481,7 +502,7 @@ static inline void do_command(const char *cmd)
 		return;
 	}
 
-	if (sscanf(cmd, "%255[^ ] %4095[^\\0]", command, argument) == 2)
+	if (sscanf(cmd, "%255[^ ] %s", command, argument) == 2)
 		cmd = command;
 
 	if (!strcasecmp(cmd, "exit") || !strcasecmp(cmd, "quit")) {
@@ -490,7 +511,7 @@ static inline void do_command(const char *cmd)
 		char variable[4096] = { '0', };
 		char value[4096] = { '0', };
 
-		if (sscanf(argument, "%4095[^ ] %4095[^ ]", variable, value) != 2) {
+		if (sscanf(argument, "%4095[^ ] %s", variable, value) != 2) {
 			printf("Invalid argument(%s): set [VAR] [VAL]\n", argument);
 			goto out;
 		}
@@ -709,14 +730,14 @@ static void processing_line_buffer(const char *buffer)
 
 	switch (s_info.cmd) {
 	case PKG_LIST:
-		if (sscanf(buffer, "%d %[^ ] %[^ ] %[^ ] %d %d %d", &pid, slavename, pkgname, abi, &refcnt, &fault_count, &list_count) != 7) {
+		if (sscanf(buffer, "%d %255[^ ] %255[^ ] %255[^ ] %d %d %d", &pid, slavename, pkgname, abi, &refcnt, &fault_count, &list_count) != 7) {
 			printf("Invalid format : [%s]\n", buffer);
 			return;
 		}
 
 		node = node_find(s_info.targetdir, pkgname);
 		if (!node) {
-			pkginfo = malloc(sizeof(*pkginfo));
+			pkginfo = calloc(1, sizeof(*pkginfo));
 			if (!pkginfo) {
 				printf("Error: %s\n", strerror(errno));
 				return;
@@ -740,6 +761,10 @@ static void processing_line_buffer(const char *buffer)
 			node_set_data(node, pkginfo);
 		} else {
 			pkginfo = node_data(node);
+			if (!pkginfo) {
+				printf("Package info is inavlid\n");
+				return;
+			}
 
 			free(pkginfo->slavename);
 			free(pkginfo->abi);
@@ -941,6 +966,21 @@ static Eina_Bool read_cb(void *data, Ecore_Fd_Handler *fd_handler)
 	}	
 
 	if (ch == '\n') { /* End of a line */
+		if (line_index == bufsz - 1) {
+			char *new_buf;
+			new_buf = realloc(line_buffer, bufsz + 2);
+			if (!new_buf) {
+				printf("Error: %s\n", strerror(errno));
+				free(line_buffer);
+				line_buffer = NULL;
+				line_index = 0;
+				bufsz = 256;
+				return ECORE_CALLBACK_CANCEL;
+			}
+
+			line_buffer = new_buf;
+		}
+
 		line_buffer[line_index] = '\0';
 
 		if (!strcmp(line_buffer, "EOD")) {
@@ -964,7 +1004,7 @@ static Eina_Bool read_cb(void *data, Ecore_Fd_Handler *fd_handler)
 			if (!new_buf) {
 				printf("Error: %s\n", strerror(errno));
 				free(line_buffer);
-				line_buffer = 0;
+				line_buffer = NULL;
 				line_index = 0;
 				bufsz = 256;
 				return ECORE_CALLBACK_CANCEL;

@@ -257,17 +257,27 @@ void node_delete(struct node *node, void (del_cb)(struct node *node))
 	if (node->sibling.next)
 		node->sibling.next->sibling.prev = node->sibling.prev;
 
+	/* Isolate the node */
+	node->sibling.prev = NULL;
+	node->sibling.next = NULL;
+
 	if (node->parent) {
-		node->parent->child = NULL;
+		if (node->parent->child == node)
+			node->parent->child = NULL;
+
 		node->parent = NULL;
 	}
 
 	tmp = node;
 	while (tmp) {
+		/* Reach to the leaf node */
 		while (tmp->child) tmp = tmp->child;
 
 		parent = tmp->parent;
 		next = tmp->sibling.next;
+
+		if (parent && parent->child == tmp)
+			parent->child = NULL;
 
 		if (del_cb)
 			del_cb(tmp);

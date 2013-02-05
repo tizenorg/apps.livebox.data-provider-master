@@ -492,139 +492,206 @@ static inline void fini_directory(void)
 {
 }
 
+static inline struct node *update_target_dir(const char *cmd)
+{
+	struct node *node;
+
+	node = (*cmd == '/') ? s_info.rootdir : s_info.curdir;
+	node = node_find(s_info.targetdir, cmd);
+
+	return node;
+}
+
+static int get_token(const char *src, char *out)
+{
+	int len = 0;
+	while (*src && *src == ' ') src++;
+
+	if (!*src)
+		return 0;
+
+	while (*src && *src != ' ') {
+		*out++ = *src++;
+		len++;
+	}
+
+	*out = '\0';
+	return len;
+}
+
+static inline int do_set(const char *cmd)
+{
+	int i;
+	char variable[4096] = { '0', };
+
+	cmd += 4;
+	i = get_token(cmd, variable);
+
+	cmd += i;
+	while (*cmd && *cmd == ' ') cmd++;
+
+	if (!i || !*cmd) {
+		printf("Invalid argument(%s): set [VAR] [VAL]\n", cmd);
+		return -EINVAL;
+	}
+
+	send_command("set", variable, cmd);
+	return 0;
+}
+
+static inline int do_get(const char *cmd)
+{
+	cmd += 4;
+
+	while (*cmd && *cmd == ' ') cmd++;
+	if (!*cmd) {
+		printf("Invalid argument(%s): get [VAR]\n", cmd);
+		return -EINVAL;
+	}
+
+	send_command("get", cmd, "");
+	return 0;
+}
+
+static inline int do_ls(const char *cmd)
+{
+	const char *name;
+	struct node *parent;
+
+	cmd += 2;
+
+	while (*cmd && *cmd == ' ')
+		cmd++;
+
+	s_info.targetdir = *cmd ? update_target_dir(cmd) : s_info.curdir;
+	if (!s_info.targetdir) {
+		printf("%s is not exists\n", cmd);
+		return -ENOENT;
+	}
+
+	name = node_name(s_info.targetdir);
+	if (name) {
+		if (!strcmp(name, "package")) {
+			if (s_info.cmd == NOP) {
+				send_pkg_list();
+				return 0;
+			}
+
+			printf("Waiting the server response\n");
+			return -EBUSY;
+		} else if (!strcmp(name, "provider")) {
+			if (s_info.cmd == NOP) {
+				send_slave_list();
+				return 0;
+			}
+
+			printf("Waiting the server response\n");
+			return -EBUSY;
+		}
+	}
+
+	parent = node_parent(s_info.targetdir);
+	if (parent && node_name(parent)) {
+		if (!strcmp(node_name(parent), "package")) {
+			if (s_info.cmd != NOP) {
+				printf("Waiting the server response\n");
+				return -EBUSY;
+			}
+
+			send_inst_list(name);
+			return 0;
+		}
+	}
+
+	ls();
+	return -1;
+}
+
+static inline int do_cd(const char *cmd)
+{
+	cmd += 2;
+
+	while (*cmd && *cmd == ' ')
+		 cmd++;
+
+	if (!*cmd)
+		return -1;
+
+	if (s_info.cmd != NOP) {
+		printf("Waiting the server response\n");
+		return -EBUSY;
+	}
+
+	s_info.targetdir = update_target_dir(cmd);
+	if (!s_info.targetdir) {
+		printf("%s is not exists\n", cmd);
+		return -ENOENT;
+	}
+
+	if (node_type(s_info.targetdir) != NODE_DIR) {
+		printf("Unable change directory to %s\n", cmd);
+		return -EINVAL;
+	}
+
+	if (!(node_mode(s_info.targetdir) & NODE_EXEC)) {
+		printf("Access denied %s\n", cmd);
+		return -EACCES;
+	}
+
+	s_info.curdir = s_info.targetdir;
+	return -1;
+}
+
+static inline int do_rm(const char *cmd)
+{
+	cmd += 2;
+	while (*cmd && *cmd == ' ') cmd++;
+	if (!*cmd)
+		return -1;
+
+	if (s_info.cmd != NOP) {
+		printf("Waiting the server response\n");
+		return -EBUSY;
+	}
+
+	s_info.targetdir = update_target_dir(cmd);
+	if (!s_info.targetdir) {
+		printf("%s is not exists\n", cmd);
+		return -ENOENT;
+	}
+
+	if (!(node_mode(s_info.targetdir) & NODE_WRITE)) {
+		printf("Access denied %s\n", cmd);
+		return -EACCES;
+	}
+
+	send_inst_delete();
+	return 0;
+}
+
 static inline void do_command(const char *cmd)
 {
-	char command[256];
-	char argument[4096] = { '\0', };
+	/* Skip the first spaces */
+	while (*cmd && *cmd == ' ') cmd++;
 
-	if (!strlen(cmd) || *cmd == '#') {
-		prompt(NULL);
-		return;
-	}
-
-	if (sscanf(cmd, "%255[^ ] %s", command, argument) == 2)
-		cmd = command;
-
-	if (!strcasecmp(cmd, "exit") || !strcasecmp(cmd, "quit")) {
-		ecore_main_loop_quit();
-	} else if (!strcasecmp(cmd, "set")) {
-		char variable[4096] = { '0', };
-		char value[4096] = { '0', };
-
-		if (sscanf(argument, "%4095[^ ] %s", variable, value) != 2) {
-			printf("Invalid argument(%s): set [VAR] [VAL]\n", argument);
-			goto out;
-		}
-
-		send_command(cmd, variable, value);
-	} else if (!strcasecmp(cmd, "get")) {
-		send_command(cmd, argument, "");
-	} else if (!strcasecmp(cmd, "ls")) {
-		const char *name;
-		struct node *parent;
-
-		if (*argument) {
-			s_info.targetdir = (*argument == '/') ? s_info.rootdir : s_info.curdir;
-			s_info.targetdir = node_find(s_info.targetdir, argument);
+	if (strlen(cmd) && *cmd != '#') {
+		if (!strncasecmp(cmd, "exit", 4) || !strncasecmp(cmd, "quit", 4)) {
+			ecore_main_loop_quit();
+		} else if (!strncasecmp(cmd, "set ", 4) && do_set(cmd) == 0) {
+			return;
+		} else if (!strncasecmp(cmd, "get ", 4) && do_get(cmd) == 0) {
+			return;
+		} else if (!strncasecmp(cmd, "ls", 2) && do_ls(cmd) == 0) {
+			return;
+		} else if (!strncasecmp(cmd, "cd", 2) && do_cd(cmd) == 0) {
+			return;
+		} else if (!strncasecmp(cmd, "rm", 2) && do_rm(cmd) == 0) {
+			return;
 		} else {
-			s_info.targetdir = s_info.curdir;
+			help();
 		}
-
-		if (!s_info.targetdir) {
-			printf("%s is not exists\n", argument);
-			goto out;
-		}
-
-		name = node_name(s_info.targetdir);
-		if (name) {
-			if (!strcmp(name, "package")) {
-				if (s_info.cmd == NOP) {
-					send_pkg_list();
-					return;
-				}
-
-				printf("Waiting the server response\n");
-				goto out;
-			} else if (!strcmp(name, "provider")) {
-				if (s_info.cmd == NOP) {
-					send_slave_list();
-					return;
-				}
-
-				printf("Waiting the server response\n");
-				goto out;
-			}
-		}
-
-		parent = node_parent(s_info.targetdir);
-		if (parent && node_name(parent)) {
-			if (!strcmp(node_name(parent), "package")) {
-				if (s_info.cmd != NOP) {
-					printf("Waiting the server response\n");
-					goto out;
-				}
-				send_inst_list(name);
-				return;
-			}
-		}
-
-		ls();
-	} else if (!strcasecmp(cmd, "cd")) {
-		if (!*argument)
-			goto out;
-
-		if (s_info.cmd != NOP) {
-			printf("Waiting the server response\n");
-			goto out;
-		}
-
-		s_info.targetdir = (*argument == '/') ? s_info.rootdir : s_info.curdir;
-		s_info.targetdir = node_find(s_info.targetdir, argument);
-		if (!s_info.targetdir) {
-			printf("%s is not exists\n", argument);
-			goto out;
-		}
-
-		if (node_type(s_info.targetdir) != NODE_DIR) {
-			printf("Unable change directory to %s\n", argument);
-			goto out;
-		}
-
-		if (!(node_mode(s_info.targetdir) & NODE_EXEC)) {
-			printf("Access denied %s\n", argument);
-			goto out;
-		}
-
-		s_info.curdir = s_info.targetdir;
-	} else if (!strcasecmp(cmd, "rm")) {
-		if (!*argument)
-			goto out;
-
-		if (s_info.cmd != NOP) {
-			printf("Waiting the server response\n");
-			goto out;
-		}
-
-		s_info.targetdir = (*argument == '/') ? s_info.rootdir : s_info.curdir;
-		s_info.targetdir = node_find(s_info.targetdir, argument);
-		if (!s_info.targetdir) {
-			printf("%s is not exists\n", argument);
-			goto out;
-		}
-
-		if (!(node_mode(s_info.targetdir) & NODE_WRITE)) {
-			printf("Access denied %s\n", argument);
-			goto out;
-		}
-
-		send_inst_delete();
-	} else if (!strcasecmp(cmd, "help")) {
-		help();
-	} else {
-		printf("Unknown command - \"help\"\n");
 	}
 
-out:
 	prompt(NULL);
 	return;
 }

@@ -2125,7 +2125,7 @@ static inline int db_insert_livebox(struct livebox *livebox, const char *appid)
 
 	if (livebox->size_list & LB_SIZE_TYPE_EASY_3x3) {
 		ret = db_insert_box_size((char *)livebox->pkgid, LB_SIZE_TYPE_EASY_3x3, (char *)livebox->preview[9]);
-		if (ret < 9)
+		if (ret < 0)
 			goto errout;
 	}
 

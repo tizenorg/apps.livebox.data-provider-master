@@ -8,6 +8,9 @@
 			<label name="data-provider-master::data" />
 			<label name="data-provider-master::share" />
 		</provide>
+		<request>
+			<smack request="sys-assert::core" type="rwxat" />
+		</request>
 	</define>
 	<request>
 		<domain name="_" />

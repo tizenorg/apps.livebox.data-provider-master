@@ -69,14 +69,14 @@ struct script_port {
 	const char *(*magic_id)(void);
 	int (*update_color)(void *handle, Evas *e, const char *id, const char *part, const char *rgba);
 	int (*update_text)(void *handle, Evas *e, const char *id, const char *part, const char *text);
-	int (*update_image)(void *handle, Evas *e, const char *id, const char *part, const char *path);
-	int (*update_script)(void *handle, Evas *e, const char *src_id, const char *target_id, const char *part, const char *path, const char *group);
+	int (*update_image)(void *handle, Evas *e, const char *id, const char *part, const char *path, const char *option);
+	int (*update_script)(void *handle, Evas *e, const char *src_id, const char *target_id, const char *part, const char *path, const char *option);
 	int (*update_signal)(void *handle, Evas *e, const char *id, const char *part, const char *signal);
 	int (*update_drag)(void *handle, Evas *e, const char *id, const char *part, double x, double y);
 	int (*update_size)(void *handle, Evas *e, const char *id, int w, int h);
 	int (*update_category)(void *handle, Evas *e, const char *id, const char *category);
 
-	void *(*create)(const char *file, const char *group);
+	void *(*create)(const char *file, const char *option);
 	int (*destroy)(void *handle);
 
 	int (*load)(void *handle, Evas *e, int w, int h);
@@ -99,8 +99,8 @@ struct block {
 	char *file;
 	int file_len;
 
-	char *group;
-	int group_len;
+	char *option;
+	int option_len;
 
 	char *id;
 	int id_len;
@@ -317,11 +317,11 @@ HAPI int script_handler_unload(struct script_info *info, int is_pd)
 	return 0;
 }
 
-HAPI struct script_info *script_handler_create(struct inst_info *inst, const char *file, const char *group, int w, int h)
+HAPI struct script_info *script_handler_create(struct inst_info *inst, const char *file, const char *option, int w, int h)
 {
 	struct script_info *info;
 
-	DbgPrint("Create script: %s (%s)\n", file, group);
+	DbgPrint("Create script: %s (%s)\n", file, option);
 
 	if (!file)
 		return NULL;
@@ -353,9 +353,9 @@ HAPI struct script_info *script_handler_create(struct inst_info *inst, const cha
 	info->w = w;
 	info->h = h;
 
-	info->port_data = info->port->create(file, group);
+	info->port_data = info->port->create(file, option);
 	if (!info->port_data) {
-		ErrPrint("Failed to create a port (%s - %s)\n", file, group);
+		ErrPrint("Failed to create a port (%s - %s)\n", file, option);
 		fb_destroy(info->fb);
 		DbgFree(info);
 		return NULL;
@@ -487,7 +487,7 @@ static int update_script_image(struct inst_info *inst, struct block *block, int 
 
 	e = script_handler_evas(info);
 	if (e)
-		info->port->update_image(info->port_data, e, block->id, block->part, block->data);
+		info->port->update_image(info->port_data, e, block->id, block->part, block->data, block->option);
 	else
 		ErrPrint("Evas: (nil) id[%s] part[%s] data[%s]\n", block->id, block->part, block->data);
 	return 0;
@@ -516,10 +516,10 @@ static int update_script_script(struct inst_info *inst, struct block *block, int
 
 	e = script_handler_evas(info);
 	if (e)
-		info->port->update_script(info->port_data, e, block->id, block->target_id, block->part, block->data, block->group);
+		info->port->update_script(info->port_data, e, block->id, block->target_id, block->part, block->data, block->option);
 	else
-		ErrPrint("Evas: (nil) id[%s] part[%s] data[%s] group[%s]\n",
-						block->id, block->part, block->data, block->group);
+		ErrPrint("Evas: (nil) id[%s] part[%s] data[%s] option[%s]\n",
+						block->id, block->part, block->data, block->option);
 	return 0;
 }
 
@@ -684,7 +684,7 @@ HAPI int script_handler_parse_desc(const char *pkgname, const char *id, const ch
 		VALUE_PART = 0x01,
 		VALUE_DATA = 0x02,
 		VALUE_FILE = 0x03,
-		VALUE_GROUP = 0x04,
+		VALUE_OPTION = 0x04,
 		VALUE_ID = 0x05,
 		VALUE_TARGET = 0x06,
 	};
@@ -693,7 +693,7 @@ HAPI int script_handler_parse_desc(const char *pkgname, const char *id, const ch
 		"part",
 		"data",
 		"file",
-		"group",
+		"option",
 		"id",
 		"target",
 		NULL
@@ -852,11 +852,11 @@ HAPI int script_handler_parse_desc(const char *pkgname, const char *id, const ch
 					idx = 0;
 					break;
 				case 4:
-					state = VALUE_GROUP;
-					if (block->group) {
-						DbgFree(block->group);
-						block->group = NULL;
-						block->group_len = 0;
+					state = VALUE_OPTION;
+					if (block->option) {
+						DbgFree(block->option);
+						block->option = NULL;
+						block->option_len = 0;
 					}
 					idx = 0;
 					break;
@@ -1006,27 +1006,27 @@ HAPI int script_handler_parse_desc(const char *pkgname, const char *id, const ch
 			idx++;
 			break;
 
-		case VALUE_GROUP:
-			if (idx == block->group_len) {
+		case VALUE_OPTION:
+			if (idx == block->option_len) {
 				char *tmp;
-				block->group_len += ADDEND;
-				tmp = realloc(block->group, block->group_len);
+				block->option_len += ADDEND;
+				tmp = realloc(block->option, block->option_len);
 				if (!tmp) {
 					ErrPrint("Heap: %s\n", strerror(errno));
 					goto errout;
 				}
-				block->group = tmp;
+				block->option = tmp;
 			}
 
 			if (ch == '\n') {
-				block->group[idx] = '\0';
+				block->option[idx] = '\0';
 				state = FIELD;
 				idx = 0;
 				field_idx = 0;
 				break;
 			}
 
-			block->group[idx] = ch;
+			block->option[idx] = ch;
 			idx++;
 			break;
 		case VALUE_ID:
@@ -1100,7 +1100,7 @@ HAPI int script_handler_parse_desc(const char *pkgname, const char *id, const ch
 			DbgFree(block->type);
 			DbgFree(block->part);
 			DbgFree(block->data);
-			DbgFree(block->group);
+			DbgFree(block->option);
 			DbgFree(block->id);
 			DbgFree(block->target_id);
 			DbgFree(block);
@@ -1129,7 +1129,7 @@ errout:
 		DbgFree(block->type);
 		DbgFree(block->part);
 		DbgFree(block->data);
-		DbgFree(block->group);
+		DbgFree(block->option);
 		DbgFree(block->id);
 		DbgFree(block->target_id);
 		DbgFree(block);

@@ -3778,6 +3778,44 @@ static inline int update_pkg_cb(struct category *category, const char *pkgname)
 	return EXIT_SUCCESS;
 }
 
+static struct packet *client_update(pid_t pid, int handle, const struct packet *packet)
+{
+	struct inst_info *inst;
+	struct client_node *client;
+	const char *pkgname;
+	const char *id;
+	int ret;
+
+	client = client_find_by_pid(pid);
+	if (!client) {
+		ErrPrint("Cilent %d is not exists\n", pid);
+		ret = -ENOMEM;
+		goto out;
+	}
+
+	ret = packet_get(packet, "ss", &pkgname, &id);
+	if (ret != 2) {
+		ErrPrint("Invalid argument\n");
+		ret = -EINVAL;
+		goto out;
+	}
+
+	inst = package_find_instance_by_id(pkgname, id);
+	if (!inst) {
+		ret = -ENOENT;
+	} else if (package_is_fault(instance_package(inst))) {
+		ret = -EFAULT;
+	} else if (instance_client(inst) != client) {
+		ret = -EPERM;
+	} else {
+		slave_rpc_request_update(pkgname, id, instance_cluster(inst), instance_category(inst));
+	}
+
+out:
+	/*! \note No reply packet */
+	return NULL;
+}
+
 static struct packet *client_refresh_group(pid_t pid, int handle, const struct packet *packet)
 {
 	const char *cluster_id;
@@ -5118,6 +5156,10 @@ static struct method s_client_table[] = {
 	{
 		.cmd = "refresh_group",
 		.handler = client_refresh_group,
+	},
+	{
+		.cmd = "update",
+		.handler = client_update,
 	},
 
 	{

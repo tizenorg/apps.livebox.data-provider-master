@@ -497,7 +497,7 @@ static inline struct node *update_target_dir(const char *cmd)
 	struct node *node;
 
 	node = (*cmd == '/') ? s_info.rootdir : s_info.curdir;
-	node = node_find(s_info.targetdir, cmd);
+	node = node_find(node, cmd);
 
 	return node;
 }
@@ -677,16 +677,21 @@ static inline void do_command(const char *cmd)
 	if (strlen(cmd) && *cmd != '#') {
 		if (!strncasecmp(cmd, "exit", 4) || !strncasecmp(cmd, "quit", 4)) {
 			ecore_main_loop_quit();
-		} else if (!strncasecmp(cmd, "set ", 4) && do_set(cmd) == 0) {
-			return;
-		} else if (!strncasecmp(cmd, "get ", 4) && do_get(cmd) == 0) {
-			return;
-		} else if (!strncasecmp(cmd, "ls", 2) && do_ls(cmd) == 0) {
-			return;
-		} else if (!strncasecmp(cmd, "cd", 2) && do_cd(cmd) == 0) {
-			return;
-		} else if (!strncasecmp(cmd, "rm", 2) && do_rm(cmd) == 0) {
-			return;
+		} else if (!strncasecmp(cmd, "set ", 4)) {
+			if (do_set(cmd) == 0)
+				return;
+		} else if (!strncasecmp(cmd, "get ", 4)) {
+			if (do_get(cmd) == 0)
+				return;
+		} else if (!strncasecmp(cmd, "ls", 2)) {
+			if (do_ls(cmd) == 0)
+				return;
+		} else if (!strncasecmp(cmd, "cd", 2)) {
+			if (do_cd(cmd) == 0)
+				return;
+		} else if (!strncasecmp(cmd, "rm", 2)) {
+			if (do_rm(cmd) == 0)
+				return;
 		} else {
 			help();
 		}

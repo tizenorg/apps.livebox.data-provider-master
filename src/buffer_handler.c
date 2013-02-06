@@ -164,11 +164,18 @@ HAPI struct buffer_info *buffer_handler_create(struct inst_info *inst, enum buff
 	return info;
 }
 
-static inline struct buffer *create_gem(Display *disp, Window parent, struct buffer_info *info)
+static inline struct buffer *create_pixmap(struct buffer_info *info)
 {
 	struct gem_data *gem;
 	struct buffer *buffer;
+	Display *disp;
+	Window parent;
 
+	disp = ecore_x_display_get();
+	if (!disp)
+		return NULL;
+
+	parent = DefaultRootWindow(disp);
 
 	buffer = calloc(1, sizeof(*buffer) + sizeof(*gem));
 	if (!buffer) {
@@ -204,37 +211,31 @@ static inline struct buffer *create_gem(Display *disp, Window parent, struct buf
 	XSync(disp, False);
 
 	DbgPrint("Pixmap:0x%X is created\n", gem->pixmap);
+	return buffer;
+}
 
-	if (info->inst) {
-		struct pkg_info *pkg;
+static inline int create_gem(struct buffer *buffer)
+{
+	struct gem_data *gem;
+	Display *disp;
 
-		if (instance_lb_buffer(info->inst) == info) {
-			pkg = instance_package(info->inst);
-			if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
-				DbgPrint("Doesn't need to create gem for LB\n");
-				return buffer;
-			}
-		} else if (instance_pd_buffer(info->inst) == info) {
-			pkg = instance_package(info->inst);
-			if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
-				DbgPrint("Doesn't need to create gem for PD\n");
-				return buffer;
-			}
-		}
+	disp = ecore_x_display_get();
+	if (!disp) {
+		ErrPrint("Failed to get display\n");
+		return -EIO;
 	}
+
+	gem = (struct gem_data *)buffer->data;
 
 	if (s_info.fd < 0) {
 		gem->data = calloc(1, gem->w * gem->h * gem->depth);
 		if (!gem->data) {
 			ErrPrint("Heap: %s\n", strerror(errno));
-			XFreePixmap(disp, gem->pixmap);
-			buffer->state = DESTROYED;
-			DbgFree(buffer);
-			return NULL;
+			return -ENOMEM;
 		}
 
 		DbgPrint("DRI2(gem) is not supported - Fallback to the S/W Backend\n");
-		return buffer;
+		return 0;
 	}
 
 	DRI2CreateDrawable(disp, gem->pixmap);
@@ -243,15 +244,12 @@ static inline struct buffer *create_gem(Display *disp, Window parent, struct buf
 	gem->dri2_buffer = DRI2GetBuffers(disp, gem->pixmap,
 					&gem->w, &gem->h, gem->attachments, gem->count, &gem->buf_count);
 	if (!gem->dri2_buffer || !gem->dri2_buffer->name) {
-		ErrPrint("Failed to get GemBuffer\n");
+		ErrPrint("Failed to get a gem buffer\n");
 		DRI2DestroyDrawable(disp, gem->pixmap);
-		XFreePixmap(disp, gem->pixmap);
-		buffer->state = DESTROYED;
-		DbgFree(buffer);
-		return NULL;
+		return -EFAULT;
 	}
-	DbgPrint("dri2_buffer: %p, name: %p, %dx%d (%dx%d)\n",
-				gem->dri2_buffer, gem->dri2_buffer->name, gem->w, gem->h, info->w, info->h);
+	DbgPrint("dri2_buffer: %p, name: %p, %dx%d\n",
+				gem->dri2_buffer, gem->dri2_buffer->name, gem->w, gem->h);
 	DbgPrint("dri2_buffer->pitch : %d, buf_count: %d\n",
 				gem->dri2_buffer->pitch, gem->buf_count);
 
@@ -260,12 +258,9 @@ static inline struct buffer *create_gem(Display *disp, Window parent, struct buf
 	 */
 	gem->pixmap_bo = drm_slp_bo_import(s_info.slp_bufmgr, gem->dri2_buffer->name);
 	if (!gem->pixmap_bo) {
-		DRI2DestroyDrawable(disp, gem->pixmap);
-		XFreePixmap(disp, gem->pixmap);
 		ErrPrint("Failed to import BO\n");
-		buffer->state = DESTROYED;
-		DbgFree(buffer);
-		return NULL;
+		DRI2DestroyDrawable(disp, gem->pixmap);
+		return -EFAULT;
 	}
 
 	if (gem->dri2_buffer->pitch != gem->w * gem->depth) {
@@ -279,8 +274,7 @@ static inline struct buffer *create_gem(Display *disp, Window parent, struct buf
 		}
 	}
 
-	DbgPrint("Return buffer: %p\n", buffer);
-	return buffer;
+	return 0;
 }
 
 static inline void *acquire_gem(struct buffer *buffer)
@@ -376,6 +370,28 @@ static inline void release_gem(struct buffer *buffer)
 	}
 }
 
+static inline int destroy_pixmap(struct buffer *buffer)
+{
+	struct gem_data *gem;
+
+	gem = (struct gem_data *)buffer->data;
+
+	if (gem->pixmap) {
+		Display *disp;
+
+		disp = ecore_x_display_get();
+		if (!disp)
+			return -EIO;
+
+		DbgPrint("Free pixmap 0x%X\n", gem->pixmap);
+		XFreePixmap(disp, gem->pixmap);
+	}
+
+	buffer->state = DESTROYED;
+	DbgFree(buffer);
+	return 0;
+}
+
 static inline int destroy_gem(struct buffer *buffer)
 {
 	struct gem_data *gem;
@@ -411,11 +427,6 @@ static inline int destroy_gem(struct buffer *buffer)
 		gem->data = NULL;
 	}
 
-	DbgPrint("Free pixmap 0x%X\n", gem->pixmap);
-	XFreePixmap(ecore_x_display_get(), gem->pixmap);
-
-	buffer->state = DESTROYED;
-	DbgFree(buffer);
 	return 0;
 }
 
@@ -874,19 +885,37 @@ HAPI void *buffer_handler_pixmap_ref(struct buffer_info *info)
 
 	buffer = info->buffer;
 	if (!buffer) {
-		Display *disp;
-		Window root;
+		int need_gem = 1;
 
-		disp = ecore_x_display_get();
-		root = DefaultRootWindow(disp);
-
-		buffer = create_gem(disp, root, info);
+		buffer = create_pixmap(info);
 		if (!buffer) {
-			DbgPrint("No GEM initialization\n");
+			DbgPrint("Failed to create a pixmap\n");
 			return NULL;
 		}
 
 		info->buffer = buffer;
+
+		if (info->inst) {
+			struct pkg_info *pkg;
+
+			if (instance_lb_buffer(info->inst) == info) {
+				pkg = instance_package(info->inst);
+				if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
+					DbgPrint("Doesn't need to create gem for LB\n");
+					need_gem = 0;
+				}
+			} else if (instance_pd_buffer(info->inst) == info) {
+				pkg = instance_package(info->inst);
+				if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
+					DbgPrint("Doesn't need to create gem for PD\n");
+					need_gem = 0;
+				}
+			}
+		}
+
+		if (need_gem)
+			create_gem(buffer);
+
 	} else if (buffer->state != CREATED || buffer->type != BUFFER_TYPE_PIXMAP) {
 		ErrPrint("Invalid buffer\n");
 		return NULL;
@@ -977,7 +1006,11 @@ HAPI int buffer_handler_pixmap_unref(void *buffer_ptr)
 
 	s_info.pixmap_list = eina_list_remove(s_info.pixmap_list, buffer);
 
-	destroy_gem(buffer);
+	if (destroy_gem(buffer) < 0)
+		ErrPrint("Failed to destroy gem buffer\n");
+
+	if (destroy_pixmap(buffer) < 0)
+		ErrPrint("Failed to destroy pixmap\n");
 
 	info = buffer->info;
 	if (info && info->buffer == buffer)

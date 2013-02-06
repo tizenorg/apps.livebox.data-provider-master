@@ -286,6 +286,7 @@ HAPI char *util_replace_string(const char *src, const char *pattern, const char 
 						DbgFree(ret);
 						return NULL;
 					}
+
 					ret = tmp;
 				}
 			}
@@ -312,12 +313,33 @@ HAPI char *util_replace_string(const char *src, const char *pattern, const char 
 			ret = tmp;
 		}
 	}
-	if (matched) {
+
+	if (matched || !pattern[pattern_idx]) {
+		if (target_idx > 0) {
+			while (replace[target_idx]) {
+				if (ret_idx >= bufsz) {
+					char *tmp;
+					tmp = extend_heap(ret, &bufsz, incsz);
+					if (!tmp) {
+						ErrPrint("Heap: %s\n", strerror(errno));
+						DbgFree(ret);
+						return NULL;
+					}
+
+					ret = tmp;
+				}
+
+				ret[ret_idx] = replace[target_idx];
+				ret_idx++;
+				target_idx++;
+			}
+		}
 		ret[ret_idx] = '\0';
 	} else {
 		DbgFree(ret);
 		ret = NULL;
 	}
+
 	return ret;
 }
 

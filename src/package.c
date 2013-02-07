@@ -1039,16 +1039,13 @@ static inline int assign_new_slave(struct pkg_info *info)
 	DbgPrint("Slave package: \"%s\" (abi: %s)\n", tmp, info->abi);
 	s_pkgname = util_replace_string(tmp, REPLACE_TAG_APPID, info->pkgname);
 	if (!s_pkgname) {
+		DbgPrint("Failed to get replaced string\n");
 		s_pkgname = strdup(tmp);
 		if (!s_pkgname) {
 			ErrPrint("Heap: %s\n", strerror(errno));
 			DbgFree(s_name);
 			return -ENOMEM;
 		}
-	} else if (!info->secured) {
-		DbgPrint("Slave package name is specified but the livebox is not secured\n");
-		DbgPrint("Forcely set secured flag for livebox %s\n", info->pkgname);
-		info->secured = 1;
 	}
 
 	DbgPrint("New slave name is %s, it is assigned for livebox %s (using %s)\n", s_name, info->pkgname, s_pkgname);

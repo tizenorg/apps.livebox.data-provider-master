@@ -23,6 +23,7 @@
 #include <sys/statvfs.h>
 #include <sys/types.h>
 #include <dirent.h>
+#include <ctype.h>
 
 #include <dlog.h>
 #include <Eina.h>
@@ -218,130 +219,112 @@ static inline char *extend_heap(char *buffer, int *sz, int incsz)
 	return tmp;
 }
 
+
 HAPI char *util_replace_string(const char *src, const char *pattern, const char *replace)
 {
-	char *ret;
-	int src_idx;
-	int pattern_idx;
-	int src_rollback_idx;
-	int ret_rollback_idx;
-	int ret_idx;
-	int target_idx;
-	int bufsz;
-	int incsz;
-	int matched;
+	const char *ptr;
+	char *tmp;
+	char *ret = NULL;
+	int idx;
+	int out_idx;
+	int out_sz;
+	enum {
+		STATE_START,
+		STATE_FIND,
+		STATE_CHECK,
+		STATE_END,
+	} state;
 
-	bufsz = strlen(src);
-	incsz = bufsz + 1; /* Including the NULL byte */
-	ret = malloc(bufsz + 1);
+	if (!src || !pattern)
+		return NULL;
+
+	out_sz = strlen(src);
+	ret = strdup(src);
 	if (!ret) {
-		ErrPrint("Heap: %s\n", strerror(errno));
+		printf("Heap: %s\n", strerror(errno));
 		return NULL;
 	}
 
-	pattern_idx = 0;
-	ret_idx = 0;
-	matched = 0;
-	for (src_idx = 0; src[src_idx]; src_idx++) {
-		if (!pattern[pattern_idx]) {
-			while (replace[target_idx]) {
-				ret[ret_idx] = replace[target_idx];
-				ret_idx++;
-				target_idx++;
-
-				if (ret_idx >= bufsz) {
-					char *tmp;
-
-					tmp = extend_heap(ret, &bufsz, incsz);
+	out_idx = 0;
+	for (state = STATE_START, ptr = src; state != STATE_END; ptr++) {
+		switch (state) {
+		case STATE_START:
+			if (*ptr == '\0') {
+				state = STATE_END;
+			} else if (!isblank(*ptr)) {
+				state = STATE_FIND;
+				ptr--;
+			}
+			break;
+		case STATE_FIND:
+			if (*ptr == '\0') {
+				state = STATE_END;
+			} else if (*ptr == *pattern) {
+				state = STATE_CHECK;
+				ptr--;
+				idx = 0;
+			} else {
+				ret[out_idx] = *ptr;
+				out_idx++;
+				if (out_idx == out_sz) {
+					tmp = extend_heap(ret, &out_sz, strlen(replace) + 1);
 					if (!tmp) {
-						ErrPrint("Heap: %s\n", strerror(errno));
-						DbgFree(ret);
+						free(ret);
 						return NULL;
 					}
 					ret = tmp;
 				}
 			}
-
-			pattern_idx = 0;
-			src--;
-			matched++;
-			continue;
-		} else if (src[src_idx] == pattern[pattern_idx]) {
-			if (pattern_idx == 0) {
-				src_rollback_idx = src_idx;
-				ret_rollback_idx = ret_idx;
-				target_idx = 0;
-			}
-
-			if (replace[target_idx]) {
-				ret[ret_idx] = replace[target_idx];
-				ret_idx++;
-				target_idx++;
-				if (ret_idx >= bufsz) {
-					char *tmp;
-
-					tmp = extend_heap(ret, &bufsz, incsz);
+			break;
+		case STATE_CHECK:
+			if (!pattern[idx]) {
+				/*!
+				 * If there is no space for copying the replacement,
+				 * Extend size of the return buffer.
+				 */
+				if (out_sz - out_idx < strlen(replace) + 1) {
+					tmp = extend_heap(ret, &out_sz, strlen(replace) + 1);
 					if (!tmp) {
-						ErrPrint("Heap: %s\n", strerror(errno));
-						DbgFree(ret);
+						free(ret);
 						return NULL;
 					}
-
 					ret = tmp;
 				}
-			}
 
-			pattern_idx++;
-			continue;
-		} else if (pattern_idx > 0) {
-			src_idx = src_rollback_idx;
-			ret_idx = ret_rollback_idx;
-			pattern_idx = 0;
-		}
+				strcpy(ret + out_idx, replace);
+				out_idx += strlen(replace);
 
-		ret[ret_idx] = src[src_idx];
-		ret_idx++;
-		if (ret_idx >= bufsz) {
-			char *tmp;
+				state = STATE_FIND;
+				ptr--;
+			} else if (*ptr != pattern[idx]) {
+				ptr -= idx;
 
-			tmp = extend_heap(ret, &bufsz, incsz);
-			if (!tmp) {
-				ErrPrint("Heap: %s\n", strerror(errno));
-				DbgFree(ret);
-				return NULL;
-			}
-			ret = tmp;
-		}
-	}
-
-	if (matched || !pattern[pattern_idx]) {
-		if (target_idx > 0) {
-			while (replace[target_idx]) {
-				if (ret_idx >= bufsz) {
-					char *tmp;
-					tmp = extend_heap(ret, &bufsz, incsz);
+				/* Copy the first matched character */
+				ret[out_idx] = *ptr;
+				out_idx++;
+				if (out_idx == out_sz) {
+					tmp = extend_heap(ret, &out_sz, strlen(replace) + 1);
 					if (!tmp) {
-						ErrPrint("Heap: %s\n", strerror(errno));
-						DbgFree(ret);
+						free(ret);
 						return NULL;
 					}
 
 					ret = tmp;
 				}
 
-				ret[ret_idx] = replace[target_idx];
-				ret_idx++;
-				target_idx++;
+				state = STATE_FIND;
+			} else {
+				idx++;
 			}
+			break;
+		default:
+			break;
 		}
-		ret[ret_idx] = '\0';
-	} else {
-		DbgFree(ret);
-		ret = NULL;
 	}
 
 	return ret;
 }
+
 
 HAPI const char *util_uri_to_path(const char *uri)
 {

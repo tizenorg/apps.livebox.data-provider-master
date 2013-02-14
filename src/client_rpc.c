@@ -31,6 +31,8 @@
 #include "conf.h"
 #include "util.h"
 
+#define RPC_TAG "rpc"
+
 /*!
  * \note
  * Static component information structure.
@@ -123,7 +125,7 @@ static Eina_Bool command_consumer_cb(void *data)
 		goto out;
 	}
 
-	rpc = client_data(command->client, "rpc");
+	rpc = client_data(command->client, RPC_TAG);
 	if (!rpc) {
 		ErrPrint("Invalid command\n");
 		goto out;
@@ -163,7 +165,7 @@ HAPI int client_rpc_async_request(struct client_node *client, struct packet *pac
 	struct command *command;
 	struct client_rpc *rpc;
 
-	if (!client)
+	if (!client || !packet)
 		return -EINVAL;
 
 	if (client_is_faulted(client)) {
@@ -172,7 +174,7 @@ HAPI int client_rpc_async_request(struct client_node *client, struct packet *pac
 		return -EFAULT;
 	}
 
-	rpc = client_data(client, "rpc");
+	rpc = client_data(client, RPC_TAG);
 	if (!rpc)
 		ErrPrint("Client[%p] is not ready for communication (%s)\n", client, packet_command(packet));
 
@@ -194,7 +196,7 @@ static int deactivated_cb(struct client_node *client, void *data)
 	Eina_List *l;
 	Eina_List *n;
 
-	rpc = client_data(client, "rpc");
+	rpc = client_data(client, RPC_TAG);
 	if (!rpc) {
 		ErrPrint("client is not valid\n");
 		return 0;
@@ -226,14 +228,14 @@ HAPI int client_rpc_init(struct client_node *client, int handle)
 		return -ENOMEM;
 	}
 
-	ret = client_set_data(client, "rpc", rpc);
+	ret = client_set_data(client, RPC_TAG, rpc);
 	if (ret < 0) {
 		ErrPrint("Failed to set \"rpc\" for client\n");
 		DbgFree(rpc);
 		return ret;
 	}
 
-	DbgPrint("CLIENT: New handle assigned for %d, %d\n", client_pid(client), handle);
+	DbgPrint("CLIENT: New handle assigned for %d, %d (old: %d)\n", client_pid(client), handle, rpc->handle);
 	rpc->handle = handle;
 
 	client_event_callback_add(client, CLIENT_EVENT_DEACTIVATE, deactivated_cb, NULL);
@@ -244,7 +246,7 @@ HAPI int client_rpc_fini(struct client_node *client)
 {
 	struct client_rpc *rpc;
 
-	rpc = client_del_data(client, "rpc");
+	rpc = client_del_data(client, RPC_TAG);
 	if (!rpc)
 		return -EINVAL;
 
@@ -257,7 +259,7 @@ HAPI int client_rpc_handle(struct client_node *client)
 {
 	struct client_rpc *rpc;
 
-	rpc = client_data(client, "rpc");
+	rpc = client_data(client, RPC_TAG);
 	if (!rpc) {
 		DbgPrint("Client has no RPC\n");
 		return -EINVAL;

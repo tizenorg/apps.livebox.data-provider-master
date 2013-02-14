@@ -28,6 +28,7 @@ extern const char *util_uri_to_path(const char *uri);
 extern void *util_timer_add(double interval, Eina_Bool (*cb)(void *data), void *data);
 extern void util_timer_interval_set(void *timer, double interval);
 extern char *util_get_file_kept_in_safe(const char *id);
+extern double util_time_delay_for_compensation(double period);
 
 #define SCHEMA_FILE	"file://"
 #define SCHEMA_PIXMAP	"pixmap://"

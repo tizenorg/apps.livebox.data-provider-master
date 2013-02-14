@@ -86,17 +86,14 @@ static inline void invoke_global_destroy_cb(struct client_node *client)
 	Eina_List *l;
 	Eina_List *n;
 	struct global_event_handler *item;
-	int ret;
 
 	EINA_LIST_FOREACH_SAFE(s_info.destroy_event_list, l, n, item) {
 		if (!item->cb) {
-			DbgPrint("Callback function is not valid\n");
+			ErrPrint("Callback function is not valid\n");
 			continue;
 		}
 
-		ret = item->cb(client, item->cbdata);
-
-		if (ret < 0) {
+		if (item->cb(client, item->cbdata) < 0) {
 			if (eina_list_data_find(s_info.destroy_event_list, item)) {
 				s_info.destroy_event_list = eina_list_remove(s_info.destroy_event_list, item);
 				DbgFree(item);
@@ -112,6 +109,11 @@ static inline void invoke_global_create_cb(struct client_node *client)
 	struct global_event_handler *item;
 
 	EINA_LIST_FOREACH_SAFE(s_info.create_event_list, l, n, item) {
+		if (!item->cb) {
+			ErrPrint("Callback function is not valid\n");
+			continue;
+		}
+
 		if (item->cb(client, item->cbdata) < 0) {
 			if (eina_list_data_find(s_info.create_event_list, item)) {
 				s_info.create_event_list = eina_list_remove(s_info.create_event_list, item);
@@ -140,7 +142,7 @@ static inline void destroy_client_data(struct client_node *client)
 			continue;
 		}
 
-		event->cb(client, event->data);
+		(void)event->cb(client, event->data);
 
 		if (eina_list_data_find(client->event_destroy_list, event)) {
 			client->event_destroy_list = eina_list_remove(client->event_destroy_list, event);
@@ -351,10 +353,8 @@ HAPI int client_deactivated_by_fault(struct client_node *client)
 	if (!client || client->faulted)
 		return 0;
 
-	DbgPrint("Client[%p] is faulted(%d), pid(%d)\n", client, client->refcnt, client->pid);
+	ErrPrint("Client[%p] is faulted(%d), pid(%d)\n", client, client->refcnt, client->pid);
 	client->faulted = 1;
-
-	DbgPrint("Reset PID (%d)\n", client->pid);
 	client->pid = (pid_t)-1;
 
 	invoke_deactivated_cb(client);
@@ -717,15 +717,17 @@ HAPI int client_browse_list(const char *cluster, const char *category, int (*cb)
 	struct client_node *client;
 	int cnt;
 
+	if (!cb || !cluster || !category)
+		return -EINVAL;
+
 	cnt = 0;
 	EINA_LIST_FOREACH(s_info.client_list, l, client) {
 		if (!client_is_subscribed(client, cluster, category))
 			continue;
 
-		if (cb) {
-			if (cb(client, data) < 0)
-				return -ECANCELED;
-		}
+		if (cb(client, data) < 0)
+			return -ECANCELED;
+
 		cnt++;
 	}
 

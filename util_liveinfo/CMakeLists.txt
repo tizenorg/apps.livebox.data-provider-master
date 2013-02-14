@@ -11,6 +11,9 @@ pkg_check_modules(info_pkgs REQUIRED
 	glib-2.0
 	gio-2.0
 	livebox-service
+	xdamage
+	xfixes
+	x11
 )
 
 FOREACH(flag ${info_pkgs_CFLAGS})

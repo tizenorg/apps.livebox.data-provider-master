@@ -411,14 +411,18 @@ HAPI void *group_context_item_del_data(struct context_item *item, const char *ta
 	struct context_item_data *tmp;
 	Eina_List *l;
 	Eina_List *n;
-	void *data;
 
 	EINA_LIST_FOREACH_SAFE(item->data_list, l, n, tmp) {
 		if (!strcmp(tmp->tag, tag)) {
+			void *data;
+
 			item->data_list = eina_list_remove(item->data_list, tmp);
-			DbgFree(tmp->tag);
+
 			data = tmp->data;
+
+			DbgFree(tmp->tag);
 			DbgFree(tmp);
+
 			return data;
 		}
 	}
@@ -428,12 +432,12 @@ HAPI void *group_context_item_del_data(struct context_item *item, const char *ta
 
 HAPI const char * const group_category_name(struct category *category)
 {
-	return category->name;
+	return category ? category->name : NULL;
 }
 
 HAPI const char * const group_cluster_name(struct cluster *cluster)
 {
-	return cluster->name;
+	return cluster ? cluster->name : NULL;
 }
 
 HAPI const char *group_cluster_name_by_category(struct category *category)
@@ -444,26 +448,33 @@ HAPI const char *group_cluster_name_by_category(struct category *category)
 static inline char *get_token(char *ptr, int *len)
 {
 	char *name;
+	int _len;
 
 	if (*len == 0) {
 		ErrPrint("Start brace but len = 0\n");
 		return NULL;
 	}
 
-	name = malloc(*len + 1);
+	_len = *len;
+
+	while (_len > 0 && isspace(ptr[_len]))
+		_len--;
+
+	if (_len == 0) {
+		ErrPrint("Token has no string\n");
+		return NULL;
+	}
+
+	name = malloc(_len + 1);
 	if (!name) {
 		ErrPrint("Heap: %s\n", strerror(errno));
 		return NULL;
 	}
 
-	strncpy(name, ptr - *len, *len);
-	name[(*len)--] = '\0';
+	strncpy(name, ptr - *len, _len);
+	name[_len] = '\0';
 
-	while (isspace(name[(*len)])) {
-		name[*len] = '\0';
-		(*len)--;
-	}
-
+	*len = _len;
 	return name;
 }
 

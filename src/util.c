@@ -337,49 +337,55 @@ HAPI const char *util_uri_to_path(const char *uri)
 	return uri + len;
 }
 
-static inline void compensate_timer(Ecore_Timer *timer)
+HAPI double util_time_delay_for_compensation(double period)
 {
 	struct timeval tv;
-	struct timeval compensator;
-	double delay;
-	double pending;
+	unsigned long long curtime;
+	unsigned long long _period;
+	unsigned long long remain;
+	unsigned int sec;
+	unsigned int usec;
+	double ret;
 
-	if (ecore_timer_interval_get(timer) <= 1.0f) {
-		DbgPrint("Doesn't need to sync the timer to start from ZERO sec\n");
-		return;
-	}
+	gettimeofday(&tv, NULL);
+	curtime = (unsigned long long)tv.tv_sec * 1000000llu + (unsigned long long)tv.tv_usec;
 
-	if (gettimeofday(&tv, NULL) < 0) {
-		ErrPrint("Error: %s\n", strerror(errno));
-		return;
-	}
+	sec = (unsigned int)period;
+	usec = (period - sec) * 1000000;
+	_period = (unsigned long long)sec * 1000000llu + usec;
 
-	compensator.tv_sec = tv.tv_sec % 60;
-	if (compensator.tv_sec == 0)
-		compensator.tv_sec = 59;
+	remain = curtime % _period;
 
-	delay = 60.0f - ((double)compensator.tv_sec + ((double)tv.tv_usec / 1000000.0f));
-	pending = ecore_timer_pending_get(timer);
-	ecore_timer_delay(timer, delay - pending);
-	DbgPrint("COMPENSATED: %lf\n", delay);
+	sec = (unsigned int)(remain / 1000000llu);
+	usec = (unsigned int)(remain % 1000000llu);
+
+	ret = (double)sec + (double)usec / 1000000.0f;
+	return period - ret;
 }
 
 HAPI void *util_timer_add(double interval, Eina_Bool (*cb)(void *data), void *data)
 {
 	Ecore_Timer *timer;
+	double delay;
 
 	timer = ecore_timer_add(interval, cb, data);
 	if (!timer)
 		return NULL;
 
-	compensate_timer(timer);
+	delay = util_time_delay_for_compensation(interval) - interval;
+	ecore_timer_delay(timer, delay);
+	DbgPrint("Compensate timer: %lf\n", delay);
+
 	return timer;
 }
 
 HAPI void util_timer_interval_set(void *timer, double interval)
 {
+	double delay;
 	ecore_timer_interval_set(timer, interval);
-	compensate_timer(timer);
+
+	delay = util_time_delay_for_compensation(interval) - interval;
+	ecore_timer_delay(timer, delay);
 }
 
 HAPI char *util_get_file_kept_in_safe(const char *id)

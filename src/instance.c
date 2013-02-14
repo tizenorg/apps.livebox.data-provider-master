@@ -138,28 +138,22 @@ static Eina_Bool update_timer_cb(void *data);
 
 static inline void timer_thaw(struct inst_info *inst)
 {
-	struct timeval tv;
 	double pending;
-	double compensate;
+	double period;
+	double delay;
 	double sleep_time;
 
 	ecore_timer_thaw(inst->update_timer);
+	period = ecore_timer_interval_get(inst->update_timer);
+	pending = ecore_timer_pending_get(inst->update_timer);
+	delay = util_time_delay_for_compensation(period) - pending;
+	ecore_timer_delay(inst->update_timer, delay);
+	DbgPrint("Compensated: %lf\n", delay);
 
 	if (inst->sleep_at == 0.0f)
 		return;
 
-	pending = ecore_timer_pending_get(inst->update_timer);
-
-	if (gettimeofday(&tv, NULL) < 0) {
-		ErrPrint("Failed to get timeofday: %s\n", strerror(errno));
-		return;
-	}
-	compensate = 60.0f - ((double)(tv.tv_sec % 60) + ((double)tv.tv_usec / 1000000.0f));
-	sleep_time = (double)tv.tv_sec + ((double)tv.tv_usec / 1000000.0f) - inst->sleep_at;
-
-	ecore_timer_delay(inst->update_timer, compensate - pending);
-	DbgPrint("Compensate: %lf\n", compensate - pending);
-
+	sleep_time = util_timestamp() - inst->sleep_at;
 	if (sleep_time > pending) {
 		DbgPrint("Update time elapsed\n");
 		(void)update_timer_cb(inst);

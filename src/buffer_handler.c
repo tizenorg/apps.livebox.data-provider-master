@@ -1266,6 +1266,8 @@ HAPI int buffer_handler_init(void)
 		DbgPrint("Fallback to the S/W Backend\n");
 		s_info.evt_base = 0;
 		s_info.err_base = 0;
+		DbgFree(deviceName);
+		DbgFree(driverName);
 		return 0;
 	}
 

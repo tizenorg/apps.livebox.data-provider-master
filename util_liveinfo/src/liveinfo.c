@@ -20,9 +20,14 @@
 #include <errno.h>
 #include <libgen.h>
 #include <sys/types.h>
+#include <sys/wait.h>
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <termios.h>
+
+#include <X11/Xlib.h>
+#include <X11/extensions/Xdamage.h>
+#include <X11/extensions/Xfixes.h>
 
 #include <glib.h>
 #include <glib-object.h>
@@ -101,6 +106,13 @@ static struct info {
 	int verbose;
 
 	int age;
+
+	char *history[1024];
+	int history_top;
+	int history_idx;
+
+	struct node *quick_search_node;
+	int quick_idx;
 } s_info = {
 	.fifo_handle = -EINVAL,
 	.fd = -EINVAL,
@@ -113,6 +125,11 @@ static struct info {
 	.input_fd = STDIN_FILENO,
 	.verbose = 0,
 	.age = 0,
+	.history = { 0, },
+	.history_top = 0,
+	.history_idx = 0,
+	.quick_search_node = NULL,
+	.quick_idx = 0,
 };
 
 char *optarg;
@@ -230,7 +247,7 @@ static inline void ls(void)
 			}
 
 			info = node_data(node);
-			printf(" %3d %5s %5.2f ", info->loaded_inst, info->abi ? info->abi : "?", info->ttl);
+			printf("%6d %3d %5s %5.2f ", info->pid, info->loaded_inst, info->abi ? info->abi : "?", info->ttl);
 		} else if (is_instance) {
 			struct instance *info;
 			struct stat stat;
@@ -447,13 +464,20 @@ static void send_inst_list(const char *pkgname)
 static inline void help(void)
 {
 	printf("liveinfo - Livebox utility\n");
+	printf("------------------------------ [Option] ------------------------------\n");
+	printf("-b Batch mode\n");
 	printf("------------------------------ [Command list] ------------------------------\n");
 	printf("[32mcd [PATH] - Change directory[0m\n");
 	printf("[32mls [ | PATH] - List up content as a file[0m\n");
 	printf("[32mrm [PKG_ID|INST_ID] - Delete package or instance[0m\n");
-	printf("[32mcat [FILE] - Open a file to get some detail information[0m\n");
-	printf("[32mpull [FILE] - Pull given file to host dir[0m\n");
+	printf("[32mstat [path] - Display the information of given path[0m\n");
 	printf("[32mset [debug] [on|off] Set the control variable of master provider[0m\n");
+	printf("[32mx damage Pix x y w h - Create damage event for given pixmap[0m\n");
+	printf("[32mx move Pix x y - Move the window[0m\n");
+	printf("[32mx resize Pix w h - Resize the window[0m\n");
+	printf("[32mx map Pix - Show the window[0m\n");
+	printf("[32mx unmap Pix - Hide the window[0m\n");
+	printf("[32msh [command] Execute shell command, [command] should be abspath[0m\n");
 	printf("[32mexit - [0m\n");
 	printf("[32mquit - [0m\n");
 	printf("----------------------------------------------------------------------------\n");
@@ -517,6 +541,120 @@ static int get_token(const char *src, char *out)
 
 	*out = '\0';
 	return len;
+}
+
+static inline int do_stat(const char *cmd)
+{
+	int i;
+	struct node *node;
+	struct node *parent;
+	char *tmp;
+	enum stat_type {
+		PKG_INSTANCE = 0x01,
+		PKG,
+		PROVIDER_INSTANCE,
+		PROVIDER,
+		ROOT,
+	} type;
+
+	cmd += 5;
+	while (*cmd && *cmd == ' ') cmd++;
+
+	if (!*cmd){
+		printf("Invalid argument\n");
+		return -EINVAL;
+	}
+
+	node = node_find(*cmd == '/' ? s_info.rootdir : s_info.curdir, cmd);
+	if (!node) {
+		printf("Invalid path\n");
+		return -EINVAL;
+	}
+
+	i = 0;
+	type = ROOT;
+	parent = node_parent(node);
+	while (parent) {
+		if (!node_name(parent)) {
+			printf("%s has no info\n", node_name(node));
+			return -EINVAL;
+		} else if (!strcmp(node_name(parent), "package")) {
+			type = (i == 0) ? PKG : PKG_INSTANCE;
+			break;
+		} else if (!strcmp(node_name(parent), "provider")){
+			type = (i == 0) ? PROVIDER : PROVIDER_INSTANCE;
+			break;
+		}
+
+		parent = node_parent(parent);
+		i++;
+		if (i > 1) {
+			printf("%s is invalid path\n", node_name(node));
+			return -EINVAL;
+		}
+	}
+
+	switch (type){
+	case PKG:
+		tmp = livebox_service_i18n_name(node_name(node), NULL);
+		printf("Name: %s (", tmp);
+		free(tmp);
+
+		i = livebox_service_is_enabled(node_name(node));
+		printf("%s)\n", i ? "enabled" : "disabled");
+
+		tmp = livebox_service_i18n_icon(node_name(node), NULL);
+		printf("Icon: %s\n", tmp);
+		free(tmp);
+
+		tmp = livebox_service_provider_name(node_name(node));
+		printf("Provider: %s (content:", tmp);
+		free(tmp);
+
+		tmp = livebox_service_content(node_name(node));
+		printf("%s)\n", tmp);
+		free(tmp);
+
+		tmp = livebox_service_lb_script_path(node_name(node));
+		printf("LB Script: %s (", tmp);
+		free(tmp);
+
+		tmp = livebox_service_lb_script_group(node_name(node));
+		printf("%s)\n", tmp);
+		free(tmp);
+
+		tmp = livebox_service_pd_script_path(node_name(node));
+		printf("PD Script: %s (", tmp);
+		free(tmp);
+
+		tmp = livebox_service_pd_script_group(node_name(node));
+		printf("%s)\n", tmp);
+		free(tmp);
+
+		i = livebox_service_mouse_event(node_name(node));
+		printf("Mouse event: %s\n", i ? "enabled" : "disabled");
+
+		i = livebox_service_touch_effect(node_name(node));
+		printf("Touch effect: %s\n", i ? "enabled" : "disabled");
+		break;
+	case PROVIDER:
+		printf("Not supported yet\n");
+		break;
+	case PKG_INSTANCE:
+		printf("Not supported yet\n");
+		break;
+	case PROVIDER_INSTANCE:
+		printf("Not supported yet\n");
+		break;
+	case ROOT:
+		printf("Not supported yet\n");
+		break;
+	default:
+		printf("Invalid type\n");
+		return -EFAULT;
+	}
+
+	return 0;
 }
 
 static inline int do_set(const char *cmd)
@@ -669,6 +807,164 @@ static inline int do_rm(const char *cmd)
 	return 0;
 }
 
+#if !defined(WCOREDUMP)
+#define WCOREDUMP(a)	0
+#endif
+
+static inline void do_sh(const char *cmd)
+{
+	pid_t pid;
+
+	cmd += 3;
+
+	while (*cmd && *cmd == ' ') cmd++;
+	if (!*cmd)
+		return;
+
+	pid = fork();
+	if (pid == 0) {
+		char command[256];
+		int idx;
+		idx = 0;
+
+		while (idx < sizeof(command) && *cmd && *cmd != ' ')
+			command[idx++] = *cmd++;
+		command[idx] = '\0';
+
+		if (execl(command, cmd, NULL) < 0)
+			printf("Failed to execute: %s\n", strerror(errno));
+
+		exit(0);
+	} else if (pid < 0) {
+		printf("Failed to create a new process: %s\n", strerror(errno));
+	} else {
+		int status;
+		if (waitpid(pid, &status, 0) < 0) {
+			printf("error: %s\n", strerror(errno));
+		} else {
+			if (WIFEXITED(status)) {
+				printf("Exit: %d\n", WEXITSTATUS(status));
+			} else if (WIFSIGNALED(status)) {
+				printf("Terminated by %d %s\n", WTERMSIG(status), WCOREDUMP(status) ? " - core generated" : "");
+			} else if (WIFSTOPPED(status)) {
+				printf("Stopped by %d\n", WSTOPSIG(status));
+			} else if (WIFCONTINUED(status)) {
+				printf("Child is resumed\n");
+			}
+		}
+	}
+}
+
+static inline void do_x(const char *cmd)
+{
+	Display *disp;
+
+	cmd += 2;
+
+	while (*cmd && *cmd == ' ') cmd++;
+	if (!*cmd)
+		return;
+
+	disp = XOpenDisplay(NULL);
+	if (!disp) {
+		printf("Failed to connect to the X\n");
+		return;
+	}
+
+	if (!strncasecmp(cmd, "damage ", 7)) {
+		unsigned int winId;
+		XRectangle rect;
+		XserverRegion region;
+		int x, y, w, h;
+
+		cmd += 7;
+
+		if (sscanf(cmd, "%u %d %d %d %d", &winId, &x, &y, &w, &h) != 5) {
+			printf("Invalid argument\nx damage WINID_DEC X Y W H\n");
+			return;
+		}
+		rect.x = x;
+		rect.y = y;
+		rect.width = w;
+		rect.height = h;
+		region = XFixesCreateRegion(disp, &rect, 1);
+		XDamageAdd(disp, winId, region);
+		XFixesDestroyRegion(disp, region);
+		XFlush(disp);
+
+		printf("Damage: %u %d %d %d %d\n", winId, x, y, w, h);
+	} else if (!strncasecmp(cmd, "resize ", 7)) {
+		unsigned int winId;
+		int w;
+		int h;
+
+		cmd += 7;
+
+		if (sscanf(cmd, "%u %d %d", &winId, &w, &h) != 3) {
+			printf("Invalid argument\nx resize WINID_DEC W H\n");
+			return;
+		}
+
+		XResizeWindow(disp, winId, w, h);
+		printf("Resize: %u %d %d\n", winId, w, h);
+	} else if (!strncasecmp(cmd, "move ", 5)) {
+		unsigned int winId;
+		int x;
+		int y;
+
+		cmd += 5;
+		if (sscanf(cmd, "%u %d %d", &winId, &x, &y) != 3) {
+			printf("Invalid argument\nx move WINID_DEC X Y\n");
+			return;
+		}
+
+		XMoveWindow(disp, winId, x, y);
+		printf("Move: %u %d %d\n", winId, x, y);
+	} else if (!strncasecmp(cmd, "map ", 4)) {
+		unsigned int winId;
+		cmd += 4;
+		if (sscanf(cmd, "%u", &winId) != 1) {
+			printf("Invalid argument\nx map WINID_DEC\n");
+			return;
+		}
+		XMapRaised(disp, winId);
+		printf("Map: %u\n", winId);
+	} else if (!strncasecmp(cmd, "unmap ", 6)) {
+		unsigned int winId;
+		cmd += 6;
+		if (sscanf(cmd, "%u", &winId) != 1) {
+			printf("Invalid argument\nx unmap WINID_DEC\n");
+			return;
+		}
+		XUnmapWindow(disp, winId);
+		printf("Unmap: %u\n", winId);
+	} else {
+		printf("Unknown command\n");
+	}
+
+	XCloseDisplay(disp);
+}
+
+static inline void put_command(const char *cmd)
+{
+	if (s_info.history[s_info.history_top]) {
+		free(s_info.history[s_info.history_top]);
+		s_info.history[s_info.history_top] = NULL;
+	}
+
+	s_info.history[s_info.history_top] = strdup(cmd);
+	s_info.history_top = (s_info.history_top + !!s_info.history[s_info.history_top]) % (sizeof(s_info.history) / sizeof(s_info.history[0]));
+}
+
+static inline const char *get_command(int idx)
+{
+	idx = s_info.history_top + idx;
+	while (idx < 0)
+		idx += (sizeof(s_info.history) / sizeof(s_info.history[0]));
+
+	return s_info.history[idx];
+}
+
 static inline void do_command(const char *cmd)
 {
 	/* Skip the first spaces */
@@ -680,6 +976,8 @@ static inline void do_command(const char *cmd)
 		} else if (!strncasecmp(cmd, "set ", 4)) {
 			if (do_set(cmd) == 0)
 				return;
+		} else if (!strncasecmp(cmd, "stat ", 5)) {
+			do_stat(cmd);
 		} else if (!strncasecmp(cmd, "get ", 4)) {
 			if (do_get(cmd) == 0)
 				return;
@@ -692,6 +990,10 @@ static inline void do_command(const char *cmd)
 		} else if (!strncasecmp(cmd, "rm", 2)) {
 			if (do_rm(cmd) == 0)
 				return;
+		} else if (!strncasecmp(cmd, "sh ", 3)) {
+			do_sh(cmd);
+		} else if (!strncasecmp(cmd, "x ", 2)) {
+			do_x(cmd);
 		} else {
 			help();
 		}
@@ -708,6 +1010,9 @@ static Eina_Bool input_cb(void *data, Ecore_Fd_Handler *fd_handler)
 	char ch;
 	int fd;
 	int ret;
+	const char escape_str[] = { 0x1b, 0x5b, 0x0 };
+	const char *escape_ptr = escape_str;
+	const char *tmp;
 
 	if (fd_handler) {
 		fd = ecore_main_fd_handler_fd_get(fd_handler);
@@ -728,6 +1033,53 @@ static Eina_Bool input_cb(void *data, Ecore_Fd_Handler *fd_handler)
 
 	/* Silly.. Silly */
 	while ((ret = read(fd, &ch, sizeof(ch))) == sizeof(ch)) {
+		if (*escape_ptr == '\0') {
+			/* Function key */
+			switch (ch) {
+			case 0x41: /* UP */
+				printf("%s2K%s1G", escape_str, escape_str);
+				tmp = get_command(--s_info.history_idx);
+				if (!tmp) {
+					s_info.history_idx = 0;
+					cmd_buffer[0] = '\0';
+					prompt(NULL);
+				} else {
+					strcpy(cmd_buffer, tmp);
+					idx = strlen(cmd_buffer);
+					prompt(cmd_buffer);
+				}
+				break;
+			case 0x42: /* DOWN */
+				if (s_info.history_idx >= 0)
+					break;
+
+				printf("%s2K%s1G", escape_str, escape_str);
+				tmp = get_command(++s_info.history_idx);
+				if (s_info.history_idx == 0) {
+					s_info.history_idx = 0;
+					cmd_buffer[0] = '\0';
+					prompt(NULL);
+				} else {
+					strcpy(cmd_buffer, tmp);
+					idx = strlen(cmd_buffer);
+					prompt(cmd_buffer);
+				}
+				break;
+			case 0x43: /* RIGHT */
+				break;
+			case 0x44: /* LEFT */
+				break;
+			default:
+				break;
+			}
+
+			escape_ptr = escape_str;
+			continue;
+		} else if (ch == *escape_ptr) {
+			escape_ptr++;
+			continue;
+		}
+
 		switch (ch) {
 		case 0x08: /* BKSP */
 			cmd_buffer[idx] = '\0';
@@ -742,6 +1094,23 @@ static Eina_Bool input_cb(void *data, Ecore_Fd_Handler *fd_handler)
 			putc('\r', stdout);
 			prompt(cmd_buffer);
 			break;
+		case 0x09: /* TAB */
+			if (!s_info.quick_search_node) {
+				s_info.quick_search_node = node_child(s_info.curdir);
+				s_info.quick_idx = idx;
+			} else {
+				s_info.quick_search_node = node_next_sibling(s_info.quick_search_node);
+				idx = s_info.quick_idx;
+			}
+
+			if (!s_info.quick_search_node)
+				break;
+
+			printf("%s2K%s1G", escape_str, escape_str);
+			strcpy(cmd_buffer + idx, node_name(s_info.quick_search_node));
+			idx += strlen(node_name(s_info.quick_search_node));
+			prompt(cmd_buffer);
+			break;
 		case '\n':
 		case '\r':
 			cmd_buffer[idx] = '\0';
@@ -749,7 +1118,10 @@ static Eina_Bool input_cb(void *data, Ecore_Fd_Handler *fd_handler)
 			if (s_info.input_fd == STDIN_FILENO || s_info.verbose)
 				putc((int)'\n', stdout);
 			do_command(cmd_buffer);
+			put_command(cmd_buffer);
 			memset(cmd_buffer, 0, sizeof(cmd_buffer));
+			s_info.history_idx = 0;
+			s_info.quick_search_node = NULL;
 
 			/* Make a main loop processing for command handling */
 			return ECORE_CALLBACK_RENEW;

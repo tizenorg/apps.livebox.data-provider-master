@@ -58,6 +58,7 @@ HAPI int const fault_is_occured(void)
 static void clear_log_file(struct slave_node *slave)
 {
 	char filename[BUFSIZ];
+
 	snprintf(filename, sizeof(filename), "%s/slave.%d", SLAVE_LOG_PATH, slave_pid(slave));
 
 	unlink(filename);

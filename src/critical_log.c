@@ -46,6 +46,36 @@ static struct {
 
 
 
+static inline void rotate_log(void)
+{
+	char *filename;
+	int namelen;
+
+	if (s_info.nr_of_lines < MAX_LOG_LINE)
+		return;
+
+	s_info.file_id = (s_info.file_id + 1) % MAX_LOG_FILE;
+
+	namelen = strlen(s_info.filename) + strlen(SLAVE_LOG_PATH) + 20;
+	filename = malloc(namelen);
+	if (filename) {
+		snprintf(filename, namelen, "%s/%d_%s", SLAVE_LOG_PATH, s_info.file_id, s_info.filename);
+
+		if (s_info.fp)
+			fclose(s_info.fp);
+
+		s_info.fp = fopen(filename, "w+");
+		if (!s_info.fp)
+			ErrPrint("Failed to open a file: %s\n", filename);
+
+		DbgFree(filename);
+	}
+
+	s_info.nr_of_lines = 0;
+}
+
+
+
 HAPI int critical_log(const char *func, int line, const char *fmt, ...)
 {
 	va_list ap;
@@ -67,29 +97,7 @@ HAPI int critical_log(const char *func, int line, const char *fmt, ...)
 	va_end(ap);
 
 	s_info.nr_of_lines++;
-	if (s_info.nr_of_lines == MAX_LOG_LINE) {
-		char *filename;
-		int namelen;
-
-		s_info.file_id = (s_info.file_id + 1) % MAX_LOG_FILE;
-
-		namelen = strlen(s_info.filename) + strlen(SLAVE_LOG_PATH) + 20;
-		filename = malloc(namelen);
-		if (filename) {
-			snprintf(filename, namelen, "%s/%d_%s", SLAVE_LOG_PATH, s_info.file_id, s_info.filename);
-
-			if (s_info.fp)
-				fclose(s_info.fp);
-
-			s_info.fp = fopen(filename, "w+");
-			if (!s_info.fp)
-				ErrPrint("Failed to open a file: %s\n", filename);
-
-			DbgFree(filename);
-		}
-
-		s_info.nr_of_lines = 0;
-	}
+	rotate_log();
 	return ret;
 }
 

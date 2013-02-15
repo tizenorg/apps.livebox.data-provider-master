@@ -73,6 +73,7 @@ struct slave_node {
 	Eina_List *data_list;
 
 	Ecore_Timer *ttl_timer; /* Time to live */
+	Ecore_Timer *activate_timer; /* Waiting hello packet for this time */
 
 	struct timeval activated_at;
 };
@@ -236,6 +237,9 @@ static inline void destroy_slave_node(struct slave_node *slave)
 	if (slave->ttl_timer)
 		ecore_timer_del(slave->ttl_timer);
 
+	if (slave->activate_timer)
+		ecore_timer_del(slave->activate_timer);
+
 	DbgFree(slave->abi);
 	DbgFree(slave->name);
 	DbgFree(slave->pkgname);
@@ -367,6 +371,29 @@ static inline void invoke_activate_cb(struct slave_node *slave)
 	}
 }
 
+static Eina_Bool activate_timer_cb(void *data)
+{
+	struct slave_node *slave = data;
+
+	slave->fault_count++;
+	invoke_fault_cb(slave);
+
+	slave_set_reactivation(slave, 0);
+	slave_set_reactivate_instances(slave, 0);
+
+	slave->activate_timer = NULL;
+	if (slave->pid > 0) {
+		int ret;
+		DbgPrint("Try to terminate PID: %d\n", slave->pid);
+		ret = aul_terminate_pid(slave->pid);
+		if (ret < 0)
+			ErrPrint("Terminate failed, pid %d\n", slave->pid);
+	}
+	slave = slave_deactivated(slave);
+	ErrPrint("Slave is not activated in %lf sec (slave: %p)\n", SLAVE_ACTIVATE_TIME, slave);
+	return ECORE_CALLBACK_CANCEL;
+}
+
 HAPI int slave_activate(struct slave_node *slave)
 {
 
@@ -407,6 +434,10 @@ HAPI int slave_activate(struct slave_node *slave)
 			return -EFAULT;
 		}
 		DbgPrint("Slave launched %d for %s\n", slave->pid, slave->name);
+
+		slave->activate_timer = ecore_timer_add(SLAVE_ACTIVATE_TIME, activate_timer_cb, slave);
+		if (!slave->activate_timer)
+			ErrPrint("Failed to register an activate timer\n");
 	}
 
 	slave->state = SLAVE_REQUEST_TO_LAUNCH;
@@ -476,6 +507,12 @@ HAPI int slave_activated(struct slave_node *slave)
 
 	if (gettimeofday(&slave->activated_at, NULL) < 0)
 		ErrPrint("Failed to get time of day: %s\n", strerror(errno));
+
+	if (slave->activate_timer) {
+		ecore_timer_del(slave->activate_timer);
+		slave->activate_timer = NULL;
+	}
+
 	return 0;
 }
 
@@ -544,9 +581,15 @@ HAPI struct slave_node *slave_deactivated(struct slave_node *slave)
 
 	slave->pid = (pid_t)-1;
 	slave->state = SLAVE_TERMINATED;
+
 	if (slave->ttl_timer) {
 		ecore_timer_del(slave->ttl_timer);
 		slave->ttl_timer = NULL;
+	}
+
+	if (slave->activate_timer) {
+		ecore_timer_del(slave->activate_timer);
+		slave->activate_timer = NULL;
 	}
 
 	reactivate = invoke_deactivate_cb(slave);
@@ -637,10 +680,11 @@ HAPI struct slave_node *slave_deactivated_by_fault(struct slave_node *slave)
 HAPI const int const slave_is_activated(struct slave_node *slave)
 {
 	switch (slave->state) {
-	case SLAVE_REQUEST_TO_LAUNCH:
 	case SLAVE_REQUEST_TO_TERMINATE:
 	case SLAVE_TERMINATED:
 		return 0;
+	case SLAVE_REQUEST_TO_LAUNCH:
+		 /* Not yet launched. but the slave incurred an unexpected error */
 	case SLAVE_REQUEST_TO_PAUSE:
 	case SLAVE_REQUEST_TO_RESUME:
 	case SLAVE_PAUSED:

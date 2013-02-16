@@ -1732,6 +1732,7 @@ static inline void update_box(struct livebox *livebox, xmlNodePtr node)
 	for (node = node->children; node; node = node->next) {
 		if (!xmlStrcasecmp(node->name, (const xmlChar *)"size")) {
 			xmlChar *size;
+			int is_easy = 0;
 
 			size = xmlNodeGetContent(node);
 			if (!size) {
@@ -1739,10 +1740,45 @@ static inline void update_box(struct livebox *livebox, xmlNodePtr node)
 				continue;
 			}
 
+			if (xmlHasProp(node, (const xmlChar *)"mode")) {
+				xmlChar *mode;
+				mode = xmlGetProp(node, (const xmlChar *)"mode");
+				if (mode) {
+					DbgPrint("Easy mode: %s\n", mode);
+					is_easy = !xmlStrcasecmp(mode, (const xmlChar *)"easy");
+					xmlFree(mode);
+				}
+			}
+
 			if (!xmlStrcasecmp(size, (const xmlChar *)"1x1")) {
-				livebox->size_list |= LB_SIZE_TYPE_1x1;
-				if (xmlHasProp(node, (const xmlChar *)"preview")) {
-					livebox->preview[0] = xmlGetProp(node, (const xmlChar *)"preview");
+				if (is_easy) {
+					livebox->size_list |= LB_SIZE_TYPE_EASY_1x1;
+					if (xmlHasProp(node, (const xmlChar *)"preview")) {
+						livebox->preview[7] = xmlGetProp(node, (const xmlChar *)"preview");
+					}
+				} else {
+					livebox->size_list |= LB_SIZE_TYPE_1x1;
+					if (xmlHasProp(node, (const xmlChar *)"preview")) {
+						livebox->preview[0] = xmlGetProp(node, (const xmlChar *)"preview");
+					}
+				}
+			} else if (!xmlStrcasecmp(size, (const xmlChar *)"3x1")) {
+				if (is_easy) {
+					livebox->size_list |= LB_SIZE_TYPE_EASY_3x1;
+					if (xmlHasProp(node, (const xmlChar *)"preview")) {
+						livebox->preview[8] = xmlGetProp(node, (const xmlChar *)"preview");
+					}
+				} else {
+					ErrPrint("Invalid size tag (%s)\n", size);
+				}
+			} else if (!xmlStrcasecmp(size, (const xmlChar *)"3x3")) {
+				if (is_easy) {
+					livebox->size_list |= LB_SIZE_TYPE_EASY_3x3;
+					if (xmlHasProp(node, (const xmlChar *)"preview")) {
+						livebox->preview[9] = xmlGetProp(node, (const xmlChar *)"preview");
+					}
+				} else {
+					ErrPrint("Invalid size tag (%s)\n", size);
 				}
 			} else if (!xmlStrcasecmp(size, (const xmlChar *)"2x1")) {
 				livebox->size_list |= LB_SIZE_TYPE_2x1;

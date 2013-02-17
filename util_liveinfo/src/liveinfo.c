@@ -24,10 +24,14 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <termios.h>
+#include <sys/shm.h>
+#include <sys/ipc.h>
 
 #include <X11/Xlib.h>
 #include <X11/extensions/Xdamage.h>
 #include <X11/extensions/Xfixes.h>
+#include <X11/extensions/XShm.h>
+#include <X11/Xutil.h>
 
 #include <glib.h>
 #include <glib-object.h>
@@ -855,6 +859,106 @@ static inline void do_sh(const char *cmd)
 	}
 }
 
+static inline int get_pixmap_size(Display *disp, Pixmap id, int *x, int *y, unsigned int *w, unsigned int *h)
+{
+	Window dummy_win;
+	unsigned int dummy_border, dummy_depth;
+	int _x;
+	int _y;
+
+	if (!x)
+		x = &_x;
+	if (!y)
+		y = &_y;
+
+	if (!XGetGeometry(disp, id, &dummy_win, x, y, w, h, &dummy_border, &dummy_depth)) {
+		return -EFAULT;
+	}
+
+	return 0;
+}
+
+static inline int do_capture(Display *disp, Pixmap id, const char *filename)
+{
+	XShmSegmentInfo si;
+	XImage *xim;
+	Visual *visual;
+	unsigned int w;
+	unsigned int h;
+	int bufsz;
+	int fd;
+	Screen *screen;
+
+	screen = DefaultScreenOfDisplay(disp);
+	visual = DefaultVisualOfScreen(screen);
+
+	if (get_pixmap_size(disp, id, NULL, NULL, &w, &h) < 0) {
+		printf("Failed to get size of a pixmap\n");
+		return -EINVAL;
+	}
+
+	printf("Pixmap size: %dx%d\n", w, h);
+	bufsz = w * h * sizeof(int);
+
+	si.shmid = shmget(IPC_PRIVATE, bufsz, IPC_CREAT | 0666);
+	if (si.shmid < 0) {
+		printf("shmget: %s\n", strerror(errno));
+		return -EFAULT;
+	}
+
+	si.readOnly = False;
+	si.shmaddr = shmat(si.shmid, NULL, 0);
+	if (si.shmaddr == (void *)-1) {
+
+		if (shmctl(si.shmid, IPC_RMID, 0) < 0)
+			printf("shmctl: %s\n", strerror(errno));
+
+		return -EFAULT;
+	}
+
+	/*!
+	 * \NOTE
+	 * Use the 24 bits Pixmap for Video player
+	 */
+	xim = XShmCreateImage(disp, visual, 24 /* (depth << 3) */, ZPixmap, NULL, &si, w, h);
+	if (xim == NULL) {
+		if (shmdt(si.shmaddr) < 0)
+			printf("shmdt: %s\n", strerror(errno));
+
+		if (shmctl(si.shmid, IPC_RMID, 0) < 0)
+			printf("shmctl: %s\n", strerror(errno));
+
+		return -EFAULT;
+	}
+
+	xim->data = si.shmaddr;
+	XShmAttach(disp, &si);
+
+	XShmGetImage(disp, id, xim, 0, 0, 0xFFFFFFFF);
+	XSync(disp, False);
+
+	fd = open(filename, O_CREAT | O_RDWR);
+	if (fd > 0) {
+		if (write(fd, xim->data, bufsz) != bufsz)
+			printf("Data is not fully written\n");
+
+		close(fd);
+	} else {
+		printf("Error: %sn\n", strerror(errno));
+	}
+
+	XShmDetach(disp, &si);
+	XDestroyImage(xim);
+
+	if (shmdt(si.shmaddr) < 0)
+		printf("shmdt: %s\n", strerror(errno));
+
+	if (shmctl(si.shmid, IPC_RMID, 0) < 0)
+		printf("shmctl: %s\n", strerror(errno));
+
+	return 0;
+}
+
 static inline void do_x(const char *cmd)
 {
 	Display *disp;
@@ -893,6 +997,18 @@ static inline void do_x(const char *cmd)
 		XFlush(disp);
 
 		printf("Damage: %u %d %d %d %d\n", winId, x, y, w, h);
+	} else if (!strncasecmp(cmd, "capture ", 8)) {
+		unsigned int winId;
+		char filename[256];
+
+		cmd += 8;
+
+		if (sscanf(cmd, "%u %255[^ ]", &winId, filename) != 2) {
+			printf("Invalid argument\nx capture WINID_DEC FILENAME (%s)\n", cmd);
+			return;
+		}
+		if (do_capture(disp, winId, filename) == 0)
+			printf("Captured: %s\n", filename);
 	} else if (!strncasecmp(cmd, "resize ", 7)) {
 		unsigned int winId;
 		int w;

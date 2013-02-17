@@ -14,6 +14,7 @@ pkg_check_modules(info_pkgs REQUIRED
 	xdamage
 	xfixes
 	x11
+	xext
 )
 
 FOREACH(flag ${info_pkgs_CFLAGS})

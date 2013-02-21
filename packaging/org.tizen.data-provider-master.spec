@@ -1,6 +1,6 @@
 Name: org.tizen.data-provider-master
 Summary: Master service provider for liveboxes.
-Version: 0.16.10
+Version: 0.16.11
 Release: 1
 Group: framework/livebox
 License: Flora License
@@ -25,7 +25,7 @@ BuildRequires: pkgconfig(libxml-2.0)
 BuildRequires: pkgconfig(x11)
 BuildRequires: pkgconfig(libdri2)
 BuildRequires: pkgconfig(libdrm)
-BuildRequires: pkgconfig(libdrm_slp)
+BuildRequires: pkgconfig(libtbm)
 BuildRequires: pkgconfig(xfixes)
 BuildRequires: pkgconfig(dri2proto)
 BuildRequires: pkgconfig(xext)

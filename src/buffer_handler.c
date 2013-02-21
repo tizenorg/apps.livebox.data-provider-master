@@ -38,7 +38,7 @@
 #include <dri2.h>
 #include <xf86drm.h>
 #include <xf86drmMode.h>
-#include <drm_slp_bufmgr.h>
+#include <tbm_bufmgr.h>
 
 #include <dlog.h>
 #include <packet.h>
@@ -69,7 +69,7 @@ struct buffer {
 struct gem_data {
 	DRI2Buffer *dri2_buffer;
 	unsigned int attachments[1];
-	drm_slp_bo pixmap_bo;
+	tbm_bo pixmap_bo;
 	int count;
 	int buf_count;
 	int w;
@@ -98,7 +98,7 @@ struct buffer_info
 };
 
 static struct {
-	drm_slp_bufmgr slp_bufmgr;
+	tbm_bufmgr slp_bufmgr;
 	int evt_base;
 	int err_base;
 	int fd;
@@ -256,7 +256,7 @@ static inline int create_gem(struct buffer *buffer)
 	/*!
 	 * \How can I destroy this?
 	 */
-	gem->pixmap_bo = drm_slp_bo_import(s_info.slp_bufmgr, gem->dri2_buffer->name);
+	gem->pixmap_bo = tbm_bo_import(s_info.slp_bufmgr, gem->dri2_buffer->name);
 	if (!gem->pixmap_bo) {
 		ErrPrint("Failed to import BO\n");
 		DRI2DestroyDrawable(disp, gem->pixmap);
@@ -294,12 +294,15 @@ static inline void *acquire_gem(struct buffer *buffer)
 		}
 
 		if (!gem->data) {
+			tbm_bo_handle handle;
+
 			if (gem->refcnt) {
 				ErrPrint("Already acquired. but the buffer is not valid\n");
 				return NULL;
 			}
 
-			gem->data = (void *)drm_slp_bo_map(gem->pixmap_bo, DRM_SLP_DEVICE_CPU, DRM_SLP_OPTION_READ|DRM_SLP_OPTION_WRITE);
+			handle = tbm_bo_map(gem->pixmap_bo, TBM_DEVICE_CPU, TBM_OPTION_READ | TBM_OPTION_WRITE);
+			gem->data = handle.ptr;
 		}
 	}
 
@@ -360,7 +363,7 @@ static inline void release_gem(struct buffer *buffer)
 			}
 
 			if (gem->pixmap_bo)
-				drm_slp_bo_unmap(gem->pixmap_bo, DRM_SLP_DEVICE_CPU);
+				tbm_bo_unmap(gem->pixmap_bo);
 
 			gem->data = NULL;
 		}
@@ -415,7 +418,7 @@ static inline int destroy_gem(struct buffer *buffer)
 
 		if (gem->pixmap_bo) {
 			DbgPrint("unref pixmap bo\n");
-			drm_slp_bo_unref(gem->pixmap_bo);
+			tbm_bo_unref(gem->pixmap_bo);
 			gem->pixmap_bo = NULL;
 
 			DbgPrint("DRI2DestroyDrawable\n");
@@ -1292,7 +1295,7 @@ HAPI int buffer_handler_init(void)
 		return 0;
 	}
 
-	s_info.slp_bufmgr = drm_slp_bufmgr_init(s_info.fd, NULL);
+	s_info.slp_bufmgr = tbm_bufmgr_init(s_info.fd);
 	if (!s_info.slp_bufmgr) {
 		DbgPrint("Failed to init bufmgr\n");
 		close(s_info.fd);
@@ -1313,7 +1316,7 @@ HAPI int buffer_handler_fini(void)
 	}
 
 	if (s_info.slp_bufmgr) {
-		drm_slp_bufmgr_destroy(s_info.slp_bufmgr);
+		tbm_bufmgr_deinit(s_info.slp_bufmgr);
 		s_info.slp_bufmgr = NULL;
 	}
 

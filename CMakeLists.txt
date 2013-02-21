@@ -21,7 +21,7 @@ pkg_check_modules(pkg REQUIRED
 	x11
 	libdri2
 	libdrm
-	libdrm_slp
+	libtbm
 	xfixes
 	dri2proto
 	xext

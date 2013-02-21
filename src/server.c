@@ -2335,6 +2335,64 @@ out:
 	return NULL;
 }
 
+static struct packet *client_pause_request(pid_t pid, int handle, const struct packet *packet)
+{
+	struct client_node *client;
+	double timestamp;
+	int ret;
+
+	client = client_find_by_pid(pid);
+	if (!client) {
+		ErrPrint("Client %d is paused - manually reported\n", pid);
+		ret = -ENOENT;
+		goto out;
+	}
+
+	ret = packet_get(packet, "d", &timestamp);
+	if (ret != 1) {
+		ErrPrint("Invalid parameter\n");
+		ret = -EINVAL;
+		goto out;
+	}
+
+	if (USE_XMONITOR)
+		DbgPrint("XMONITOR enabled. ignore client paused request\n");
+	else
+		xmonitor_pause(client);
+
+out:
+	return NULL;
+}
+
+static struct packet *client_resume_request(pid_t pid, int handle, const struct packet *packet)
+{
+	struct client_node *client;
+	double timestamp;
+	int ret;
+
+	client = client_find_by_pid(pid);
+	if (!client) {
+		ErrPrint("Client %d is paused - manually reported\n", pid);
+		ret = -ENOENT;
+		goto out;
+	}
+
+	ret = packet_get(packet, "d", &timestamp);
+	if (ret != 1) {
+		ErrPrint("Invalid parameter\n");
+		ret = -EINVAL;
+		goto out;
+	}
+
+	if (USE_XMONITOR)
+		DbgPrint("XMONITOR enabled. ignore client resumed request\n");
+	else
+		xmonitor_resume(client);
+
+out:
+	return NULL;
+}
+
 static struct packet *client_pd_key_up(pid_t pid, int handle, const struct packet *packet)
 {
 	struct client_node *client;
@@ -5212,6 +5270,15 @@ static struct method s_client_table[] = {
 	{
 		.cmd = "pd_key_up",
 		.handler = client_pd_key_up,
+	},
+
+	{
+		.cmd = "client_paused",
+		.handler = client_pause_request,
+	},
+	{
+		.cmd = "client_resumed",
+		.handler = client_resume_request,
 	},
 
 	{

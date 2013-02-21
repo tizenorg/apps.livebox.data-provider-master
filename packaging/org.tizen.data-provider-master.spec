@@ -1,6 +1,6 @@
 Name: org.tizen.data-provider-master
 Summary: Master service provider for liveboxes.
-Version: 0.16.7
+Version: 0.16.10
 Release: 1
 Group: framework/livebox
 License: Flora License
@@ -41,7 +41,7 @@ Keep trace on the life-cycle of the livebox and status of the service providers,
 %setup -q
 
 %build
-cmake . -DCMAKE_INSTALL_PREFIX=%{_prefix}
+cmake . -DCMAKE_INSTALL_PREFIX=%{_prefix} -DPRODUCT=private
 CFLAGS="${CFLAGS} -Wall -Winline -Werror" LDFLAGS="${LDFLAGS}" make %{?jobs:-j%jobs}
 
 %install

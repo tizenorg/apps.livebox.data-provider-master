@@ -34,13 +34,13 @@
 #include <dlog.h>
 
 #include "conf.h"
-#include "xmonitor.h"
 #include "debug.h"
 #include "client_life.h"
 #include "slave_life.h"
 #include "main.h"
 #include "util.h"
 #include "setting.h"
+#include "xmonitor.h"
 
 int errno;
 
@@ -66,7 +66,7 @@ static struct info {
 	.pause_list = NULL,
 	.resume_list = NULL,
 
-	.paused = 0,
+	.paused = 1, /*!< The provider is treated as paused process when it is launched */
 };
 
 static inline void touch_paused_file(void)
@@ -218,14 +218,10 @@ static Eina_Bool client_cb(void *data, int type, void *event)
 
 	if (!strcmp(name, "_X_ILLUME_DEACTIVATE_WINDOW")) {
 		DbgPrint("PAUSE EVENT\n");
-		client_paused(client);
-
-		xmonitor_handle_state_changes();
+		xmonitor_pause(client);
 	} else if (!strcmp(name, "_X_ILLUME_ACTIVATE_WINDOW")) {
 		DbgPrint("RESUME EVENT\n");
-		client_resumed(client);
-
-		xmonitor_handle_state_changes();
+		xmonitor_resume(client);
 	} else {
 		/* ignore event */
 	}
@@ -316,7 +312,34 @@ static inline void sniff_all_windows(void)
 	return;
 }
 
-HAPI int xmonitor_init(void)
+HAPI int xmonitor_pause(struct client_node *client)
+{
+	DbgPrint("%d is paused\n", client_pid(client));
+	client_paused(client);
+	xmonitor_handle_state_changes();
+	return 0;
+}
+
+HAPI int xmonitor_resume(struct client_node *client)
+{
+	DbgPrint("%d is resumed\n", client_pid(client));
+	client_resumed(client);
+	xmonitor_handle_state_changes();
+	return 0;
+}
+
+static inline void disable_xmonitor(void)
+{
+	ecore_event_handler_del(s_info.create_handler);
+	ecore_event_handler_del(s_info.destroy_handler);
+	ecore_event_handler_del(s_info.client_handler);
+
+	s_info.create_handler = NULL;
+	s_info.destroy_handler = NULL;
+	s_info.client_handler = NULL;
+}
+
+static inline int enable_xmonitor(void)
 {
 	if (ecore_x_composite_query() == EINA_FALSE)
 		DbgPrint("====> COMPOSITOR IS NOT ENABLED\n");
@@ -352,6 +375,17 @@ HAPI int xmonitor_init(void)
 	}
 
 	sniff_all_windows();
+	return 0;
+}
+
+HAPI int xmonitor_init(void)
+{
+	if (USE_XMONITOR) {
+		int ret;
+		ret = enable_xmonitor();
+		if (ret < 0)
+			return ret;
+	}
 
 	s_info.paused = client_is_all_paused() || setting_is_lcd_off();
 	if (s_info.paused) {
@@ -364,13 +398,8 @@ HAPI int xmonitor_init(void)
 
 HAPI void xmonitor_fini(void)
 {
-	ecore_event_handler_del(s_info.create_handler);
-	ecore_event_handler_del(s_info.destroy_handler);
-	ecore_event_handler_del(s_info.client_handler);
-
-	s_info.create_handler = NULL;
-	s_info.destroy_handler = NULL;
-	s_info.client_handler = NULL;
+	if (USE_XMONITOR)
+		disable_xmonitor();
 }
 
 HAPI int xmonitor_add_event_callback(enum xmonitor_event event, int (*cb)(void *user_data), void *user_data)

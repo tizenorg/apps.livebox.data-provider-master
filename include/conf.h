@@ -81,6 +81,7 @@ struct conf {
 	int debug_mode;
 	int overwrite_content;
 	int com_core_thread;
+	int use_xmonitor;
 };
 
 extern struct conf g_conf;
@@ -145,6 +146,8 @@ extern int conf_loader(void);
 #define DELAY_TIME	0.0000001f
 #define DEFAULT_CLUSTER	"user,created"
 #define MINIMUM_REACTIVATION_TIME	10
+
+#define USE_XMONITOR		g_conf.use_xmonitor
 
 #define HAPI __attribute__((visibility("hidden")))
 

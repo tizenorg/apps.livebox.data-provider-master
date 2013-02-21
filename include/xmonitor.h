@@ -28,5 +28,7 @@ extern int xmonitor_add_event_callback(enum xmonitor_event event, int (*cb)(void
 extern int xmonitor_del_event_callback(enum xmonitor_event event, int (*cb)(void *user_data), void *user_data);
 extern int xmonitor_is_paused(void);
 extern void xmonitor_handle_state_changes(void);
+extern int xmonitor_resume(struct client_node *client);
+extern int xmonitor_pause(struct client_node *client);
 
 /* End of a file */

@@ -247,6 +247,22 @@ static inline int instance_recover_visible_state(struct inst_info *inst)
 	return ret;
 }
 
+static inline void send_size_changed_event(struct inst_info *inst, int is_pd, int w, int h, int status)
+{
+	struct packet *packet;
+	const char *pkgname;
+	const char *id;
+
+	pkgname = package_name(inst->info);
+	id = inst->id;
+
+	packet = packet_create_noack("size_changed", "ssiiii", pkgname, id, is_pd, w, h, status);
+	if (packet)
+		CLIENT_SEND_EVENT(inst, packet);
+	else
+		ErrPrint("Failed to send size changed event\n");
+}
+
 HAPI int instance_unicast_created_event(struct inst_info *inst, struct client_node *client)
 {
 	struct packet *packet;
@@ -979,9 +995,9 @@ static void activate_cb(struct slave_node *slave, const struct packet *packet, v
 		 * so just increase the loaded instance counter
 		 * After that, do reset jobs.
 		 */
-		inst->state = INST_ACTIVATED;
-
 		instance_set_lb_info(inst, w, h, priority, content, title);
+
+		inst->state = INST_ACTIVATED;
 
 		switch (inst->requested_state) {
 		case INST_DESTROYED:
@@ -1486,9 +1502,6 @@ HAPI void instance_set_lb_info(struct inst_info *inst, int w, int h, double prio
 			ErrPrint("Heap: %s\n", strerror(errno));
 	}
 
-	inst->lb.width = w;
-	inst->lb.height = h;
-
 	if (_content) {
 		DbgFree(inst->content);
 		inst->content= _content;
@@ -1501,10 +1514,25 @@ HAPI void instance_set_lb_info(struct inst_info *inst, int w, int h, double prio
 
 	if (priority >= 0.0f && priority <= 1.0f)
 		inst->lb.priority = priority;
+
+	if (inst->state == INST_ACTIVATED && (inst->lb.width != w || inst->lb.height != h)) {
+		/*!
+		 */
+		send_size_changed_event(inst, 0, w, h, 0);
+	}
+
+	inst->lb.width = w;
+	inst->lb.height = h;
 }
 
 HAPI void instance_set_pd_info(struct inst_info *inst, int w, int h)
 {
+	if (inst->state == INST_ACTIVATED && (inst->pd.width != w || inst->pd.height != h)) {
+		/*!
+		 */
+		send_size_changed_event(inst, 1, w, h, 0);
+	}
+
 	inst->pd.width = w;
 	inst->pd.height = h;
 }
@@ -1700,10 +1728,9 @@ static void resize_cb(struct slave_node *slave, const struct packet *packet, voi
 	if (ret == 0) {
 		cbdata->inst->lb.width = cbdata->w;
 		cbdata->inst->lb.height = cbdata->h;
-	} else {
-		ErrPrint("Failed to change the size of a livebox (%d)\n", ret);
 	}
 
+	send_size_changed_event(cbdata->inst, 0, cbdata->w, cbdata->h, ret);
 	instance_unref(cbdata->inst);
 	DbgFree(cbdata);
 }

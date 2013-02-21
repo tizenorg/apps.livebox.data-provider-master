@@ -20,6 +20,7 @@
 
 #include <dlog.h>
 #include <Ecore_Evas.h>
+#include <Evas.h>
 
 #include "util.h"
 #include "conf.h"
@@ -95,13 +96,48 @@ HAPI struct fb_info *fb_create(struct inst_info *inst, int w, int h, enum buffer
 	return info;
 }
 
+static void sw_render_pre_cb(void *data, Evas *e, void *event_info)
+{
+	struct fb_info *info = data;
+	int w;
+	int h;
+
+	buffer_handler_get_size(info->buffer, &w, &h);
+	evas_damage_rectangle_add(e, 0, 0, w, h);
+}
+
+static void sw_render_post_cb(void *data, Evas *e, void *event_info)
+{
+        void *canvas;
+        Ecore_Evas *internal_ee;
+	int x, y, w, h;
+
+        internal_ee = ecore_evas_ecore_evas_get(e);
+        if (!internal_ee) {
+		LOGD("Failed to get ecore evas\n");
+                return;
+        }
+
+        // Get a pointer of a buffer of the virtual canvas
+        canvas = (void*)ecore_evas_buffer_pixels_get(internal_ee);
+        if (!canvas) {
+		LOGD("Failed to get pixel canvas\n");
+                return;
+        }
+
+	ecore_evas_geometry_get(internal_ee, &x, &y, &w, &h);
+	evas_data_argb_unpremul(canvas, w * h);
+}
+
 static void render_pre_cb(void *data, Evas *e, void *event_info)
 {
 	fb_pixmap_render_pre(data);
+	sw_render_pre_cb(data, e, event_info);
 }
 
 static void render_post_cb(void *data, Evas *e, void *event_info)
 {
+	sw_render_post_cb(data, e, event_info);
 	fb_pixmap_render_post(data);
 }
 
@@ -109,6 +145,7 @@ HAPI int fb_create_buffer(struct fb_info *info)
 {
 	int ow;
 	int oh;
+	Evas *e;
 
 	buffer_handler_get_size(info->buffer, &ow, &oh);
 	DbgPrint("Buffer handler size: %dx%d\n", ow, oh);
@@ -136,23 +173,22 @@ HAPI int fb_create_buffer(struct fb_info *info)
 		return -EFAULT;
 	}
 
+	e = ecore_evas_get(info->ee);
 	if (buffer_handler_type(info->buffer) == BUFFER_TYPE_PIXMAP) {
-		Evas *e;
-		e = ecore_evas_get(info->ee);
-		if (e) {
-			evas_event_callback_add(e, EVAS_CALLBACK_RENDER_PRE, render_pre_cb, info);
-			evas_event_callback_add(e, EVAS_CALLBACK_RENDER_POST, render_post_cb, info);
+		evas_event_callback_add(e, EVAS_CALLBACK_RENDER_PRE, render_pre_cb, info);
+		evas_event_callback_add(e, EVAS_CALLBACK_RENDER_POST, render_post_cb, info);
 
-			/*!
-			 * \note
-			 * ecore_evas_alpha_set tries to access the canvas buffer.
-			 * Without any render_pre/render_post callback.
-			 */
-			fb_pixmap_render_pre(info);
-			ecore_evas_alpha_set(info->ee, EINA_TRUE);
-			fb_pixmap_render_post(info);
-		}
+		/*!
+		 * \note
+		 * ecore_evas_alpha_set tries to access the canvas buffer.
+		 * Without any render_pre/render_post callback.
+		 */
+		fb_pixmap_render_pre(info);
+		ecore_evas_alpha_set(info->ee, EINA_TRUE);
+		fb_pixmap_render_post(info);
 	} else {
+		evas_event_callback_add(e, EVAS_CALLBACK_RENDER_PRE, sw_render_pre_cb, info);
+		evas_event_callback_add(e, EVAS_CALLBACK_RENDER_POST, sw_render_post_cb, info);
 		ecore_evas_alpha_set(info->ee, EINA_TRUE);
 	}
 

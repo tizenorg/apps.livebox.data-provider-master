@@ -641,10 +641,23 @@ static int update_info(struct inst_info *inst, struct block *block, int is_pd)
 		}
 
 		if (!block->id) {
-			if (is_pd)
+			int resized;
+
+			if (is_pd) {
+				resized = (instance_pd_width(inst) != w) || (instance_pd_height(inst) != h);
 				instance_set_pd_info(inst, w, h);
-			else
+			} else {
+				/*!
+				 * \note
+				 * LB Size is already scaled by livebox-service.
+				 * Each livebox uses the LB_SIZE_TYPE_XXX for its size.
+				 */
+				resized = (instance_lb_width(inst) != w) || (instance_lb_height(inst) != h);
 				instance_set_lb_info(inst, w, h, NO_CHANGE, CONTENT_NO_CHANGE, TITLE_NO_CHANGE);
+			}
+
+			if (resized)
+				instance_send_resized_event(inst, is_pd, w, h, 0);
 
 			script_handler_resize(info, w, h);
 		} else {

@@ -113,6 +113,9 @@ enum livebox_visible_state { /*!< Must be sync'd with livebox-viewer */
 	LB_VISIBLE_ERROR = 0xFFFFFFFF, /* To enlarge the size of this enumeration type */
 };
 
+#define IS_PD	1
+#define IS_LB	0
+
 struct inst_info;
 struct pkg_info;
 struct script_handle;
@@ -184,6 +187,7 @@ extern const enum instance_state const instance_state(const struct inst_info *in
  */
 extern int instance_unicast_created_event(struct inst_info *inst, struct client_node *client);
 extern int instance_unicast_deleted_event(struct inst_info *inst, struct client_node *client);
+extern void instance_send_resized_event(struct inst_info *inst, int is_pd, int w, int h, int status);
 
 extern int instance_create_lb_buffer(struct inst_info *inst);
 extern int instance_create_pd_buffer(struct inst_info *inst);

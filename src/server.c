@@ -4138,13 +4138,13 @@ static struct packet *slave_faulted(pid_t pid, int handle, const struct packet *
 
 	inst = package_find_instance_by_id(pkgname, id);
 	if (!inst) {
-		DbgPrint("There is no such instance: %s\n", id);
+		DbgPrint("There is a no such instance(%s)\n", id);
 		ret = -ENOENT;
 	} else if (instance_state(inst) == INST_DESTROYED) {
-		ErrPrint("Instance is already destroyed (%s)\n", id);
+		ErrPrint("Instance(%s) is already destroyed\n", id);
 		ret = -EINVAL;
 	} else {
-		DbgPrint("Destroy instance (%s)\n", id);
+		DbgPrint("Destroy instance(%s)\n", id);
 		ret = instance_destroy(inst);
 	}
 
@@ -4253,7 +4253,9 @@ static struct packet *slave_updated(pid_t pid, int handle, const struct packet *
 		ret = -EINVAL;
 	} else {
 		char *filename;
+		int resized;
 
+		resized = (instance_lb_width(inst) != w) || (instance_lb_height(inst) != h);
 		instance_set_lb_info(inst, w, h, priority, content_info, title);
 
 		switch (package_lb_type(instance_package(inst))) {
@@ -4271,14 +4273,13 @@ static struct packet *slave_updated(pid_t pid, int handle, const struct packet *
 			}
 			break;
 		case LB_TYPE_BUFFER:
-			instance_lb_updated_by_instance(inst);
-			ret = 0;
-			break;
 		default:
 			/*!
 			 * \check
 			 * text format (inst)
 			 */
+			if (resized)
+				instance_send_resized_event(inst, IS_LB, w, h, 0);
 			instance_lb_updated_by_instance(inst);
 			ret = 0;
 			break;
@@ -4463,8 +4464,12 @@ static struct packet *slave_acquire_buffer(pid_t pid, int handle, const struct p
 
 			ret = buffer_handler_load(info);
 			if (ret == 0) {
+				int resized;
+				resized = (instance_lb_width(inst) != w) || (instance_lb_height(inst) != h);
 				instance_set_lb_info(inst, w, h, -1.0f, NULL, NULL);
 				id = buffer_handler_id(info);
+				if (resized)
+					instance_send_resized_event(inst, IS_LB, w, h, 0);
 				DbgPrint("Buffer handler ID: %s\n", id);
 			} else {
 				DbgPrint("Failed to load a buffer(%d)\n", ret);
@@ -4497,8 +4502,12 @@ static struct packet *slave_acquire_buffer(pid_t pid, int handle, const struct p
 
 			ret = buffer_handler_load(info);
 			if (ret == 0) {
+				int resized;
+				resized = (instance_pd_width(inst) != w) || (instance_pd_height(inst) != h);
 				instance_set_pd_info(inst, w, h);
 				id = buffer_handler_id(info);
+				if (resized)
+					instance_send_resized_event(inst, IS_PD, w, h, 0);
 				DbgPrint("Buffer handler ID: %s\n", id);
 			} else {
 				DbgPrint("Failed to load a buffer (%d)\n", ret);
@@ -4594,8 +4603,13 @@ static struct packet *slave_resize_buffer(pid_t pid, int handle, const struct pa
 				 * id is resued for newly assigned ID
 				 */
 				if (!ret) {
+					int resized;
+
 					id = buffer_handler_id(info);
+					resized = (instance_lb_width(inst) != w) || (instance_lb_height(inst) != h);
 					instance_set_lb_info(inst, w, h, -1.0f, NULL, NULL);
+					if (resized)
+						instance_send_resized_event(inst, IS_LB, w, h, 0);
 				}
 			}
 		}
@@ -4611,9 +4625,12 @@ static struct packet *slave_resize_buffer(pid_t pid, int handle, const struct pa
 				 * id is resued for newly assigned ID
 				 */
 				if (!ret) {
+					int resized;
 					id = buffer_handler_id(info);
-					DbgPrint("Set PD Info: %dx%d\n", w, h);
+					resized = (instance_pd_width(inst) != w) || (instance_pd_height(inst) != h);
 					instance_set_pd_info(inst, w, h);
+					if (resized)
+						instance_send_resized_event(inst, IS_PD, w, h, 0);
 				}
 			}
 		}

@@ -82,6 +82,9 @@ struct conf {
 	int overwrite_content;
 	int com_core_thread;
 	int use_xmonitor;
+
+	double scale_width_factor;
+	double scale_height_factor;
 };
 
 extern struct conf g_conf;
@@ -93,6 +96,9 @@ extern int conf_loader(void);
 
 #define CR 13
 #define LF 10
+
+#define SCALE_WIDTH_FACTOR	g_conf.scale_width_factor
+#define SCALE_HEIGHT_FACTOR	g_conf.scale_height_factor
 
 #define USE_SW_BACKEND		g_conf.use_sw_backend
 #define PROVIDER_METHOD		g_conf.provider_method

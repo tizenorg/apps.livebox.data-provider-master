@@ -67,6 +67,18 @@ if [ -x %{_sysconfdir}/rc.d/init.d/data-provider-master ]; then
 fi
 
 %post
+chown 5000:5000 /opt/usr/share/live_magazine
+chmod 750 /opt/usr/share/live_magazine
+chown 5000:5000 /opt/usr/share/live_magazine/log
+chmod 750 /opt/usr/share/live_magazine/log
+chown 5000:5000 /opt/usr/share/live_magazine/reader
+chmod 750 /opt/usr/share/live_magazine/reader
+chown 5000:5000 /opt/usr/share/live_magazine/always
+chmod 750 /opt/usr/share/live_magazine/always
+chown 0:5000 /opt/dbspace/.livebox.db
+chmod 640 /opt/dbspace/.livebox.db
+chown 0:5000 /opt/dbspace/.livebox.db-journal
+chmod 640 /opt/dbspace/.livebox.db-journal
 echo "Successfully installed. Please start a daemon again manually"
 echo "%{_sysconfdir}/init.d/data-provider-master start"
 
@@ -82,11 +94,11 @@ echo "%{_sysconfdir}/init.d/data-provider-master start"
 %{_libdir}/systemd/user/data-provider-master.service
 %{_libdir}/systemd/user/tizen-middleware.target.wants/data-provider-master.service
 %{_datarootdir}/license/*
-%attr(750,app,app) /opt/usr/share/live_magazine
-%attr(750,app,app) /opt/usr/share/live_magazine/log
-%attr(750,app,app) /opt/usr/share/live_magazine/reader
-%attr(750,app,app) /opt/usr/share/live_magazine/always
-%attr(640,root,app) /opt/dbspace/.livebox.db
-%attr(640,root,app) /opt/dbspace/.livebox.db-journal
+/opt/usr/share/live_magazine
+/opt/usr/share/live_magazine/log
+/opt/usr/share/live_magazine/reader
+/opt/usr/share/live_magazine/always
+/opt/dbspace/.livebox.db
+/opt/dbspace/.livebox.db-journal
 
 # End of a file

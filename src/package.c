@@ -82,6 +82,9 @@ struct pkg_info {
 		unsigned int size_list;
 		char *auto_launch;
 		int pinup;
+		int timeout;
+		double period;
+		char *libexec;
 	} lb;
 
 	struct {
@@ -107,12 +110,9 @@ struct pkg_info {
 	} pd;
 
 	int network;
-	int timeout;
-	double period;
 	int secured;
 	char *script; /* script type: edje, ... */
 	char *abi;
-	char *libexec;
 
 	int fault_count;
 	struct fault_info *fault_info;
@@ -288,7 +288,7 @@ static inline void destroy_package(struct pkg_info *info)
 	DbgFree(info->script);
 	DbgFree(info->abi);
 	DbgFree(info->pkgname);
-	DbgFree(info->libexec);
+	DbgFree(info->lb.libexec);
 	DbgFree(info->lb.auto_launch);
 
 	DbgFree(info);
@@ -428,14 +428,14 @@ static inline int load_conf(struct pkg_info *info)
 		return -ENOMEM;
 	}
 
-	info->timeout = parser_timeout(parser);
+	info->lb.timeout = parser_timeout(parser);
 	info->network = parser_network(parser);
 
-	info->period = parser_period(parser);
-	if (info->period < 0.0f)
-		info->period = 0.0f;
-	else if (info->period > 0.0f && info->period < MINIMUM_PERIOD)
-		info->period = MINIMUM_PERIOD;
+	info->lb.period = parser_period(parser);
+	if (info->lb.period < 0.0f)
+		info->lb.period = 0.0f;
+	else if (info->lb.period > 0.0f && info->lb.period < MINIMUM_PERIOD)
+		info->lb.period = MINIMUM_PERIOD;
 
 	info->lb.size_list = parser_size(parser);
 
@@ -707,22 +707,22 @@ HAPI struct slave_node * const package_slave(const struct pkg_info *info)
 
 HAPI const int const package_timeout(const struct pkg_info *info)
 {
-	return info->timeout;
+	return info->lb.timeout;
 }
 
 HAPI void package_set_timeout(struct pkg_info *info, int timeout)
 {
-	info->timeout = timeout;
+	info->lb.timeout = timeout;
 }
 
 HAPI const double const package_period(const struct pkg_info *info)
 {
-	return info->period;
+	return info->lb.period;
 }
 
 HAPI void package_set_period(struct pkg_info *info, double period)
 {
-	info->period = period;
+	info->lb.period = period;
 }
 
 HAPI const int const package_secured(const struct pkg_info *info)
@@ -974,7 +974,7 @@ HAPI void package_set_lb_type(struct pkg_info *info, enum lb_type type)
 
 HAPI const char * const package_libexec(struct pkg_info *info)
 {
-	return info->libexec;
+	return info->lb.libexec;
 }
 
 HAPI int package_set_libexec(struct pkg_info *info, const char *libexec)
@@ -987,8 +987,8 @@ HAPI int package_set_libexec(struct pkg_info *info, const char *libexec)
 		return -ENOMEM;
 	}
 
-	DbgFree(info->libexec);
-	info->libexec = tmp;
+	DbgFree(info->lb.libexec);
+	info->lb.libexec = tmp;
 	return 0;
 }
 

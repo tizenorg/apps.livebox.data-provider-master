@@ -176,6 +176,7 @@ extern const char * const instance_auto_launch(const struct inst_info *inst);
 extern const int const instance_priority(const struct inst_info *inst);
 extern const struct client_node * const instance_client(const struct inst_info *inst);
 extern const double const instance_period(const struct inst_info *inst);
+extern const int const instance_timeout(const struct inst_info *inst);
 extern const int const instance_lb_width(const struct inst_info *inst);
 extern const int const instance_lb_height(const struct inst_info *inst);
 extern const int const instance_pd_width(const struct inst_info *inst);

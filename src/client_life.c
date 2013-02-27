@@ -74,14 +74,14 @@ struct client_node {
 	int paused;
 
 	Eina_List *event_deactivate_list;
-	Eina_List *event_destroy_list;
+	Eina_List *event_activate_list;
 	Eina_List *data_list;
 	Eina_List *subscribe_list;
 
 	int faulted;
 };
 
-static inline void invoke_global_destroy_cb(struct client_node *client)
+static inline void invoke_global_destroyed_cb(struct client_node *client)
 {
 	Eina_List *l;
 	Eina_List *n;
@@ -102,7 +102,7 @@ static inline void invoke_global_destroy_cb(struct client_node *client)
 	}
 }
 
-static inline void invoke_global_create_cb(struct client_node *client)
+static inline void invoke_global_created_cb(struct client_node *client)
 {
 	Eina_List *l;
 	Eina_List *n;
@@ -123,32 +123,55 @@ static inline void invoke_global_create_cb(struct client_node *client)
 	}
 }
 
+static inline void invoke_deactivated_cb(struct client_node *client)
+{
+	struct event_item *item;
+	Eina_List *l;
+	Eina_List *n;
+	int ret;
+
+	client_ref(client); /*!< Prevent from client deletion in the callbacks */
+	EINA_LIST_FOREACH_SAFE(client->event_deactivate_list, l, n, item) {
+		ret = item->cb(client, item->data);
+		if (ret < 0) {
+			if (eina_list_data_find(client->event_deactivate_list, item)) {
+				client->event_deactivate_list = eina_list_remove(client->event_deactivate_list, item);
+				DbgFree(item);
+			}
+		}
+	}
+	client_unref(client);
+}
+
+static inline void invoke_activated_cb(struct client_node *client)
+{
+	struct event_item *item;
+	Eina_List *l;
+	Eina_List *n;
+	int ret;
+
+	client_ref(client); /*!< Prevent from client deletion in the callbacks */
+	EINA_LIST_FOREACH_SAFE(client->event_activate_list, l, n, item) {
+		ret = item->cb(client, item->data);
+		if (ret < 0) {
+			if (eina_list_data_find(client->event_activate_list, item)) {
+				client->event_activate_list = eina_list_remove(client->event_activate_list, item);
+				DbgFree(item);
+			}
+		}
+	}
+}
+
 static inline void destroy_client_data(struct client_node *client)
 {
 	struct event_item *event;
 	struct data_item *data;
 	struct subscribe_item *item;
-	Eina_List *l;
-	Eina_List *n;
 
 	DbgPrint("Client %p is destroyed\n", client);
 
-	invoke_global_destroy_cb(client);
+	invoke_global_destroyed_cb(client);
 	client_rpc_fini(client); /*!< Finalize the RPC after invoke destroy callbacks */
-
-	EINA_LIST_FOREACH_SAFE(client->event_destroy_list, l, n, event) {
-		if (!event->cb) {
-			DbgPrint("Callback function is not valid\n");
-			continue;
-		}
-
-		(void)event->cb(client, event->data);
-
-		if (eina_list_data_find(client->event_destroy_list, event)) {
-			client->event_destroy_list = eina_list_remove(client->event_destroy_list, event);
-			DbgFree(event);
-		}
-	}
 
 	EINA_LIST_FREE(client->data_list, data) {
 		DbgPrint("Tag is not cleared (%s)\n", data->tag);
@@ -194,15 +217,36 @@ static inline struct client_node *create_client_data(pid_t pid)
 	client->refcnt = 1;
 
 	s_info.client_list = eina_list_append(s_info.client_list, client);
+
+	/*!
+	 * \note
+	 * Right after create a client ADT,
+	 * We assume that the client is paused.
+	 */
+	client_paused(client);
+	xmonitor_handle_state_changes();
 	return client;
 }
 
 static Eina_Bool created_cb(void *data)
 {
-	invoke_global_create_cb(data);
+	invoke_global_created_cb(data);
+	invoke_activated_cb(data);
+	/*!
+	 * \note
+	 * Client PAUSE/RESUME event must has to be sent after created event.
+	 */
+	xmonitor_update_state(client_pid(data));
 	return ECORE_CALLBACK_CANCEL;
 }
 
+/*!
+ * \note
+ * Noramlly, client ADT is created when it send the "acquire" packet.
+ * It means we have the handle for communicating with the client already,
+ * So we just create its ADT in this function.
+ * And invoke the global created event & activated event callbacks
+ */
 HAPI struct client_node *client_create(pid_t pid, int handle)
 {
 	struct client_node *client;
@@ -225,22 +269,18 @@ HAPI struct client_node *client_create(pid_t pid, int handle)
 		client = client_unref(client);
 		ErrPrint("Failed to initialize the RPC for %d, Destroy client data %p(has to be 0x0)\n", pid, client);
 	} else {
+		/*!
+		 * \note
+		 * To save the time to send reply packet to the client.
+		 */
 		if (ecore_timer_add(DELAY_TIME, created_cb, client) == NULL) {
 			ErrPrint("Failed to add a timer for client created event\n");
 			client = client_unref(client);
 			return NULL;
 		}
-
-		xmonitor_update_state(pid);
 	}
 
 	return client;
-}
-
-HAPI int client_destroy(struct client_node *client)
-{
-	client_unref(client);
-	return 0;
 }
 
 HAPI struct client_node *client_ref(struct client_node *client)
@@ -328,26 +368,6 @@ HAPI int client_count(void)
 	return eina_list_count(s_info.client_list);
 }
 
-static inline void invoke_deactivated_cb(struct client_node *client)
-{
-	struct event_item *item;
-	Eina_List *l;
-	Eina_List *n;
-	int ret;
-
-	client_ref(client); /*!< Prevent deleting from callback */
-	EINA_LIST_FOREACH_SAFE(client->event_deactivate_list, l, n, item) {
-		ret = item->cb(client, item->data);
-		if (ret < 0) {
-			if (eina_list_data_find(client->event_deactivate_list, item)) {
-				client->event_deactivate_list = eina_list_remove(client->event_deactivate_list, item);
-				DbgFree(item);
-			}
-		}
-	}
-	client_unref(client);
-}
-
 HAPI int client_deactivated_by_fault(struct client_node *client)
 {
 	if (!client || client->faulted)
@@ -358,7 +378,7 @@ HAPI int client_deactivated_by_fault(struct client_node *client)
 	client->pid = (pid_t)-1;
 
 	invoke_deactivated_cb(client);
-	client_destroy(client);
+	(void)client_destroy(client);
 	/*!
 	 * \todo
 	 * Who invokes this function has to care the reference counter of a client
@@ -424,8 +444,8 @@ HAPI int client_event_callback_add(struct client_node *client, enum client_event
 	case CLIENT_EVENT_DEACTIVATE:
 		client->event_deactivate_list = eina_list_prepend(client->event_deactivate_list, item);
 		break;
-	case CLIENT_EVENT_DESTROY:
-		client->event_destroy_list = eina_list_prepend(client->event_destroy_list, item);
+	case CLIENT_EVENT_ACTIVATE:
+		client->event_activate_list = eina_list_prepend(client->event_activate_list, item);
 		break;
 	default:
 		DbgFree(item);
@@ -457,10 +477,10 @@ HAPI int client_event_callback_del(struct client_node *client, enum client_event
 		}
 		break;
 
-	case CLIENT_EVENT_DESTROY:
-		EINA_LIST_FOREACH_SAFE(client->event_destroy_list, l, n, item) {
+	case CLIENT_EVENT_ACTIVATE:
+		EINA_LIST_FOREACH_SAFE(client->event_activate_list, l, n, item) {
 			if (item->cb == cb && item->data == data) {
-				client->event_destroy_list = eina_list_remove(client->event_destroy_list, item);
+				client->event_activate_list = eina_list_remove(client->event_activate_list, item);
 				DbgFree(item);
 				return 0;
 			}
@@ -562,7 +582,7 @@ HAPI int client_fini(void)
 	Eina_List *n;
 
 	EINA_LIST_FOREACH_SAFE(s_info.client_list, l, n, client) {
-		client_destroy(client);
+		(void)client_destroy(client);
 	}
 
 	EINA_LIST_FREE(s_info.create_event_list, handler) {

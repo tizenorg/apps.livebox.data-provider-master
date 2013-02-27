@@ -4704,17 +4704,73 @@ out:
 	return result;
 }
 
-static struct packet *service_update(pid_t pid, int handle, const struct packet *packet)
+static struct packet *service_change_period(pid_t pid, int handle, const struct packet *packet)
 {
+	struct inst_info *inst;
 	struct packet *result;
 	const char *pkgname;
+	const char *id;
+	double period;
+	int ret;
+
+	ret = packet_get(packet, "ssd", &pkgname, &id, &period);
+	if (ret != 3) {
+		ErrPrint("Invalid packet\n");
+		ret = -EINVAL;
+		goto out;
+	}
+
+	if (!strlen(id)) {
+		struct pkg_info *pkg;
+
+		pkg = package_find(pkgname);
+		if (!pkg) {
+			ret = -ENOENT;
+		} else if (package_is_fault(pkg)) {
+			ret = -EFAULT;
+		} else {
+			Eina_List *inst_list;
+			Eina_List *l;
+
+			inst_list = package_instance_list(pkg);
+			EINA_LIST_FOREACH(inst_list, l, inst) {
+				ret = instance_set_period(inst, period);
+				if (ret < 0)
+					DbgPrint("Failed to change the period of %s to (%lf)\n", instance_id(inst), period);
+			}
+		}
+	} else {
+		inst = package_find_instance_by_id(pkgname, id);
+		if (!inst)
+			ret = -ENOENT;
+		else if (package_is_fault(instance_package(inst)))
+			ret = -EFAULT;
+		else
+			ret = instance_set_period(inst, period);
+	}
+
+	DbgPrint("Change the update period: %s(%s), %lf : %d\n", pkgname, id, period, ret);
+out:
+	result = packet_create_reply(packet, "i", ret);
+	if (!result)
+		ErrPrint("Failed to create a packet\n");
+
+	return result;
+}
+
+static struct packet *service_update(pid_t pid, int handle, const struct packet *packet)
+{
+	struct pkg_info *pkg;
+	struct packet *result;
+	const char *pkgname;
+	const char *id;
 	const char *cluster;
 	const char *category;
 	char *lb_pkgname;
 	int ret;
 
-	ret = packet_get(packet, "sss", &pkgname, &cluster, &category);
-	if (ret != 3) {
+	ret = packet_get(packet, "ssss", &pkgname, &id, &cluster, &category);
+	if (ret != 4) {
 		ErrPrint("Invalid Packet\n");
 		ret = -EINVAL;
 		goto out;
@@ -4727,11 +4783,22 @@ static struct packet *service_update(pid_t pid, int handle, const struct packet 
 		goto out;
 	}
 
+	pkg = package_find(lb_pkgname);
+	if (!pkg) {
+		ret = -ENOENT;
+		goto out;
+	}
+
+	if (package_is_fault(pkg)) {
+		ret = -EFAULT;
+		goto out;
+	}
+
 	/*!
 	 * \TODO
 	 * Validate the update requstor.
 	 */
-	slave_rpc_request_update(lb_pkgname, "", cluster, category);
+	slave_rpc_request_update(lb_pkgname, id, cluster, category);
 	DbgFree(lb_pkgname);
 	ret = 0;
 
@@ -5308,6 +5375,10 @@ static struct method s_service_table[] = {
 	{
 		.cmd = "service_update",
 		.handler = service_update,
+	},
+	{
+		.cmd = "service_change_period",
+		.handler = service_change_period,
 	},
 	{
 		.cmd = NULL,

@@ -15,8 +15,8 @@
  */
 
 enum client_event {
+	CLIENT_EVENT_ACTIVATE,
 	CLIENT_EVENT_DEACTIVATE,
-	CLIENT_EVENT_DESTROY,
 };
 
 enum client_global_event {
@@ -32,7 +32,7 @@ struct packet;
  * Create & Destroy
  */
 extern struct client_node *client_create(pid_t pid, int handle);
-extern int client_destroy(struct client_node *client);
+#define client_destroy(client)	client_unref(client)
 
 /*!
  * \note

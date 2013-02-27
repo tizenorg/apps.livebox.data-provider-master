@@ -102,6 +102,8 @@ struct inst_info {
 		} canvas;
 
 		const char *auto_launch;
+		int timeout;
+		double period;
 	} lb;
 
 	struct {
@@ -121,9 +123,6 @@ struct inst_info {
 		char *pended_update_desc;
 		int pended_update_cnt;
 	} pd;
-
-	int timeout;
-	double period;
 
 	struct client_node *client; /*!< Owner - creator */
 	Eina_List *client_list; /*!< Viewer list */
@@ -309,7 +308,7 @@ HAPI int instance_unicast_created_event(struct inst_info *inst, struct client_no
 			!!inst->client,
 			package_pinup(inst->info),
 			lb_type, pd_type,
-			inst->period, inst->title,
+			inst->lb.period, inst->title,
 			inst->is_pinned_up);
 	if (!packet) {
 		ErrPrint("Failed to build a packet for %s\n", package_name(inst->info));
@@ -371,7 +370,7 @@ static int instance_broadcast_created_event(struct inst_info *inst)
 			!!inst->client,
 			package_pinup(inst->info),
 			lb_type, pd_type,
-			inst->period, inst->title,
+			inst->lb.period, inst->title,
 			inst->is_pinned_up);
 	if (!packet) {
 		ErrPrint("Failed to build a packet for %s\n", package_name(inst->info));
@@ -537,14 +536,14 @@ static inline int fork_package(struct inst_info *inst, const char *pkgname)
 
 	instance_set_pd_info(inst, package_pd_width(info), package_pd_height(info));
 
-	inst->timeout = package_timeout(info);
-	inst->period = package_period(info);
+	inst->lb.timeout = package_timeout(info);
+	inst->lb.period = package_period(info);
 
 	inst->info = info;
 
 	if (package_secured(info)) {
 		DbgPrint("Register the update timer for secured livebox [%s]\n", package_name(info));
-		inst->update_timer = util_timer_add(inst->period, update_timer_cb, inst);
+		inst->update_timer = util_timer_add(inst->lb.period, update_timer_cb, inst);
 		if (!inst->update_timer)
 			ErrPrint("Failed to add an update timer for instance %s\n", inst->id);
 		else
@@ -986,7 +985,7 @@ static void activate_cb(struct slave_node *slave, const struct packet *packet, v
 			struct inst_info *new_inst;
 			new_inst = instance_create(inst->client, util_timestamp(), package_name(inst->info),
 							inst->content, inst->cluster, inst->category,
-							inst->period, 0, 0);
+							inst->lb.period, 0, 0);
 			if (!new_inst)
 				ErrPrint("Failed to create a new instance\n");
 		} else {
@@ -1266,9 +1265,9 @@ HAPI int instance_reactivate(struct inst_info *inst)
 			package_name(inst->info),
 			inst->id,
 			inst->content,
-			inst->timeout,
+			inst->lb.timeout,
 			!!package_lb_path(inst->info),
-			inst->period,
+			inst->lb.period,
 			inst->cluster,
 			inst->category,
 			inst->lb.width, inst->lb.height,
@@ -1330,9 +1329,9 @@ HAPI int instance_activate(struct inst_info *inst)
 			package_name(inst->info),
 			inst->id,
 			inst->content,
-			inst->timeout,
+			inst->lb.timeout,
 			!!package_lb_path(inst->info),
-			inst->period,
+			inst->lb.period,
 			inst->cluster,
 			inst->category,
 			!!inst->client,
@@ -1790,12 +1789,12 @@ static void set_period_cb(struct slave_node *slave, const struct packet *packet,
 	}
 
 	if (ret == 0)
-		cbdata->inst->period = cbdata->period;
+		cbdata->inst->lb.period = cbdata->period;
 	else
 		ErrPrint("Failed to set period %d\n", ret);
 
 out:
-	result = packet_create_noack("period_changed", "idss", ret, cbdata->inst->period, package_name(cbdata->inst->info), cbdata->inst->id);
+	result = packet_create_noack("period_changed", "idss", ret, cbdata->inst->lb.period, package_name(cbdata->inst->info), cbdata->inst->id);
 	if (result)
 		(void)CLIENT_SEND_EVENT(cbdata->inst, result);
 	else
@@ -1817,25 +1816,25 @@ static Eina_Bool timer_updator_cb(void *data)
 	inst = cbdata->inst;
 	DbgFree(cbdata);
 
-	DbgPrint("Update period is changed to %lf from %lf\n", period, inst->period);
+	DbgPrint("Update period is changed to %lf from %lf\n", period, inst->lb.period);
 
-	inst->period = period;
+	inst->lb.period = period;
 	if (inst->update_timer) {
-		if (inst->period == 0.0f) {
+		if (inst->lb.period == 0.0f) {
 			ecore_timer_del(inst->update_timer);
 			inst->update_timer = NULL;
 		} else {
-			util_timer_interval_set(inst->update_timer, inst->period);
+			util_timer_interval_set(inst->update_timer, inst->lb.period);
 		}
-	} else if (inst->period > 0.0f) {
-		inst->update_timer = util_timer_add(inst->period, update_timer_cb, inst);
+	} else if (inst->lb.period > 0.0f) {
+		inst->update_timer = util_timer_add(inst->lb.period, update_timer_cb, inst);
 		if (!inst->update_timer)
 			ErrPrint("Failed to add an update timer for instance %s\n", inst->id);
 		else
 			timer_freeze(inst); /* Freeze the update timer as default */
 	}
 
-	result = packet_create_noack("period_changed", "idss", 0, inst->period, package_name(inst->info), inst->id);
+	result = packet_create_noack("period_changed", "idss", 0, inst->lb.period, package_name(inst->info), inst->id);
 	if (result)
 		(void)CLIENT_SEND_EVENT(inst, result);
 	else
@@ -2092,9 +2091,14 @@ HAPI const struct client_node *const instance_client(const struct inst_info *ins
 	return inst->client;
 }
 
+HAPI const int const instance_timeout(const struct inst_info *inst)
+{
+	return inst->lb.timeout;
+}
+
 HAPI const double const instance_period(const struct inst_info *inst)
 {
-	return inst->period;
+	return inst->lb.period;
 }
 
 HAPI const int const instance_lb_width(const struct inst_info *inst)

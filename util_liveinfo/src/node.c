@@ -204,6 +204,7 @@ struct node *node_create(struct node *parent, const char *name, enum node_type t
 		node->name = strdup(name);
 		if (!node->name) {
 			printf("Error: %s\n", strerror(errno));
+			free(node);
 			return NULL;
 		}
 	} else {

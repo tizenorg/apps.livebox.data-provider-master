@@ -438,6 +438,11 @@ static void send_inst_delete(void)
 	name = node_name(parent);
 
 	packet = packet_create_noack("pkg_ctrl", "sss", "rminst", name, inst->id);
+	if (!packet) {
+		printf("Failed to create a packet\n");
+		return;
+	}
+
 	com_core_packet_send_only(s_info.fd, packet);
 	packet_destroy(packet);
 	s_info.cmd = INST_CTRL;
@@ -653,9 +658,6 @@ static inline int do_stat(const char *cmd)
 	case ROOT:
 		printf("Not supported yet\n");
 		break;
-	default:
-		printf("Invalid type\n");
-		return -EFAULT;
 	}
 
 	return 0;
@@ -831,7 +833,7 @@ static inline void do_sh(const char *cmd)
 		int idx;
 		idx = 0;
 
-		while (idx < sizeof(command) && *cmd && *cmd != ' ')
+		while (idx < (sizeof(command) - 1) && *cmd && *cmd != ' ')
 			command[idx++] = *cmd++;
 		command[idx] = '\0';
 
@@ -871,9 +873,8 @@ static inline int get_pixmap_size(Display *disp, Pixmap id, int *x, int *y, unsi
 	if (!y)
 		y = &_y;
 
-	if (!XGetGeometry(disp, id, &dummy_win, x, y, w, h, &dummy_border, &dummy_depth)) {
+	if (!XGetGeometry(disp, id, &dummy_win, x, y, w, h, &dummy_border, &dummy_depth))
 		return -EFAULT;
-	}
 
 	return 0;
 }
@@ -937,8 +938,8 @@ static inline int do_capture(Display *disp, Pixmap id, const char *filename)
 	XShmGetImage(disp, id, xim, 0, 0, 0xFFFFFFFF);
 	XSync(disp, False);
 
-	fd = open(filename, O_CREAT | O_RDWR);
-	if (fd > 0) {
+	fd = open(filename, O_CREAT | O_RDWR, 0644);
+	if (fd >= 0) {
 		if (write(fd, xim->data, bufsz) != bufsz)
 			printf("Data is not fully written\n");
 

@@ -4466,7 +4466,7 @@ static struct packet *slave_acquire_buffer(pid_t pid, int handle, const struct p
 			if (ret == 0) {
 				int resized;
 				resized = (instance_lb_width(inst) != w) || (instance_lb_height(inst) != h);
-				instance_set_lb_info(inst, w, h, -1.0f, NULL, NULL);
+				instance_set_lb_info(inst, w, h, PRIORITY_NO_CHANGE, CONTENT_NO_CHANGE, TITLE_NO_CHANGE);
 				id = buffer_handler_id(info);
 				if (resized)
 					instance_send_resized_event(inst, IS_LB, w, h, 0);
@@ -4607,7 +4607,7 @@ static struct packet *slave_resize_buffer(pid_t pid, int handle, const struct pa
 
 					id = buffer_handler_id(info);
 					resized = (instance_lb_width(inst) != w) || (instance_lb_height(inst) != h);
-					instance_set_lb_info(inst, w, h, -1.0f, NULL, NULL);
+					instance_set_lb_info(inst, w, h, PRIORITY_NO_CHANGE, CONTENT_NO_CHANGE, TITLE_NO_CHANGE);
 					if (resized)
 						instance_send_resized_event(inst, IS_LB, w, h, 0);
 				}

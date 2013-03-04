@@ -111,8 +111,8 @@ extern int conf_loader(void);
 #define DEFAULT_SCRIPT		g_conf.default_conf.script
 #define DEFAULT_ABI		g_conf.default_conf.abi
 #define DEFAULT_GROUP		g_conf.default_conf.pd_group
-#define NO_CHANGE		g_conf.default_conf.period
 #define DEFAULT_PERIOD		g_conf.default_conf.period
+#define PRIORITY_NO_CHANGE	-1.0f
 
 #define BUNDLE_SLAVE_NAME	g_conf.launch_key.name
 #define BUNDLE_SLAVE_SECURED	g_conf.launch_key.secured

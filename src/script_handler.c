@@ -653,7 +653,7 @@ static int update_info(struct inst_info *inst, struct block *block, int is_pd)
 				 * Each livebox uses the LB_SIZE_TYPE_XXX for its size.
 				 */
 				resized = (instance_lb_width(inst) != w) || (instance_lb_height(inst) != h);
-				instance_set_lb_info(inst, w, h, NO_CHANGE, CONTENT_NO_CHANGE, TITLE_NO_CHANGE);
+				instance_set_lb_info(inst, w, h, PRIORITY_NO_CHANGE, CONTENT_NO_CHANGE, TITLE_NO_CHANGE);
 			}
 
 			if (resized)

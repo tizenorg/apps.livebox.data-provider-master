@@ -869,6 +869,8 @@ static struct packet *client_pd_mouse_down(pid_t pid, int handle, const struct p
 		goto out;
 	}
 
+	DbgPrint("(%dx%d) - (%lfx%lf)\n", w, h, x, y);
+
 	/*!
 	 * \NOTE:
 	 * Trust the package name which are sent by the client.
@@ -984,6 +986,7 @@ static struct packet *client_pd_mouse_up(pid_t pid, int handle, const struct pac
 		goto out;
 	}
 
+	DbgPrint("(%dx%d) - (%lfx%lf)\n", w, h, x, y);
 	/*!
 	 * \NOTE:
 	 * Trust the package name which are sent by the client.
@@ -1099,6 +1102,7 @@ static struct packet *client_pd_mouse_move(pid_t pid, int handle, const struct p
 		goto out;
 	}
 
+	DbgPrint("(%dx%d) - (%lfx%lf)\n", w, h, x, y);
 	/*!
 	 * \NOTE:
 	 * Trust the package name which are sent by the client.
@@ -3495,6 +3499,57 @@ static Eina_Bool lazy_pd_destroyed_cb(void *data)
 	return ECORE_CALLBACK_CANCEL;
 }
 
+static struct packet *client_pd_move(pid_t pid, int handle, const struct packet *packet) /* pkgname, id, x, y */
+{
+	struct client_node *client;
+	struct inst_info *inst;
+	const char *pkgname;
+	const char *id;
+	double x = 0.0f;
+	double y = 0.0f;
+	int ret;
+
+	client = client_find_by_pid(pid);
+	if (!client) {
+		ErrPrint("Client %d is not exists\n", pid);
+		ret = -ENOENT;
+		goto out;
+	}
+
+	ret = packet_get(packet, "ssdd", &pkgname, &id, &x, &y);
+	if (ret != 4) {
+		ErrPrint("Parameter is not correct\n");
+		ret = -EINVAL;
+		goto out;
+	}
+
+	DbgPrint("pid[%d] pkgname[%s] id[%s] %lfx%lf\n", pid, pkgname, id, x, y);
+
+	inst = package_find_instance_by_id(pkgname, id);
+	if (!inst)
+		ret = -ENOENT;
+	else if (package_is_fault(instance_package(inst)))
+		ret = -EFAULT;
+	else if (package_pd_type(instance_package(inst)) == PD_TYPE_BUFFER) {
+		instance_slave_set_pd_pos(inst, x, y);
+		ret = instance_signal_emit(inst,
+				"pd,move", util_uri_to_path(instance_id(inst)),
+				0.0, 0.0, 0.0, 0.0, x, y, 0);
+	} else if (package_pd_type(instance_package(inst)) == PD_TYPE_SCRIPT) {
+		instance_slave_set_pd_pos(inst, x, y);
+		script_handler_update_pointer(instance_pd_script(inst), x, y, 0);
+		ret = instance_signal_emit(inst,
+				"pd,move", util_uri_to_path(instance_id(inst)),
+				0.0, 0.0, 0.0, 0.0, x, y, 0);
+	} else {
+		ErrPrint("Invalid PD type\n");
+		ret = -EINVAL;
+	}
+out:
+	DbgPrint("Update PD position: %lfx%lf (%d)\n", x, y, ret);
+	return NULL;
+}
+
 static struct packet *client_create_pd(pid_t pid, int handle, const struct packet *packet) /* pid, pkgname, filename, ret */
 {
 	struct client_node *client;
@@ -3559,8 +3614,8 @@ static struct packet *client_create_pd(pid_t pid, int handle, const struct packe
 		 * so we can hanle it later.
 		 */
 		instance_slave_set_pd_pos(inst, x, y);
-		ret = instance_slave_open_pd(inst, client);
 		script_handler_update_pointer(instance_pd_script(inst), x, y, 0);
+		ret = instance_slave_open_pd(inst, client);
 		ret = script_handler_load(instance_pd_script(inst), 1);
 
 		/*!
@@ -3577,6 +3632,8 @@ static struct packet *client_create_pd(pid_t pid, int handle, const struct packe
 			inst = instance_ref(inst); /* To guarantee the inst */
 			if (!ecore_timer_add(DELAY_TIME, lazy_pd_created_cb, inst))
 				instance_unref(inst);
+		} else {
+			instance_client_pd_created(inst, ret);
 		}
 	} else {
 		ErrPrint("Invalid PD TYPE\n");
@@ -3629,7 +3686,7 @@ static struct packet *client_destroy_pd(pid_t pid, int handle, const struct pack
 	else if (package_pd_type(instance_package(inst)) == PD_TYPE_BUFFER) {
 		ret = instance_signal_emit(inst,
 				"pd,hide", util_uri_to_path(instance_id(inst)),
-				0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0);
+				0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0);
 		ret = instance_slave_close_pd(inst, client);
 
 		/*!
@@ -3641,9 +3698,8 @@ static struct packet *client_destroy_pd(pid_t pid, int handle, const struct pack
 		 */
 
 	} else if (package_pd_type(instance_package(inst)) == PD_TYPE_SCRIPT) {
-		ret = instance_slave_close_pd(inst, client);
-
 		ret = script_handler_unload(instance_pd_script(inst), 1);
+		ret = instance_slave_close_pd(inst, client);
 
 		/*!
 		 * \note
@@ -5270,6 +5326,10 @@ static struct method s_client_table[] = {
 	{
 		.cmd = "create_pd",
 		.handler = client_create_pd, /* pid, pkgname, filename, ret */
+	},
+	{
+		.cmd = "pd_move",
+		.handler = client_pd_move, /* pkgname, id, x, y */
 	},
 	{
 		.cmd = "destroy_pd",

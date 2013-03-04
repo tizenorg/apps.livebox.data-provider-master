@@ -867,9 +867,6 @@ static void reactivate_cb(struct slave_node *slave, const struct packet *packet,
 
 			if (pd_type == PD_TYPE_SCRIPT && inst->pd.canvas.script && inst->pd.is_opened_for_reactivate) {
 				double x, y;
-
-				instance_slave_get_pd_pos(inst, &x, &y);
-
 				/*!
 				 * \note
 				 * We should to send a request to open a PD to slave.
@@ -878,6 +875,7 @@ static void reactivate_cb(struct slave_node *slave, const struct packet *packet,
 				 * To do that, send open request from here.
 				 */
 				ret = instance_slave_open_pd(inst, NULL);
+				instance_slave_get_pd_pos(inst, &x, &y);
 
 				/*!
 				 * \note
@@ -1153,10 +1151,12 @@ static int pd_script_close_cb(struct client_node *client, void *inst)
 {
 	int ret;
 
+	ret = script_handler_unload(instance_pd_script(inst), 1);
+	DbgPrint("Unload script: %d\n", ret);
+
 	ret = instance_slave_close_pd(inst, client);
 	DbgPrint("Forcely close the PD ret: %d\n", ret);
 
-	ret = script_handler_unload(instance_pd_script(inst), 1);
 	return -1; /* Delete this callback */
 }
 
@@ -1953,6 +1953,7 @@ HAPI int instance_signal_emit(struct inst_info *inst, const char *signal, const 
 		return -EFAULT;
 	}
 
+	DbgPrint("Signal emit: %s(%s), %s(%s), %lf, %lf, %lf, %lf, %lfx%lf, %d\n", pkgname, id, signal, part, sx, sy, ex, ey, x, y, down);
 	ret = slave_rpc_request_only(slave, pkgname, packet, 0); 
 	return ret;
 }
@@ -2435,6 +2436,7 @@ HAPI int instance_slave_open_pd(struct inst_info *inst, struct client_node *clie
 	}
 
 	inst->pd.owner = client;
+	DbgPrint("pd,show event is sent\n");
 	return ret;
 }
 
@@ -2504,7 +2506,7 @@ HAPI int instance_client_pd_created(struct inst_info *inst, int status)
 		break;
 	}
 
-	inst->pd.need_to_send_close_event = 1;
+	inst->pd.need_to_send_close_event = (status == 0);
 
 	packet = packet_create_noack("pd_created", "sssiii", 
 			package_name(inst->info), inst->id, buf_id,
@@ -2516,7 +2518,7 @@ HAPI int instance_client_pd_created(struct inst_info *inst, int status)
 
 	ret = CLIENT_SEND_EVENT(inst, packet);
 
-	if (inst->pd.pended_update_cnt) {
+	if (inst->pd.need_to_send_close_event && inst->pd.pended_update_cnt) {
 		DbgPrint("Apply pended desc(%d) - %s\n", inst->pd.pended_update_cnt, inst->pd.pended_update_desc);
 		instance_pd_updated_by_instance(inst, inst->pd.pended_update_desc);
 		inst->pd.pended_update_cnt = 0;

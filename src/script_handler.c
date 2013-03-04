@@ -265,6 +265,8 @@ HAPI int script_handler_load(struct script_info *info, int is_pd)
 			return -EFAULT;
 		}
 		info->loaded = 1;
+		script_signal_emit(e, util_uri_to_path(instance_id(info->inst)),
+				is_pd ? "pd,show" : "lb,show", 0.0f, 0.0f, 0.0f, 0.0f);
 	} else {
 		ErrPrint("Evas: (nil) %dx%d\n", info->w, info->h);
 	}
@@ -275,9 +277,6 @@ HAPI int script_handler_load(struct script_info *info, int is_pd)
 	ecore_evas_activate(info->ee);
 	fb_sync(info->fb);
 
-	if (e)
-		script_signal_emit(e, util_uri_to_path(instance_id(info->inst)),
-					is_pd ? "pd,show" : "lb,show", 0.0f, 0.0f, 0.0f, 0.0f);
 	return 0;
 }
 
@@ -300,7 +299,8 @@ HAPI int script_handler_unload(struct script_info *info, int is_pd)
 
 	e = script_handler_evas(info);
 	if (e) {
-		script_signal_emit(e, util_uri_to_path(instance_id(info->inst)), is_pd ? "pd,hide" : "lb,hide", 0.0f, 0.0f, 0.0f, 0.0f);
+		script_signal_emit(e, util_uri_to_path(instance_id(info->inst)),
+				is_pd ? "pd,hide" : "lb,hide", 0.0f, 0.0f, 0.0f, 0.0f);
 		if (info->port->unload(info->port_data, e) < 0)
 			ErrPrint("Failed to unload script object. but go ahead\n");
 		evas_event_callback_del(e, EVAS_CALLBACK_RENDER_POST, render_post_cb);

@@ -226,7 +226,7 @@ static inline int build_client_info(struct pkg_info *info)
 		return -EIO;
 	}
 
-	ret = sqlite3_bind_text(stmt, 1, package_name(info), -1, NULL);
+	ret = sqlite3_bind_text(stmt, 1, package_name(info), -1, SQLITE_TRANSIENT);
 	if (ret != SQLITE_OK) {
 		ErrPrint("Failed to bind a pkgname %s\n", package_name(info));
 		sqlite3_finalize(stmt);
@@ -273,13 +273,13 @@ static inline int build_provider_info(struct pkg_info *info)
 		return -EIO;
 	}
 
-	if (sqlite3_bind_text(stmt, 1, package_name(info), -1, NULL) != SQLITE_OK) {
+	if (sqlite3_bind_text(stmt, 1, package_name(info), -1, SQLITE_TRANSIENT) != SQLITE_OK) {
 		ErrPrint("Failed to bind a pkgname(%s) - %s\n", package_name(info), sqlite3_errmsg(s_info.handle));
 		sqlite3_finalize(stmt);
 		return -EIO;
 	}
 
-	if (sqlite3_bind_text(stmt, 2, package_name(info), -1, NULL) != SQLITE_OK) {
+	if (sqlite3_bind_text(stmt, 2, package_name(info), -1, SQLITE_TRANSIENT) != SQLITE_OK) {
 		ErrPrint("Failed to bind a pkgname(%s) - %s\n", package_name(info), sqlite3_errmsg(s_info.handle));
 		sqlite3_finalize(stmt);
 		return -EIO;
@@ -366,7 +366,7 @@ static inline int build_box_size_info(struct pkg_info *info)
 		return -EIO;
 	}
 
-	if (sqlite3_bind_text(stmt, 1, package_name(info), -1, NULL) != SQLITE_OK) {
+	if (sqlite3_bind_text(stmt, 1, package_name(info), -1, SQLITE_TRANSIENT) != SQLITE_OK) {
 		ErrPrint("Failed to bind a pkgname(%s) - %s\n", package_name(info), sqlite3_errmsg(s_info.handle));
 		sqlite3_finalize(stmt);
 		return -EIO;
@@ -497,7 +497,7 @@ static inline int build_group_info(struct pkg_info *info)
 		return -EIO;
 	}
 
-	ret = sqlite3_bind_text(stmt, 1, package_name(info), -1, NULL);
+	ret = sqlite3_bind_text(stmt, 1, package_name(info), -1, SQLITE_TRANSIENT);
 	if (ret != SQLITE_OK) {
 		ErrPrint("Failed to bind a package name(%s)\n", package_name(info));
 		sqlite3_finalize(stmt);
@@ -583,7 +583,7 @@ HAPI int io_is_exists(const char *pkgname) /* Manifest Package Name */
 		return -EIO;
 	}
 
-	ret = sqlite3_bind_text(stmt, 1, pkgname, -1, NULL);
+	ret = sqlite3_bind_text(stmt, 1, pkgname, -1, SQLITE_TRANSIENT);
 	if (ret != SQLITE_OK) {
 		ErrPrint("Error: %s\n", sqlite3_errmsg(s_info.handle));
 		ret = -EIO;
@@ -623,13 +623,13 @@ HAPI char *io_livebox_pkgname(const char *pkgname)
 		return NULL;
 	}
 
-	ret = sqlite3_bind_text(stmt, 1, pkgname, -1, NULL);
+	ret = sqlite3_bind_text(stmt, 1, pkgname, -1, SQLITE_TRANSIENT);
 	if (ret != SQLITE_OK) {
 		ErrPrint("Error: %s\n", sqlite3_errmsg(s_info.handle));
 		goto out;
 	}
 
-	ret = sqlite3_bind_text(stmt, 2, pkgname, -1, NULL);
+	ret = sqlite3_bind_text(stmt, 2, pkgname, -1, SQLITE_TRANSIENT);
 	if (ret != SQLITE_OK) {
 		ErrPrint("Error: %s\n", sqlite3_errmsg(s_info.handle));
 		goto out;
@@ -731,7 +731,7 @@ HAPI int io_update_livebox_package(const char *pkgname, int (*cb)(const char *lb
 		return -EFAULT;
 	}
 
-	ret = sqlite3_bind_text(stmt, 1, pkgname, -1, NULL);
+	ret = sqlite3_bind_text(stmt, 1, pkgname, -1, SQLITE_TRANSIENT);
 	if (ret != SQLITE_OK) {
 		ErrPrint("Error: %s\n", sqlite3_errmsg(s_info.handle));
 		ret = -EFAULT;

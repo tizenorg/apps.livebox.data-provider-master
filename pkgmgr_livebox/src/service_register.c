@@ -305,14 +305,14 @@ static inline int db_insert_pkgmap(const char *appid, const char *pkgid, int pri
 		return -EIO;
 	}
 
-	ret = sqlite3_bind_text(stmt, 1, appid, -1, NULL);
+	ret = sqlite3_bind_text(stmt, 1, appid, -1, SQLITE_TRANSIENT);
 	if (ret != SQLITE_OK) {
 		DbgPrint("Error: %s\n", sqlite3_errmsg(s_info.handle));
 		ret = -EIO;
 		goto out;
 	}
 
-	ret = sqlite3_bind_text(stmt, 2, pkgid, -1, NULL);
+	ret = sqlite3_bind_text(stmt, 2, pkgid, -1, SQLITE_TRANSIENT);
 	if (ret != SQLITE_OK) {
 		DbgPrint("Error: %s\n", sqlite3_errmsg(s_info.handle));
 		ret = -EIO;
@@ -352,7 +352,7 @@ static inline int db_remove_pkgmap(const char *pkgid)
 		return -EIO;
 	}
 
-	ret = sqlite3_bind_text(stmt, 1, pkgid, -1, NULL);
+	ret = sqlite3_bind_text(stmt, 1, pkgid, -1, SQLITE_TRANSIENT);
 	if (ret != SQLITE_OK) {
 		DbgPrint("Error: %s\n", sqlite3_errmsg(s_info.handle));
 		ret = -EIO;
@@ -408,7 +408,7 @@ static inline int db_remove_provider(const char *pkgid)
 		return -EIO;
 	}
 
-	ret = sqlite3_bind_text(stmt, 1, pkgid, -1, NULL);
+	ret = sqlite3_bind_text(stmt, 1, pkgid, -1, SQLITE_TRANSIENT);
 	if (ret != SQLITE_OK) {
 		DbgPrint("Error: %s\n", sqlite3_errmsg(s_info.handle));
 		ret = -EIO;
@@ -476,7 +476,7 @@ static inline int db_insert_provider(struct livebox *livebox)
 		return -EIO;
 	}
 
-	ret = sqlite3_bind_text(stmt, 1, (char *)livebox->pkgid, -1, NULL);
+	ret = sqlite3_bind_text(stmt, 1, (char *)livebox->pkgid, -1, SQLITE_TRANSIENT);
 	if (ret != SQLITE_OK) {
 		DbgPrint("Error: %s\n", sqlite3_errmsg(s_info.handle));
 		ret = -EIO;
@@ -491,7 +491,7 @@ static inline int db_insert_provider(struct livebox *livebox)
 		goto out;
 	}
 
-	ret = sqlite3_bind_text(stmt, 3, abi, -1, NULL);
+	ret = sqlite3_bind_text(stmt, 3, abi, -1, SQLITE_TRANSIENT);
 	if (ret != SQLITE_OK) {
 		DbgPrint("Error: %s\n", sqlite3_errmsg(s_info.handle));
 		ret = -EIO;
@@ -511,14 +511,14 @@ static inline int db_insert_provider(struct livebox *livebox)
 		goto out;
 	}
 
-	ret = sqlite3_bind_text(stmt, 6, box_src, -1, NULL);
+	ret = sqlite3_bind_text(stmt, 6, box_src, -1, SQLITE_TRANSIENT);
 	if (ret != SQLITE_OK) {
 		DbgPrint("Error: %s\n", sqlite3_errmsg(s_info.handle));
 		ret = -EIO;
 		goto out;
 	}
 
-	ret = sqlite3_bind_text(stmt, 7, box_group, -1, NULL);
+	ret = sqlite3_bind_text(stmt, 7, box_group, -1, SQLITE_TRANSIENT);
 	if (ret != SQLITE_OK) {
 		DbgPrint("Error: %s\n", sqlite3_errmsg(s_info.handle));
 		ret = -EIO;
@@ -532,21 +532,21 @@ static inline int db_insert_provider(struct livebox *livebox)
 		goto out;
 	}
 
-	ret = sqlite3_bind_text(stmt, 9, pd_src, -1, NULL);
+	ret = sqlite3_bind_text(stmt, 9, pd_src, -1, SQLITE_TRANSIENT);
 	if (ret != SQLITE_OK) {
 		DbgPrint("Error: %s\n", sqlite3_errmsg(s_info.handle));
 		ret = -EIO;
 		goto out;
 	}
 
-	ret = sqlite3_bind_text(stmt, 10, pd_group, -1, NULL);
+	ret = sqlite3_bind_text(stmt, 10, pd_group, -1, SQLITE_TRANSIENT);
 	if (ret != SQLITE_OK) {
 		DbgPrint("Error: %s\n", sqlite3_errmsg(s_info.handle));
 		ret = -EIO;
 		goto out;
 	}
 
-	ret = sqlite3_bind_text(stmt, 11, libexec, -1, NULL);
+	ret = sqlite3_bind_text(stmt, 11, libexec, -1, SQLITE_TRANSIENT);
 	if (ret != SQLITE_OK) {
 		DbgPrint("Error: %s\n", sqlite3_errmsg(s_info.handle));
 		ret = -EIO;
@@ -560,14 +560,14 @@ static inline int db_insert_provider(struct livebox *livebox)
 		goto out;
 	}
 
-	ret = sqlite3_bind_text(stmt, 13, period, -1, NULL);
+	ret = sqlite3_bind_text(stmt, 13, period, -1, SQLITE_TRANSIENT);
 	if (ret != SQLITE_OK) {
 		DbgPrint("Error: %s\n", sqlite3_errmsg(s_info.handle));
 		ret = -EIO;
 		goto out;
 	}
 
-	ret = sqlite3_bind_text(stmt, 14, script, -1, NULL);
+	ret = sqlite3_bind_text(stmt, 14, script, -1, SQLITE_TRANSIENT);
 	if (ret != SQLITE_OK) {
 		DbgPrint("Error: %s\n", sqlite3_errmsg(s_info.handle));
 		ret = -EIO;
@@ -626,42 +626,42 @@ static inline int db_insert_client(struct livebox *livebox)
 		return -EIO;
 	}
 
-	ret = sqlite3_bind_text(stmt, 1, (char *)livebox->pkgid, -1, NULL);
+	ret = sqlite3_bind_text(stmt, 1, (char *)livebox->pkgid, -1, SQLITE_TRANSIENT);
 	if (ret != SQLITE_OK) {
 		DbgPrint("Error: %s\n", sqlite3_errmsg(s_info.handle));
 		ret = -EIO;
 		goto out;
 	}
 
-	ret = sqlite3_bind_text(stmt, 2, (char *)livebox->icon, -1, NULL);
+	ret = sqlite3_bind_text(stmt, 2, (char *)livebox->icon, -1, SQLITE_TRANSIENT);
 	if (ret != SQLITE_OK) {
 		DbgPrint("Error: %s\n", sqlite3_errmsg(s_info.handle));
 		ret = -EIO;
 		goto out;
 	}
 
-	ret = sqlite3_bind_text(stmt, 3, (char *)livebox->name, -1, NULL);
+	ret = sqlite3_bind_text(stmt, 3, (char *)livebox->name, -1, SQLITE_TRANSIENT);
 	if (ret != SQLITE_OK) {
 		DbgPrint("Error: %s\n", sqlite3_errmsg(s_info.handle));
 		ret = -EIO;
 		goto out;
 	}
 
-	ret = sqlite3_bind_text(stmt, 4, (char *)livebox->auto_launch, -1, NULL);
+	ret = sqlite3_bind_text(stmt, 4, (char *)livebox->auto_launch, -1, SQLITE_TRANSIENT);
 	if (ret != SQLITE_OK) {
 		DbgPrint("Error: %s\n", sqlite3_errmsg(s_info.handle));
 		ret = -EIO;
 		goto out;
 	}
 
-	ret = sqlite3_bind_text(stmt, 5, (char *)livebox->pd_size, -1, NULL);
+	ret = sqlite3_bind_text(stmt, 5, (char *)livebox->pd_size, -1, SQLITE_TRANSIENT);
 	if (ret != SQLITE_OK) {
 		DbgPrint("Error: %s\n", sqlite3_errmsg(s_info.handle));
 		ret = -EIO;
 		goto out;
 	}
 
-	ret = sqlite3_bind_text(stmt, 6, livebox->content ? (char *)livebox->content : "default", -1, NULL);
+	ret = sqlite3_bind_text(stmt, 6, livebox->content ? (char *)livebox->content : "default", -1, SQLITE_TRANSIENT);
 	if (ret != SQLITE_OK) {
 		DbgPrint("Error: %s\n", sqlite3_errmsg(s_info.handle));
 		ret = -EIO;
@@ -675,7 +675,7 @@ static inline int db_insert_client(struct livebox *livebox)
 		goto out;
 	}
 
-	ret = sqlite3_bind_text(stmt, 8, livebox->setup ? (char *)livebox->setup : "", -1, NULL);
+	ret = sqlite3_bind_text(stmt, 8, livebox->setup ? (char *)livebox->setup : "", -1, SQLITE_TRANSIENT);
 	if (ret != SQLITE_OK) {
 		DbgPrint("Error: %s\n", sqlite3_errmsg(s_info.handle));
 		ret = -EIO;
@@ -722,7 +722,7 @@ static inline int db_remove_client(const char *pkgid)
 		return -EIO;
 	}
 
-	ret = sqlite3_bind_text(stmt, 1, pkgid, -1, NULL);
+	ret = sqlite3_bind_text(stmt, 1, pkgid, -1, SQLITE_TRANSIENT);
 	if (ret != SQLITE_OK) {
 		DbgPrint("Error: %s\n", sqlite3_errmsg(s_info.handle));
 		ret = -EIO;
@@ -774,28 +774,28 @@ static inline int db_insert_i18n(const char *pkgid, const char *lang, const char
 		return -EIO;
 	}
 
-	ret = sqlite3_bind_text(stmt, 1, pkgid, -1, NULL);
+	ret = sqlite3_bind_text(stmt, 1, pkgid, -1, SQLITE_TRANSIENT);
 	if (ret != SQLITE_OK) {
 		DbgPrint("Error: %s\n", sqlite3_errmsg(s_info.handle));
 		ret = -EIO;
 		goto out;
 	}
 
-	ret = sqlite3_bind_text(stmt, 2, lang, -1, NULL);
+	ret = sqlite3_bind_text(stmt, 2, lang, -1, SQLITE_TRANSIENT);
 	if (ret != SQLITE_OK) {
 		DbgPrint("Error: %s\n", sqlite3_errmsg(s_info.handle));
 		ret = -EIO;
 		goto out;
 	}
 
-	ret = sqlite3_bind_text(stmt, 3, name, -1, NULL);
+	ret = sqlite3_bind_text(stmt, 3, name, -1, SQLITE_TRANSIENT);
 	if (ret != SQLITE_OK) {
 		DbgPrint("Error: %s\n", sqlite3_errmsg(s_info.handle));
 		ret = -EIO;
 		goto out;
 	}
 
-	ret = sqlite3_bind_text(stmt, 4, icon, -1, NULL);
+	ret = sqlite3_bind_text(stmt, 4, icon, -1, SQLITE_TRANSIENT);
 	if (ret != SQLITE_OK) {
 		DbgPrint("Error: %s\n", sqlite3_errmsg(s_info.handle));
 		ret = -EIO;
@@ -828,7 +828,7 @@ static inline int db_remove_i18n(const char *pkgid)
 		return -EIO;
 	}
 
-	ret = sqlite3_bind_text(stmt, 1, pkgid, -1, NULL);
+	ret = sqlite3_bind_text(stmt, 1, pkgid, -1, SQLITE_TRANSIENT);
 	if (ret != SQLITE_OK) {
 		DbgPrint("Error: %s\n", sqlite3_errmsg(s_info.handle));
 		ret = -EIO;
@@ -881,21 +881,21 @@ static inline int db_insert_group(const char *pkgid, const char *cluster, const 
 		return -EIO;
 	}
 
-	ret = sqlite3_bind_text(stmt, 1, cluster, -1, NULL);
+	ret = sqlite3_bind_text(stmt, 1, cluster, -1, SQLITE_TRANSIENT);
 	if (ret != SQLITE_OK) {
 		DbgPrint("Error: %s\n", sqlite3_errmsg(s_info.handle));
 		ret = -EIO;
 		goto out;
 	}
 
-	ret = sqlite3_bind_text(stmt, 2, category, -1, NULL);
+	ret = sqlite3_bind_text(stmt, 2, category, -1, SQLITE_TRANSIENT);
 	if (ret != SQLITE_OK) {
 		DbgPrint("Error: %s\n", sqlite3_errmsg(s_info.handle));
 		ret = -EIO;
 		goto out;
 	}
 
-	ret = sqlite3_bind_text(stmt, 3, pkgid, -1, NULL);
+	ret = sqlite3_bind_text(stmt, 3, pkgid, -1, SQLITE_TRANSIENT);
 	if (ret != SQLITE_OK) {
 		DbgPrint("Error: %s\n", sqlite3_errmsg(s_info.handle));
 		ret = -EIO;
@@ -933,12 +933,12 @@ static inline int db_get_group_id(const char *cluster, const char *category)
 	}
 
 	ret = -EIO;
-	if (sqlite3_bind_text(stmt, 1, cluster, -1, NULL) != SQLITE_OK) {
+	if (sqlite3_bind_text(stmt, 1, cluster, -1, SQLITE_TRANSIENT) != SQLITE_OK) {
 		ErrPrint("Failed to bind a cluster(%s) - %s\n", cluster, sqlite3_errmsg(s_info.handle));
 		goto out;
 	}
 
-	if (sqlite3_bind_text(stmt, 2, category, -1, NULL) != SQLITE_OK) {
+	if (sqlite3_bind_text(stmt, 2, category, -1, SQLITE_TRANSIENT) != SQLITE_OK) {
 		ErrPrint("Failed to bind a category(%s) - %s\n", category, sqlite3_errmsg(s_info.handle));
 		goto out;
 	}
@@ -970,7 +970,7 @@ static inline int db_remove_group(const char *pkgid)
 		return -EIO;
 	}
 
-	ret = sqlite3_bind_text(stmt, 1, pkgid, -1, NULL);
+	ret = sqlite3_bind_text(stmt, 1, pkgid, -1, SQLITE_TRANSIENT);
 	if (ret != SQLITE_OK) {
 		DbgPrint("Error: %s\n", sqlite3_errmsg(s_info.handle));
 		ret = -EIO;
@@ -1030,14 +1030,14 @@ static inline int db_get_option_id(int id, const char *pkgid, const char *ctx_it
 		goto out;
 	}
 
-	ret = sqlite3_bind_text(stmt, 2, pkgid, -1, NULL);
+	ret = sqlite3_bind_text(stmt, 2, pkgid, -1, SQLITE_TRANSIENT);
 	if (ret != SQLITE_OK) {
 		DbgPrint("Error: %s\n", sqlite3_errmsg(s_info.handle));
 		ret = -EIO;
 		goto out;
 	}
 
-	ret = sqlite3_bind_text(stmt, 3, ctx_item, -1, NULL);
+	ret = sqlite3_bind_text(stmt, 3, ctx_item, -1, SQLITE_TRANSIENT);
 	if (ret != SQLITE_OK) {
 		DbgPrint("Error: %s\n", sqlite3_errmsg(s_info.handle));
 		ret = -EIO;
@@ -1082,14 +1082,14 @@ static inline int db_insert_groupmap(int id, const char *pkgid, const char *ctx_
 		goto out;
 	}
 
-	ret = sqlite3_bind_text(stmt, 2, pkgid, -1, NULL);
+	ret = sqlite3_bind_text(stmt, 2, pkgid, -1, SQLITE_TRANSIENT);
 	if (ret != SQLITE_OK) {
 		DbgPrint("Error: %s\n", sqlite3_errmsg(s_info.handle));
 		ret = -EIO;
 		goto out;
 	}
 
-	ret = sqlite3_bind_text(stmt, 3, ctx_item, -1, NULL);
+	ret = sqlite3_bind_text(stmt, 3, ctx_item, -1, SQLITE_TRANSIENT);
 	if (ret != SQLITE_OK) {
 		DbgPrint("Error: %s\n", sqlite3_errmsg(s_info.handle));
 		ret = -EIO;
@@ -1122,7 +1122,7 @@ static inline int db_remove_groupmap(const char *pkgid)
 		return -EIO;
 	}
 
-	ret = sqlite3_bind_text(stmt, 1, pkgid, -1, NULL);
+	ret = sqlite3_bind_text(stmt, 1, pkgid, -1, SQLITE_TRANSIENT);
 	if (ret != SQLITE_OK) {
 		DbgPrint("Error: %s\n", sqlite3_errmsg(s_info.handle));
 		ret = -EIO;
@@ -1177,7 +1177,7 @@ static inline int db_insert_option(const char *pkgid, int option_id, const char 
 		return -EIO;
 	}
 
-	ret = sqlite3_bind_text(stmt, 1, pkgid, -1, NULL);
+	ret = sqlite3_bind_text(stmt, 1, pkgid, -1, SQLITE_TRANSIENT);
 	if (ret != SQLITE_OK) {
 		DbgPrint("Error: %s\n", sqlite3_errmsg(s_info.handle));
 		ret = -EIO;
@@ -1191,14 +1191,14 @@ static inline int db_insert_option(const char *pkgid, int option_id, const char 
 		goto out;
 	}
 
-	ret = sqlite3_bind_text(stmt, 3, key, -1, NULL);
+	ret = sqlite3_bind_text(stmt, 3, key, -1, SQLITE_TRANSIENT);
 	if (ret != SQLITE_OK) {
 		DbgPrint("Error: %s\n", sqlite3_errmsg(s_info.handle));
 		ret = -EIO;
 		goto out;
 	}
 
-	ret = sqlite3_bind_text(stmt, 4, value, -1, NULL);
+	ret = sqlite3_bind_text(stmt, 4, value, -1, SQLITE_TRANSIENT);
 	if (ret != SQLITE_OK) {
 		DbgPrint("Error: %s\n", sqlite3_errmsg(s_info.handle));
 		ret = -EIO;
@@ -1230,7 +1230,7 @@ static inline int db_remove_option(const char *pkgid)
 		return -EIO;
 	}
 
-	ret = sqlite3_bind_text(stmt, 1, pkgid, -1, NULL);
+	ret = sqlite3_bind_text(stmt, 1, pkgid, -1, SQLITE_TRANSIENT);
 	if (ret != SQLITE_OK) {
 		DbgPrint("Error: %s\n", sqlite3_errmsg(s_info.handle));
 		ret = -EIO;
@@ -1285,7 +1285,7 @@ static inline int db_insert_box_size(const char *pkgid, int size_type, const cha
 		return -EIO;
 	}
 
-	ret = sqlite3_bind_text(stmt, 1, pkgid, -1, NULL);
+	ret = sqlite3_bind_text(stmt, 1, pkgid, -1, SQLITE_TRANSIENT);
 	if (ret != SQLITE_OK) {
 		DbgPrint("Error: %s\n", sqlite3_errmsg(s_info.handle));
 		ret = -EIO;
@@ -1299,7 +1299,7 @@ static inline int db_insert_box_size(const char *pkgid, int size_type, const cha
 		goto out;
 	}
 
-	ret = sqlite3_bind_text(stmt, 3, preview ? preview : "", -1, NULL);
+	ret = sqlite3_bind_text(stmt, 3, preview ? preview : "", -1, SQLITE_TRANSIENT);
 	if (ret != SQLITE_OK) {
 		DbgPrint("Error: %s\n", sqlite3_errmsg(s_info.handle));
 		ret = -EIO;
@@ -1332,7 +1332,7 @@ static inline int db_remove_box_size(const char *pkgid)
 		return -EIO;
 	}
 
-	ret = sqlite3_bind_text(stmt, 1, pkgid, -1, NULL);
+	ret = sqlite3_bind_text(stmt, 1, pkgid, -1, SQLITE_TRANSIENT);
 	if (ret != SQLITE_OK) {
 		DbgPrint("Error: %s\n", sqlite3_errmsg(s_info.handle));
 		ret = -EIO;

@@ -11,6 +11,9 @@
 		<request>
 			<smack request="sys-assert::core" type="rwxat" />
 		</request>
+		<permit>
+			<smack permit="dbus" type="rx" />
+		</permit>
 	</define>
 	<request>
 		<domain name="_" />

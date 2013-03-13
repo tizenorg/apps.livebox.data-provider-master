@@ -25,7 +25,6 @@
 
 #include <vconf.h>
 #include <dlog.h>
-#include <heynoti.h>
 
 #include <Eina.h>
 
@@ -39,12 +38,6 @@
 #include "conf.h"
 
 int errno;
-
-static struct {
-	int heyfd;
-} s_info = {
-	.heyfd = -1,
-};
 
 static void lcd_state_cb(keynode_t *node, void *user_data)
 {
@@ -67,14 +60,24 @@ HAPI int setting_is_lcd_off(void)
 	return state == VCONFKEY_PM_STATE_LCDOFF || state == VCONFKEY_PM_STATE_SLEEP;
 }
 
-static void power_off_cb(void *data)
+static void power_off_cb(keynode_t *node, void *user_data)
 {
-	CRITICAL_LOG("Terminated(heynoti)\n");
+ 	int val;
+	CRITICAL_LOG("Terminated(vconf)\n");
 
-	if (creat("/tmp/.stop.provider", 0644) < 0)
-		ErrPrint("Failed to create .stop.provider [%s]\n", strerror(errno));
+	if (vconf_get_int(VCONFKEY_SYSMAN_POWER_OFF_STATUS, &val) != 0) {
+		ErrPrint("Failed to get power off status (%d)\n", val);
+		return;
+	}
 
-	exit(0);
+	if (val == VCONFKEY_SYSMAN_POWER_OFF_DIRECT || val == VCONFKEY_SYSMAN_POWER_OFF_RESTART) {
+		if (creat("/tmp/.stop.provider", 0644) < 0)
+			ErrPrint("Failed to create .stop.provider [%s]\n", strerror(errno));
+
+		exit(0);
+	} else {
+		ErrPrint("Unknown power state: %d\n", val);
+	}
 }
 
 HAPI int setting_init(void)
@@ -85,19 +88,9 @@ HAPI int setting_init(void)
 	if (ret < 0)
 		ErrPrint("Failed to add vconf for lock state\n");
 
-	s_info.heyfd = heynoti_init();
-	if (s_info.heyfd < 0) {
-		CRITICAL_LOG("Failed to set poweroff heynoti [%d]\n", s_info.heyfd);
-		return 0;
-	}
-
-	ret = heynoti_subscribe(s_info.heyfd, "power_off_start", power_off_cb, NULL);
+	ret = vconf_notify_key_changed(VCONFKEY_SYSMAN_POWER_OFF_STATUS, power_off_cb, NULL);
 	if (ret < 0)
-		CRITICAL_LOG("Failed to subscribe heynoti for power off [%d]\n", ret);
-
-	ret = heynoti_attach_handler(s_info.heyfd);
-	if (ret < 0)
-		CRITICAL_LOG("Failed to attach heynoti handler [%d]\n", ret);
+		ErrPrint("Failed to add vconf for power state\n");
 
 	return ret;
 }
@@ -106,6 +99,7 @@ HAPI int setting_fini(void)
 {
 	int ret;
 	ret = vconf_ignore_key_changed(VCONFKEY_PM_STATE, lcd_state_cb);
+	ret = vconf_ignore_key_changed(VCONFKEY_SYSMAN_POWER_OFF_STATUS, power_off_cb);
 	return ret;
 }
 

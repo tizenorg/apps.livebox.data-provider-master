@@ -1,0 +1,9 @@
+Name=Live Data Provider - Master
+Type=Application
+Exec=/usr/bin/data-provider-master
+Icon=data-provider-master.png
+NoDisplay=True
+Network=True
+Comment=Homescreen-Live Box content data provider (master)
+X-TIZEN-TaskManage=False
+X-TIZEN-Multiple=False

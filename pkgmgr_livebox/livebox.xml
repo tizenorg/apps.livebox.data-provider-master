@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<manifest xmlns="http://tizen.org/ns/packages" package="org.tizen.nicesj" version="1.0" install-location="auto">
+
+<livebox appid="org.tizen.nicesj.livebox" primary="true" secured="false" network="false" abi="c" timeout="20" period="10.0" libexec="/usr/apps/org.tizen.myapp/libexec/liblive-org.tizen.nicesj.so" pinup="false" script="edje" nodisplay="false">
+	<label>My livebox</label>
+	<icon>/usr/share/icons/small/org.tizen.live-nicesj.png</icon>
+	<label xml:lang="en_US">Sample</label>
+	<label xml:lang="ko_KR">Hangul</label>
+	<content>Content information</content>
+
+	<launch>org.tizen.nicesj</launch>
+
+	<setup>org.tizen.nicesj</setup>
+
+	<box type="image" mouse_event="false" touch_effect="true">
+		<size preview="ABSPATH">1x1</size>
+		<size preview="ABSPATH">2x1</size>
+		<size>2x2</size>
+		<size>4x1</size>
+		<size>4x2</size>
+		<size>4x3</size>
+		<size>4x4</size>
+
+		<!-- Easy home -->
+		<size>21x21</size>
+		<size preview="ABSPATH">23x21</size>
+		<size>23x23</size>
+
+		<script src="/opt/usr/apps/org.tizen.myapp/res/script/my.edj" group="my_group" />
+	</box>
+
+	<pd type="script">
+		<size>720x100</size>
+		<script src="/opt/usr/apps/org.tizen.myapp/res/script/mypd.edj" group="group_string" />
+	</pd>
+
+	<group>
+		<cluster name="cluster1">
+			<category name="category1" context="APP_USED_FREQUENTLY">
+				<option key="time_span" value="value" />
+				<option key="result_size" value="value" />
+			</category>
+			<category name="category2" context="APP_USED_FREQUENTLY_THISTIME">
+				<option key="time_span" value="value" />
+				<option key="result_size" value="value" />
+				<option key="time_interval" value="value" />
+			</category>
+		</cluster>
+		<cluster name="cluster2">
+			<category name="category1" context="CONTACT_COMMUNICATED_FREQUENTLY">
+				<option key="data_provider" value="org.tizen.contact" />
+				<option key="time_span" value="value" />
+				<option key="result_size" value="size" />
+			</category>
+			<category name="category2" context="CONTACT_COMMUNICATED_FREQUENTLY_THISTIME">
+				<option key="data_provider" value="org.tizen.contact" />
+				<option key="time_span" value="value" />
+				<option key="result_size" value="value" />
+				<option key="time_interval" value="value" />
+			</category>
+			<category name="category3" context="CONTACT_COMMUNICATED_ATLEASTONCE">
+				<option key="data_provider" value="value" />
+				<option key="time_span" value="value" />
+				<option key="result_size" value="value" />
+			</category>
+		</cluster>
+		<cluster name="noctx_cluster">
+			<category name="noctx_category" />
+		</cluster>
+		<!--
+		     KEYWORD_SEARCHED_FREQUENTLY(DATA_PROVIDER, TIME_SPAN, RESULT_SIZE)
+		     MUSIC_PLAYED_FREQUENTLY(DATA_PROVIDER, TIME_SPAN, RESULT_SIZE)
+		-->
+	</group>
+</livebox>
+</manifest>

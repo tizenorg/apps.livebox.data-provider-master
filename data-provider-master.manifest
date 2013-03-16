@@ -1,0 +1,56 @@
+<manifest>
+	<!-- Provider master label -->
+	<define>
+		<domain name="data-provider-master" policy="restricted" />
+		<provide>
+			<label name="data-provider-master::log" />
+			<label name="data-provider-master::db" />
+			<label name="data-provider-master::data" />
+			<label name="data-provider-master::share" />
+		</provide>
+		<request>
+			<smack request="sys-assert::core" type="rwxat" />
+		</request>
+		<permit>
+			<smack permit="dbus" type="rx" />
+		</permit>
+	</define>
+	<request>
+		<domain name="_" />
+	</request>
+
+	<assign>
+		<!-- Executable file -->
+		<filesystem path="/usr/bin/data-provider-master" label="data-provider-master" exec_label="data-provider-master" />
+		<filesystem path="/usr/bin/liveinfo" label="data-provider-master" exec_label="data-provider-master" />
+
+		<!-- Configuration data -->
+		<filesystem path="/usr/share/data-provider-master" label="data-provider-master::data" />
+		<filesystem path="/usr/share/data-provider-master/abi.ini" label="data-provider-master::data" />
+
+		<!-- livebox-service is able to access the resolution.ini file -->
+		<filesystem path="/usr/share/data-provider-master/resolution.ini" label="_" />
+
+		<!-- Slave provider and the master provider are able to access the conf.ini file -->
+		<filesystem path="/usr/share/data-provider-master/conf.ini" label="data-provider-master::data" />
+
+		<!-- Shared data folder -->
+		<filesystem path="/opt/usr/share/live_magazine" label="data-provider-master::share" type="transmutable" />
+		<filesystem path="/opt/usr/share/live_magazine/log" label="data-provider-master::share" type="transmutable" />
+		<filesystem path="/opt/usr/share/live_magazine/reader" label="data-provider-master::share" type="transmutable" />
+		<filesystem path="/opt/usr/share/live_magazine/always" label="data-provider-master::share" type="transmutable" />
+
+		<!-- Database -->
+		<filesystem path="/opt/dbspace/.livebox.db" label="data-provider-master::db" />
+		<filesystem path="/opt/dbspace/.livebox.db-journal" label="data-provider-master::db" />
+
+		<!-- Init script -->
+		<filesystem path="/etc/rc.d/init.d/data-provider-master" label="_" exec_label="none" />
+		<filesystem path="/etc/rc.d/rc3.d/S99data-provider-master" label="_" exec_label="none" />
+		<filesystem path="/usr/lib/systemd/user/data-provider-master.service" label="_" />
+		<filesystem path="/usr/lib/systemd/user/tizen-middleware.target.wants/data-provider-master.service" label="_" />
+
+		<!-- Package manager plugin -->
+		<filesystem path="/usr/etc/package-manager/parserlib/liblivebox.so" label="_" />
+	</assign>
+</manifest>

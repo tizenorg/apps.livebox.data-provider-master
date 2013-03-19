@@ -118,8 +118,8 @@ struct script_info {
 	int w;
 	int h;
 
-	double x;
-	double y;
+	int x;
+	int y;
 	int down;
 
 	struct script_port *port;
@@ -221,7 +221,7 @@ int script_signal_emit(Evas *e, const char *part, const char *signal, double sx,
 	if (!part || strlen(part) == 0)
 		part = "";
 
-	ret = instance_signal_emit(info->inst, signal, part, sx, sy, ex, ey, info->x, info->y, info->down);
+	ret = instance_signal_emit(info->inst, signal, part, sx, sy, ex, ey, (double)info->x / (double)info->w, (double)info->y / (double)info->h, info->down);
 	return ret;
 }
 
@@ -1298,7 +1298,7 @@ HAPI int script_fini(void)
 	return 0;
 }
 
-HAPI int script_handler_update_pointer(struct script_info *info, double x, double y, int down)
+HAPI int script_handler_update_pointer(struct script_info *info, int x, int y, int down)
 {
 	if (!info)
 		return 0;

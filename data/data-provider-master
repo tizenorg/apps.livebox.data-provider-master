@@ -34,6 +34,12 @@ launch_provider()
 
 start ()
 {
+	OLDPID=`ps ax | grep /usr/bin/data-provider-master | grep -v grep | awk '{print $1}'`
+	if [ x"$OLDPID" != x"" ]; then
+		echo $OLDPID is already running.
+		exit 0
+	fi
+
 	rm /tmp/.stop.provider
 	launch_provider &
 }

@@ -49,6 +49,7 @@
 #include "util.h"
 #include "debug.h"
 #include "critical_log.h"
+#include "event.h"
 
 #if defined(FLOG)
 FILE *__file_log_fp;
@@ -110,12 +111,15 @@ static inline int app_create(void)
 	ret = server_init();
 	DbgPrint("Server initialized: %d\n", ret);
 
+	event_init();
 	return 0;
 }
 
 static inline int app_terminate(void)
 {
 	int ret;
+
+	event_fini();
 
 	ret = setting_fini();
 	DbgPrint("Finalize setting : %d\n", ret);

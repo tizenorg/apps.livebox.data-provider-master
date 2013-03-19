@@ -79,6 +79,7 @@ ADD_EXECUTABLE(${PROJECT_NAME}
 	src/critical_log.c
 	src/liveinfo.c
 	src/pkgmgr.c
+	src/event.c
 )
 
 TARGET_LINK_LIBRARIES(${PROJECT_NAME} ${pkg_LDFLAGS} "-ldl")

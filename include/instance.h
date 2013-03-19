@@ -89,6 +89,11 @@
  * reference count of an instance reaches to ZERO.
  */
 
+enum instance_event {
+	INSTANCE_EVENT_DESTROY,
+	INSTNACE_EVENT_UNKNOWN,
+};
+
 enum instance_state {
 	INST_INIT = 0x0, /*!< Only keeps in the master */
 
@@ -212,5 +217,8 @@ extern void *instance_client_list(struct inst_info *inst);
 
 extern void instance_init(void);
 extern void instance_fini(void);
+
+extern int instance_event_callback_add(struct inst_info *inst, enum instance_event type, int (*event_cb)(struct inst_info *inst, void *data), void *data);
+extern int instance_event_callback_del(struct inst_info *inst, enum instance_event type, int (*event_cb)(struct inst_info *inst, void *data));
 
 /* End of a file */

@@ -71,6 +71,7 @@ HAPI struct conf g_conf = {
 		.root = "/opt/usr/live/",
 		.script_port = "/usr/share/data-provider-master/plugin-script/",
 		.db = "/opt/dbspace/.livebox.db",
+		.input = "/dev/input/event1",
 	},
 
 	.ping_time = 240.0f,
@@ -307,6 +308,14 @@ static void share_path_handler(char *buffer)
 	DbgPrint("Shared folder: %s\n", g_conf.path.image);
 }
 
+static void input_path_handler(char *buffer)
+{
+	g_conf.path.input = strdup(buffer);
+	if (!g_conf.path.input)
+		ErrPrint("Heap: %s\n", strerror(errno));
+	DbgPrint("Input device: %s\n", g_conf.path.input);
+}
+
 static void ping_time_handler(char *buffer)
 {
 	if (sscanf(buffer, "%lf", &g_conf.ping_time) != 1)
@@ -467,6 +476,10 @@ HAPI int conf_loader(void)
 		{
 			.name = "com_core_thread",
 			.handler = com_core_thread_handler,
+		},
+		{
+			.name = "input",
+			.handler = input_path_handler,
 		},
 		{
 			.name = NULL,

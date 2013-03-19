@@ -389,6 +389,7 @@ static Eina_Bool activate_timer_cb(void *data)
 		if (ret < 0)
 			ErrPrint("Terminate failed, pid %d\n", slave->pid);
 	}
+
 	slave = slave_deactivated(slave);
 	ErrPrint("Slave is not activated in %lf sec (slave: %p)\n", SLAVE_ACTIVATE_TIME, slave);
 	return ECORE_CALLBACK_CANCEL;

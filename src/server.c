@@ -46,6 +46,7 @@
 #include "abi.h"
 #include "liveinfo.h"
 #include "io.h"
+#include "event.h"
 
 static struct info {
 	int info_fd;
@@ -70,6 +71,169 @@ struct deleted_item {
 	struct client_node *client;
 	struct inst_info *inst;
 };
+
+static int event_lb_route_cb(enum event_state state, struct event_data *event_info, void *data)
+{
+	struct inst_info *inst = data;
+	const struct pkg_info *pkg;
+	struct slave_node *slave;
+	struct packet *packet;
+	const char *cmdstr;
+
+	pkg = instance_package(inst);
+	if (!pkg)
+		return -EINVAL;
+
+	slave = package_slave(pkg);
+	if (!slave)
+		return -EINVAL;
+
+	switch (state) {
+	case EVENT_STATE_ACTIVATE:
+		cmdstr = "lb_mouse_down";
+		break;
+	case EVENT_STATE_ACTIVATED:
+		cmdstr = "lb_mouse_move";
+		break;
+	case EVENT_STATE_DEACTIVATE:
+		cmdstr = "lb_mouse_up";
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	packet = packet_create_noack(cmdstr, "ssdii", package_name(pkg), instance_id(inst), util_timestamp(), event_info->x, event_info->y);
+	if (!packet)
+		return -EFAULT;
+
+	return slave_rpc_request_only(slave, package_name(pkg), packet, 0);
+}
+
+static int event_lb_consume_cb(enum event_state state, struct event_data *event_info, void *data)
+{
+	struct script_info *script;
+	struct inst_info *inst = data;
+	const struct pkg_info *pkg;
+	double timestamp;
+	Evas *e;
+
+	pkg = instance_package(inst);
+	if (!pkg)
+		return 0;
+
+	script = instance_lb_script(inst);
+	if (!script)
+		return -EFAULT;
+
+	e = script_handler_evas(script);
+	if (!e)
+		return -EFAULT;
+
+	timestamp = util_timestamp();
+
+	switch (state) {
+	case EVENT_STATE_ACTIVATE:
+		script_handler_update_pointer(script, event_info->x, event_info->y, 1);
+		evas_event_feed_mouse_move(e, event_info->x, event_info->y, timestamp, NULL);
+		evas_event_feed_mouse_down(e, 1, EVAS_BUTTON_NONE, timestamp + 0.01f, NULL);
+		break;
+	case EVENT_STATE_ACTIVATED:
+		script_handler_update_pointer(script, event_info->x, event_info->y, -1);
+		evas_event_feed_mouse_move(e, event_info->x, event_info->y, timestamp, NULL);
+		break;
+	case EVENT_STATE_DEACTIVATE:
+		script_handler_update_pointer(script, event_info->x, event_info->y, 0);
+		evas_event_feed_mouse_move(e, event_info->x, event_info->y, timestamp, NULL);
+		evas_event_feed_mouse_up(e, 1, EVAS_BUTTON_NONE, timestamp + 0.1f, NULL);
+		break;
+	default:
+		break;
+	}
+
+	return 0;
+}
+
+static int event_pd_route_cb(enum event_state state, struct event_data *event_info, void *data)
+{
+	struct inst_info *inst = data;
+	const struct pkg_info *pkg;
+	struct slave_node *slave;
+	struct packet *packet;
+	const char *cmdstr;
+
+	pkg = instance_package(inst);
+	if (!pkg)
+		return -EINVAL;
+
+	slave = package_slave(pkg);
+	if (!slave)
+		return -EINVAL;
+
+	DbgPrint("Event: %dx%d\n", event_info->x, event_info->y);
+	switch (state) {
+	case EVENT_STATE_ACTIVATE:
+		cmdstr = "pd_mouse_down";
+		break;
+	case EVENT_STATE_ACTIVATED:
+		cmdstr = "pd_mouse_move";
+		break;
+	case EVENT_STATE_DEACTIVATE:
+		cmdstr = "pd_mouse_up";
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	packet = packet_create_noack(cmdstr, "ssdii", package_name(pkg), instance_id(inst), util_timestamp(), event_info->x, event_info->y);
+	if (!packet)
+		return -EFAULT;
+
+	return slave_rpc_request_only(slave, package_name(pkg), packet, 0);
+}
+
+static int event_pd_consume_cb(enum event_state state, struct event_data *event_info, void *data)
+{
+	struct script_info *script;
+	struct inst_info *inst = data;
+	const struct pkg_info *pkg;
+	double timestamp;
+	Evas *e;
+
+	pkg = instance_package(inst);
+	if (!pkg)
+		return 0;
+
+	script = instance_pd_script(inst);
+	if (!script)
+		return -EFAULT;
+
+	e = script_handler_evas(script);
+	if (!e)
+		return -EFAULT;
+
+	DbgPrint("Event: %dx%d\n", event_info->x, event_info->y);
+	timestamp = util_timestamp();
+
+	switch (state) {
+	case EVENT_STATE_ACTIVATE:
+		script_handler_update_pointer(script, event_info->x, event_info->y, 1);
+		evas_event_feed_mouse_move(e, event_info->x, event_info->y, timestamp, NULL);
+		evas_event_feed_mouse_down(e, 1, EVAS_BUTTON_NONE, timestamp + 0.01f, NULL);
+		break;
+	case EVENT_STATE_ACTIVATED:
+		script_handler_update_pointer(script, event_info->x, event_info->y, -1);
+		evas_event_feed_mouse_move(e, event_info->x, event_info->y, timestamp, NULL);
+		break;
+	case EVENT_STATE_DEACTIVATE:
+		script_handler_update_pointer(script, event_info->x, event_info->y, 0);
+		evas_event_feed_mouse_move(e, event_info->x, event_info->y, timestamp, NULL);
+		evas_event_feed_mouse_up(e, 1, EVAS_BUTTON_NONE, timestamp + 0.1f, NULL);
+		break;
+	default:
+		break;
+	}
+	return 0;
+}
 
 static struct packet *client_acquire(pid_t pid, int handle, const struct packet *packet) /*!< timestamp, ret */
 {
@@ -144,8 +308,8 @@ static struct packet *client_clicked(pid_t pid, int handle, const struct packet 
 	const char *id;
 	const char *event;
 	double timestamp;
-	double x;
-	double y;
+	int x;
+	int y;
 	int ret;
 	struct inst_info *inst;
 
@@ -156,14 +320,14 @@ static struct packet *client_clicked(pid_t pid, int handle, const struct packet 
 		goto out;
 	}
 
-	ret = packet_get(packet, "sssddd", &pkgname, &id, &event, &timestamp, &x, &y);
+	ret = packet_get(packet, "sssdii", &pkgname, &id, &event, &timestamp, &x, &y);
 	if (ret != 6) {
 		ErrPrint("Parameter is not matched\n");
 		ret = -EINVAL;
 		goto out;
 	}
 
-	DbgPrint("pid[%d] pkgname[%s] id[%s] event[%s] timestamp[%lf] x[%lf] y[%lf]\n", pid, pkgname, id, event, timestamp, x, y);
+	DbgPrint("pid[%d] pkgname[%s] id[%s] event[%s] timestamp[%lf] x[%d] y[%d]\n", pid, pkgname, id, event, timestamp, x, y);
 
 	/*!
 	 * \NOTE:
@@ -619,11 +783,9 @@ static struct packet *client_pd_mouse_enter(pid_t pid, int handle, const struct 
 	const char *pkgname;
 	const char *id;
 	int ret;
-	int w;
-	int h;
 	double timestamp;
-	double x;
-	double y;
+	int x;
+	int y;
 	struct inst_info *inst;
 	const struct pkg_info *pkg;
 
@@ -634,8 +796,8 @@ static struct packet *client_pd_mouse_enter(pid_t pid, int handle, const struct 
 		goto out;
 	}
 
-	ret = packet_get(packet, "ssiiddd", &pkgname, &id, &w, &h, &timestamp, &x, &y);
-	if (ret != 7) {
+	ret = packet_get(packet, "ssdii", &pkgname, &id, &timestamp, &x, &y);
+	if (ret != 5) {
 		ErrPrint("Invalid parameter\n");
 		ret = -EINVAL;
 		goto out;
@@ -733,11 +895,9 @@ static struct packet *client_pd_mouse_leave(pid_t pid, int handle, const struct 
 	const char *pkgname;
 	const char *id;
 	int ret;
-	int w;
-	int h;
 	double timestamp;
-	double x;
-	double y;
+	int x;
+	int y;
 	struct inst_info *inst;
 	const struct pkg_info *pkg;
 
@@ -748,8 +908,8 @@ static struct packet *client_pd_mouse_leave(pid_t pid, int handle, const struct 
 		goto out;
 	}
 
-	ret = packet_get(packet, "ssiiddd", &pkgname, &id, &w, &h, &timestamp, &x, &y);
-	if (ret != 7) {
+	ret = packet_get(packet, "ssdii", &pkgname, &id, &timestamp, &x, &y);
+	if (ret != 5) {
 		ErrPrint("Parameter is not matched\n");
 		ret = -EINVAL;
 		goto out;
@@ -847,11 +1007,9 @@ static struct packet *client_pd_mouse_down(pid_t pid, int handle, const struct p
 	const char *pkgname;
 	const char *id;
 	int ret;
-	int w;
-	int h;
 	double timestamp;
-	double x;
-	double y;
+	int x;
+	int y;
 	struct inst_info *inst;
 	const struct pkg_info *pkg;
 
@@ -862,14 +1020,14 @@ static struct packet *client_pd_mouse_down(pid_t pid, int handle, const struct p
 		goto out;
 	}
 
-	ret = packet_get(packet, "ssiiddd", &pkgname, &id, &w, &h, &timestamp, &x, &y);
-	if (ret != 7) {
+	ret = packet_get(packet, "ssdii", &pkgname, &id, &timestamp, &x, &y);
+	if (ret != 5) {
 		ErrPrint("Parameter is not matched\n");
 		ret = -EINVAL;
 		goto out;
 	}
 
-	DbgPrint("(%dx%d) - (%lfx%lf)\n", w, h, x, y);
+	DbgPrint("(%dx%d)\n", x, y);
 
 	/*!
 	 * \NOTE:
@@ -945,7 +1103,7 @@ static struct packet *client_pd_mouse_down(pid_t pid, int handle, const struct p
 		}
 
 		script_handler_update_pointer(script, x, y, 1);
-		evas_event_feed_mouse_move(e, x * w, y * h, timestamp, NULL);
+		evas_event_feed_mouse_move(e, x, y, timestamp, NULL);
 		evas_event_feed_mouse_down(e, 1, EVAS_BUTTON_NONE, timestamp + 0.01f, NULL);
 		ret = 0;
 	} else {
@@ -964,11 +1122,9 @@ static struct packet *client_pd_mouse_up(pid_t pid, int handle, const struct pac
 	const char *pkgname;
 	const char *id;
 	int ret;
-	int w;
-	int h;
 	double timestamp;
-	double x;
-	double y;
+	int x;
+	int y;
 	struct inst_info *inst;
 	const struct pkg_info *pkg;
 
@@ -979,14 +1135,14 @@ static struct packet *client_pd_mouse_up(pid_t pid, int handle, const struct pac
 		goto out;
 	}
 
-	ret = packet_get(packet, "ssiiddd", &pkgname, &id, &w, &h, &timestamp, &x, &y);
-	if (ret != 7) {
+	ret = packet_get(packet, "ssdii", &pkgname, &id, &timestamp, &x, &y);
+	if (ret != 5) {
 		ErrPrint("Parameter is not matched\n");
 		ret = -EINVAL;
 		goto out;
 	}
 
-	DbgPrint("(%dx%d) - (%lfx%lf)\n", w, h, x, y);
+	DbgPrint("(%dx%d)\n", x, y);
 	/*!
 	 * \NOTE:
 	 * Trust the package name which are sent by the client.
@@ -1061,7 +1217,7 @@ static struct packet *client_pd_mouse_up(pid_t pid, int handle, const struct pac
 		}
 
 		script_handler_update_pointer(script, x, y, 0);
-		evas_event_feed_mouse_move(e, x * w, y * h, timestamp, NULL);
+		evas_event_feed_mouse_move(e, x, y, timestamp, NULL);
 		evas_event_feed_mouse_up(e, 1, EVAS_BUTTON_NONE, timestamp + 0.1f, NULL);
 		ret = 0;
 	} else {
@@ -1080,11 +1236,9 @@ static struct packet *client_pd_mouse_move(pid_t pid, int handle, const struct p
 	const char *pkgname;
 	const char *id;
 	int ret;
-	int w;
-	int h;
 	double timestamp;
-	double x;
-	double y;
+	int x;
+	int y;
 	struct inst_info *inst;
 	const struct pkg_info *pkg;
 
@@ -1095,14 +1249,14 @@ static struct packet *client_pd_mouse_move(pid_t pid, int handle, const struct p
 		goto out;
 	}
 
-	ret = packet_get(packet, "ssiiddd", &pkgname, &id, &w, &h, &timestamp, &x, &y);
-	if (ret != 7) {
+	ret = packet_get(packet, "ssdii", &pkgname, &id, &timestamp, &x, &y);
+	if (ret != 5) {
 		ErrPrint("Parameter is not matched\n");
 		ret = -EINVAL;
 		goto out;
 	}
 
-	DbgPrint("(%dx%d) - (%lfx%lf)\n", w, h, x, y);
+	DbgPrint("(%dx%d)\n", x, y);
 	/*!
 	 * \NOTE:
 	 * Trust the package name which are sent by the client.
@@ -1177,7 +1331,7 @@ static struct packet *client_pd_mouse_move(pid_t pid, int handle, const struct p
 		}
 
 		script_handler_update_pointer(script, x, y, -1);
-		evas_event_feed_mouse_move(e, x * w, y * h, timestamp, NULL);
+		evas_event_feed_mouse_move(e, x, y, timestamp, NULL);
 		ret = 0;
 	} else {
 		ErrPrint("Unsupported package\n");
@@ -1195,11 +1349,9 @@ static struct packet *client_lb_mouse_move(pid_t pid, int handle, const struct p
 	const char *pkgname;
 	const char *id;
 	int ret;
-	int w;
-	int h;
 	double timestamp;
-	double x;
-	double y;
+	int x;
+	int y;
 	struct inst_info *inst;
 	const struct pkg_info *pkg;
 
@@ -1210,8 +1362,8 @@ static struct packet *client_lb_mouse_move(pid_t pid, int handle, const struct p
 		goto out;
 	}
 
-	ret = packet_get(packet, "ssiiddd", &pkgname, &id, &w, &h, &timestamp, &x, &y);
-	if (ret != 7) {
+	ret = packet_get(packet, "ssdii", &pkgname, &id, &timestamp, &x, &y);
+	if (ret != 5) {
 		ErrPrint("Parameter is not matched\n");
 		ret = -EINVAL;
 		goto out;
@@ -1290,7 +1442,7 @@ static struct packet *client_lb_mouse_move(pid_t pid, int handle, const struct p
 		}
 
 		script_handler_update_pointer(script, x, y, -1);
-		evas_event_feed_mouse_move(e, x * w, y * h, timestamp, NULL);
+		evas_event_feed_mouse_move(e, x, y, timestamp, NULL);
 		ret = 0;
 	} else {
 		ErrPrint("Unsupported package\n");
@@ -1302,17 +1454,21 @@ out:
 	return NULL;
 }
 
-static struct packet *client_lb_mouse_enter(pid_t pid, int handle, const struct packet *packet) /* pid, pkgname, filename, width, height, timestamp, x, y, ret */
+static int inst_del_cb(struct inst_info *inst, void *data)
+{
+	event_deactivate();
+	return -1; /* Delete this callback */
+}
+
+static struct packet *client_lb_mouse_set(pid_t pid, int handle, const struct packet *packet)
 {
 	struct client_node *client;
 	const char *pkgname;
 	const char *id;
 	int ret;
-	int w;
-	int h;
 	double timestamp;
-	double x;
-	double y;
+	int x;
+	int y;
 	struct inst_info *inst;
 	const struct pkg_info *pkg;
 
@@ -1323,8 +1479,283 @@ static struct packet *client_lb_mouse_enter(pid_t pid, int handle, const struct 
 		goto out;
 	}
 
-	ret = packet_get(packet, "ssiiddd", &pkgname, &id, &w, &h, &timestamp, &x, &y);
-	if (ret != 7) {
+	ret = packet_get(packet, "ssdii", &pkgname, &id, &timestamp, &x, &y);
+	if (ret != 5) {
+		ErrPrint("Parameter is not matched\n");
+		ret = -EINVAL;
+		goto out;
+	}
+
+	inst = package_find_instance_by_id(pkgname, id);
+	if (!inst) {
+		ErrPrint("Instance[%s] is not exists\n", id);
+		ret = -ENOENT;
+		goto out;
+	}
+
+	pkg = instance_package(inst);
+	if (!pkg) {
+		ErrPrint("Package[%s] info is not exists\n", pkgname);
+		ret = -EFAULT;
+		goto out;
+	}
+
+	if (package_is_fault(pkg)) {
+		/*!
+		 * \note
+		 * If the package is registered as fault module,
+		 * slave has not load it, so we don't need to do anything at here!
+		 */
+		DbgPrint("Package[%s] is faulted\n", pkgname);
+		ret = -EFAULT;
+	} else if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
+		if (event_is_activated()) {
+			if (event_deactivate() == 0)
+				instance_event_callback_del(inst, INSTANCE_EVENT_DESTROY, inst_del_cb);
+		}
+
+		ret = event_activate(x, y, event_lb_route_cb, inst);
+		if (ret == 0)
+			instance_event_callback_add(inst, INSTANCE_EVENT_DESTROY, inst_del_cb, NULL);
+	} else if (package_lb_type(pkg) == LB_TYPE_SCRIPT) {
+		if (event_is_activated()) {
+			if (event_deactivate() == 0)
+				instance_event_callback_del(inst, INSTANCE_EVENT_DESTROY, inst_del_cb);
+		}
+
+		ret = event_activate(x, y, event_lb_consume_cb, inst);
+		if (ret == 0)
+			instance_event_callback_add(inst, INSTANCE_EVENT_DESTROY, inst_del_cb, NULL);
+	} else {
+		ErrPrint("Unsupported package\n");
+		ret = -EINVAL;
+	}
+out:
+	return NULL;
+}
+
+static struct packet *client_lb_mouse_unset(pid_t pid, int handle, const struct packet *packet)
+{
+	struct client_node *client;
+	const char *pkgname;
+	const char *id;
+	int ret;
+	double timestamp;
+	int x;
+	int y;
+	struct inst_info *inst;
+	const struct pkg_info *pkg;
+	client = client_find_by_pid(pid);
+	if (!client) {
+		ErrPrint("Client %d is not exists\n", pid);
+		ret = -ENOENT;
+		goto out;
+	}
+	ret = packet_get(packet, "ssdii", &pkgname, &id, &timestamp, &x, &y);
+	if (ret != 5) {
+		ErrPrint("Parameter is not matched\n");
+		ret = -EINVAL;
+		goto out;
+	}
+
+	inst = package_find_instance_by_id(pkgname, id);
+	if (!inst) {
+		ErrPrint("Instance[%s] is not exists\n", id);
+		ret = -ENOENT;
+		goto out;
+	}
+
+	pkg = instance_package(inst);
+	if (!pkg) {
+		ErrPrint("Package[%s] info is not exists\n", pkgname);
+		ret = -EFAULT;
+		goto out;
+	}
+
+	if (package_is_fault(pkg)) {
+		/*!
+		 * \note
+		 * If the package is registered as fault module,
+		 * slave has not load it, so we don't need to do anything at here!
+		 */
+		DbgPrint("Package[%s] is faulted\n", pkgname);
+		ret = -EFAULT;
+	} else if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
+		ret = event_deactivate();
+		if (ret == 0)
+			instance_event_callback_del(inst, INSTANCE_EVENT_DESTROY, inst_del_cb);
+	} else if (package_lb_type(pkg) == LB_TYPE_SCRIPT) {
+		ret = event_deactivate();
+		if (ret == 0)
+			instance_event_callback_del(inst, INSTANCE_EVENT_DESTROY, inst_del_cb);
+	} else {
+		ErrPrint("Unsupported package\n");
+		ret = -EINVAL;
+	}
+out:
+	return NULL;
+}
+
+static struct packet *client_pd_mouse_set(pid_t pid, int handle, const struct packet *packet)
+{
+	struct client_node *client;
+	const char *pkgname;
+	const char *id;
+	int ret;
+	double timestamp;
+	int x;
+	int y;
+	struct inst_info *inst;
+	const struct pkg_info *pkg;
+
+	client = client_find_by_pid(pid);
+	if (!client) {
+		ErrPrint("Client %d is not exists\n", pid);
+		ret = -ENOENT;
+		goto out;
+	}
+
+	ret = packet_get(packet, "ssdii", &pkgname, &id, &timestamp, &x, &y);
+	if (ret != 5) {
+		ErrPrint("Parameter is not matched\n");
+		ret = -EINVAL;
+		goto out;
+	}
+
+	inst = package_find_instance_by_id(pkgname, id);
+	if (!inst) {
+		ErrPrint("Instance[%s] is not exists\n", id);
+		ret = -ENOENT;
+		goto out;
+	}
+
+	pkg = instance_package(inst);
+	if (!pkg) {
+		ErrPrint("Package[%s] info is not exists\n", pkgname);
+		ret = -EFAULT;
+		goto out;
+	}
+
+	if (package_is_fault(pkg)) {
+		/*!
+		 * \note
+		 * If the package is registered as fault module,
+		 * slave has not load it, so we don't need to do anything at here!
+		 */
+		DbgPrint("Package[%s] is faulted\n", pkgname);
+		ret = -EFAULT;
+	} else if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
+		if (event_is_activated()) {
+			if (event_deactivate() == 0)
+				instance_event_callback_del(inst, INSTANCE_EVENT_DESTROY, inst_del_cb);
+		}
+
+		ret = event_activate(x, y, event_pd_route_cb, inst);
+		if (ret == 0)
+			instance_event_callback_add(inst, INSTANCE_EVENT_DESTROY, inst_del_cb, NULL);
+	} else if (package_pd_type(pkg) == PD_TYPE_SCRIPT) {
+		if (event_is_activated()) {
+			if (event_deactivate() == 0)
+				instance_event_callback_del(inst, INSTANCE_EVENT_DESTROY, inst_del_cb);
+		}
+
+		ret = event_activate(x, y, event_pd_consume_cb, inst);
+		if (ret == 0)
+			instance_event_callback_add(inst, INSTANCE_EVENT_DESTROY, inst_del_cb, NULL);
+	} else {
+		ErrPrint("Unsupported package\n");
+		ret = -EINVAL;
+	}
+
+out:
+	return NULL;
+}
+
+static struct packet *client_pd_mouse_unset(pid_t pid, int handle, const struct packet *packet)
+{
+	struct client_node *client;
+	const char *pkgname;
+	const char *id;
+	int ret;
+	double timestamp;
+	int x;
+	int y;
+	struct inst_info *inst;
+	const struct pkg_info *pkg;
+
+	client = client_find_by_pid(pid);
+	if (!client) {
+		ErrPrint("Client %d is not exists\n", pid);
+		ret = -ENOENT;
+		goto out;
+	}
+
+	ret = packet_get(packet, "ssdii", &pkgname, &id, &timestamp, &x, &y);
+	if (ret != 5) {
+		ErrPrint("Parameter is not matched\n");
+		ret = -EINVAL;
+		goto out;
+	}
+
+	inst = package_find_instance_by_id(pkgname, id);
+	if (!inst) {
+		ErrPrint("Instance[%s] is not exists\n", id);
+		ret = -ENOENT;
+		goto out;
+	}
+
+	pkg = instance_package(inst);
+	if (!pkg) {
+		ErrPrint("Package[%s] info is not exists\n", pkgname);
+		ret = -EFAULT;
+		goto out;
+	}
+
+	if (package_is_fault(pkg)) {
+		/*!
+		 * \note
+		 * If the package is registered as fault module,
+		 * slave has not load it, so we don't need to do anything at here!
+		 */
+		DbgPrint("Package[%s] is faulted\n", pkgname);
+		ret = -EFAULT;
+	} else if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
+		ret = event_deactivate();
+		if (ret == 0)
+			instance_event_callback_del(inst, INSTANCE_EVENT_DESTROY, inst_del_cb);
+	} else if (package_pd_type(pkg) == PD_TYPE_SCRIPT) {
+		ret = event_deactivate();
+		if (ret == 0)
+			instance_event_callback_del(inst, INSTANCE_EVENT_DESTROY, inst_del_cb);
+	} else {
+		ErrPrint("Unsupported package\n");
+		ret = -EINVAL;
+	}
+out:
+	return NULL;
+}
+
+static struct packet *client_lb_mouse_enter(pid_t pid, int handle, const struct packet *packet) /* pid, pkgname, filename, width, height, timestamp, x, y, ret */
+{
+	struct client_node *client;
+	const char *pkgname;
+	const char *id;
+	int ret;
+	double timestamp;
+	int x;
+	int y;
+	struct inst_info *inst;
+	const struct pkg_info *pkg;
+
+	client = client_find_by_pid(pid);
+	if (!client) {
+		ErrPrint("Client %d is not exists\n", pid);
+		ret = -ENOENT;
+		goto out;
+	}
+
+	ret = packet_get(packet, "ssdii", &pkgname, &id, &timestamp, &x, &y);
+	if (ret != 5) {
 		ErrPrint("Parameter is not matched\n");
 		ret = -EINVAL;
 		goto out;
@@ -1421,11 +1852,9 @@ static struct packet *client_lb_mouse_leave(pid_t pid, int handle, const struct 
 	const char *pkgname;
 	const char *id;
 	int ret;
-	int w;
-	int h;
 	double timestamp;
-	double x;
-	double y;
+	int x;
+	int y;
 	struct inst_info *inst;
 	const struct pkg_info *pkg;
 
@@ -1436,8 +1865,8 @@ static struct packet *client_lb_mouse_leave(pid_t pid, int handle, const struct 
 		goto out;
 	}
 
-	ret = packet_get(packet, "ssiiddd", &pkgname, &id, &w, &h, &timestamp, &x, &y);
-	if (ret != 7) {
+	ret = packet_get(packet, "ssdii", &pkgname, &id, &timestamp, &x, &y);
+	if (ret != 5) {
 		ErrPrint("Parameter is not matched\n");
 		ret = -EINVAL;
 		goto out;
@@ -1535,11 +1964,9 @@ static struct packet *client_lb_mouse_down(pid_t pid, int handle, const struct p
 	const char *pkgname;
 	const char *id;
 	int ret;
-	int w;
-	int h;
 	double timestamp;
-	double x;
-	double y;
+	int x;
+	int y;
 	struct inst_info *inst;
 	const struct pkg_info *pkg;
 
@@ -1550,8 +1977,8 @@ static struct packet *client_lb_mouse_down(pid_t pid, int handle, const struct p
 		goto out;
 	}
 
-	ret = packet_get(packet, "ssiiddd", &pkgname, &id, &w, &h, &timestamp, &x, &y);
-	if (ret != 7) {
+	ret = packet_get(packet, "ssdii", &pkgname, &id, &timestamp, &x, &y);
+	if (ret != 5) {
 		ErrPrint("Parameter is not matched\n");
 		ret = -EINVAL;
 		goto out;
@@ -1631,7 +2058,7 @@ static struct packet *client_lb_mouse_down(pid_t pid, int handle, const struct p
 		}
 
 		script_handler_update_pointer(script, x, y, 1);
-		evas_event_feed_mouse_move(e, x * w, y * h, timestamp, NULL);
+		evas_event_feed_mouse_move(e, x, y, timestamp, NULL);
 		evas_event_feed_mouse_down(e, 1, EVAS_BUTTON_NONE, timestamp + 0.01f, NULL);
 		ret = 0;
 	} else {
@@ -1650,11 +2077,9 @@ static struct packet *client_lb_mouse_up(pid_t pid, int handle, const struct pac
 	const char *pkgname;
 	const char *id;
 	int ret;
-	int w;
-	int h;
 	double timestamp;
-	double x;
-	double y;
+	int x;
+	int y;
 	struct inst_info *inst;
 	const struct pkg_info *pkg;
 
@@ -1665,8 +2090,8 @@ static struct packet *client_lb_mouse_up(pid_t pid, int handle, const struct pac
 		goto out;
 	}
 
-	ret = packet_get(packet, "ssiiddd", &pkgname, &id, &w, &h, &timestamp, &x, &y);
-	if (ret != 7) {
+	ret = packet_get(packet, "ssdii", &pkgname, &id, &timestamp, &x, &y);
+	if (ret != 5) {
 		ErrPrint("Parameter is not matched\n");
 		ret = -EINVAL;
 		goto out;
@@ -1746,7 +2171,7 @@ static struct packet *client_lb_mouse_up(pid_t pid, int handle, const struct pac
 		}
 
 		script_handler_update_pointer(script, x, y, 0);
-		evas_event_feed_mouse_move(e, x * w, y * h, timestamp, NULL);
+		evas_event_feed_mouse_move(e, x, y, timestamp, NULL);
 		evas_event_feed_mouse_up(e, 1, EVAS_BUTTON_NONE, timestamp + 0.1f, NULL);
 		ret = 0;
 	} else {
@@ -1765,11 +2190,9 @@ static struct packet *client_pd_access_read(pid_t pid, int handle, const struct 
 	const char *pkgname;
 	const char *id;
 	int ret;
-	int w;
-	int h;
 	double timestamp;
-	double x;
-	double y;
+	int x;
+	int y;
 	struct inst_info *inst;
 	const struct pkg_info *pkg;
 
@@ -1780,8 +2203,8 @@ static struct packet *client_pd_access_read(pid_t pid, int handle, const struct 
 		goto out;
 	}
 
-	ret = packet_get(packet, "ssiiddd", &pkgname, &id, &w, &h, &timestamp, &x, &y);
-	if (ret != 7) {
+	ret = packet_get(packet, "ssdii", &pkgname, &id, &timestamp, &x, &y);
+	if (ret != 5) {
 		ErrPrint("Invalid parameter\n");
 		ret = -EINVAL;
 		goto out;
@@ -1881,11 +2304,9 @@ static struct packet *client_pd_access_read_prev(pid_t pid, int handle, const st
 	const char *pkgname;
 	const char *id;
 	int ret;
-	int w;
-	int h;
 	double timestamp;
-	double x;
-	double y;
+	int x;
+	int y;
 	struct inst_info *inst;
 	const struct pkg_info *pkg;
 
@@ -1896,8 +2317,8 @@ static struct packet *client_pd_access_read_prev(pid_t pid, int handle, const st
 		goto out;
 	}
 
-	ret = packet_get(packet, "ssiiddd", &pkgname, &id, &w, &h, &timestamp, &x, &y);
-	if (ret != 7) {
+	ret = packet_get(packet, "ssdii", &pkgname, &id, &timestamp, &x, &y);
+	if (ret != 5) {
 		ErrPrint("Invalid parameter\n");
 		ret = -EINVAL;
 		goto out;
@@ -1997,11 +2418,9 @@ static struct packet *client_pd_access_read_next(pid_t pid, int handle, const st
 	const char *pkgname;
 	const char *id;
 	int ret;
-	int w;
-	int h;
 	double timestamp;
-	double x;
-	double y;
+	int x;
+	int y;
 	struct inst_info *inst;
 	const struct pkg_info *pkg;
 
@@ -2012,8 +2431,8 @@ static struct packet *client_pd_access_read_next(pid_t pid, int handle, const st
 		goto out;
 	}
 
-	ret = packet_get(packet, "ssiiddd", &pkgname, &id, &w, &h, &timestamp, &x, &y);
-	if (ret != 7) {
+	ret = packet_get(packet, "ssdii", &pkgname, &id, &timestamp, &x, &y);
+	if (ret != 5) {
 		ErrPrint("Invalid parameter\n");
 		ret = -EINVAL;
 		goto out;
@@ -2113,11 +2532,9 @@ static struct packet *client_pd_access_activate(pid_t pid, int handle, const str
 	const char *pkgname;
 	const char *id;
 	int ret;
-	int w;
-	int h;
 	double timestamp;
-	double x;
-	double y;
+	int x;
+	int y;
 	struct inst_info *inst;
 	const struct pkg_info *pkg;
 
@@ -2128,8 +2545,8 @@ static struct packet *client_pd_access_activate(pid_t pid, int handle, const str
 		goto out;
 	}
 
-	ret = packet_get(packet, "ssiiddd", &pkgname, &id, &w, &h, &timestamp, &x, &y);
-	if (ret != 7) {
+	ret = packet_get(packet, "ssdii", &pkgname, &id, &timestamp, &x, &y);
+	if (ret != 5) {
 		ErrPrint("Invalid parameter\n");
 		ret = -EINVAL;
 		goto out;
@@ -2229,11 +2646,9 @@ static struct packet *client_pd_key_down(pid_t pid, int handle, const struct pac
 	const char *pkgname;
 	const char *id;
 	int ret;
-	int w;
-	int h;
 	double timestamp;
-	double x;
-	double y;
+	int x;
+	int y;
 	struct inst_info *inst;
 	const struct pkg_info *pkg;
 
@@ -2244,8 +2659,8 @@ static struct packet *client_pd_key_down(pid_t pid, int handle, const struct pac
 		goto out;
 	}
 
-	ret = packet_get(packet, "ssiiddd", &pkgname, &id, &w, &h, &timestamp, &x, &y);
-	if (ret != 7) {
+	ret = packet_get(packet, "ssdii", &pkgname, &id, &timestamp, &x, &y);
+	if (ret != 5) {
 		ErrPrint("Invalid parameter\n");
 		ret = -EINVAL;
 		goto out;
@@ -2403,11 +2818,9 @@ static struct packet *client_pd_key_up(pid_t pid, int handle, const struct packe
 	const char *pkgname;
 	const char *id;
 	int ret;
-	int w;
-	int h;
 	double timestamp;
-	double x;
-	double y;
+	int x;
+	int y;
 	struct inst_info *inst;
 	const struct pkg_info *pkg;
 
@@ -2418,7 +2831,7 @@ static struct packet *client_pd_key_up(pid_t pid, int handle, const struct packe
 		goto out;
 	}
 
-	ret = packet_get(packet, "ssiiddd", &pkgname, &id, &w, &h, &timestamp, &x, &y);
+	ret = packet_get(packet, "ssdii", &pkgname, &id, &timestamp, &x, &y);
 	if (ret != 7) {
 		ErrPrint("Invalid parameter\n");
 		ret = -EINVAL;
@@ -2519,11 +2932,9 @@ static struct packet *client_lb_access_read(pid_t pid, int handle, const struct 
 	const char *pkgname;
 	const char *id;
 	int ret;
-	int w;
-	int h;
 	double timestamp;
-	double x;
-	double y;
+	int x;
+	int y;
 	struct inst_info *inst;
 	const struct pkg_info *pkg;
 
@@ -2534,7 +2945,7 @@ static struct packet *client_lb_access_read(pid_t pid, int handle, const struct 
 		goto out;
 	}
 
-	ret = packet_get(packet, "ssiiddd", &pkgname, &id, &w, &h, &timestamp, &x, &y);
+	ret = packet_get(packet, "ssdii", &pkgname, &id, &timestamp, &x, &y);
 	if (ret != 7) {
 		ErrPrint("Parameter is not matched\n");
 		ret = -EINVAL;
@@ -2636,11 +3047,9 @@ static struct packet *client_lb_access_read_prev(pid_t pid, int handle, const st
 	const char *pkgname;
 	const char *id;
 	int ret;
-	int w;
-	int h;
 	double timestamp;
-	double x;
-	double y;
+	int x;
+	int y;
 	struct inst_info *inst;
 	const struct pkg_info *pkg;
 
@@ -2651,7 +3060,7 @@ static struct packet *client_lb_access_read_prev(pid_t pid, int handle, const st
 		goto out;
 	}
 
-	ret = packet_get(packet, "ssiiddd", &pkgname, &id, &w, &h, &timestamp, &x, &y);
+	ret = packet_get(packet, "ssdii", &pkgname, &id, &timestamp, &x, &y);
 	if (ret != 7) {
 		ErrPrint("Parameter is not matched\n");
 		ret = -EINVAL;
@@ -2753,11 +3162,9 @@ static struct packet *client_lb_access_read_next(pid_t pid, int handle, const st
 	const char *pkgname;
 	const char *id;
 	int ret;
-	int w;
-	int h;
 	double timestamp;
-	double x;
-	double y;
+	int x;
+	int y;
 	struct inst_info *inst;
 	const struct pkg_info *pkg;
 
@@ -2768,7 +3175,7 @@ static struct packet *client_lb_access_read_next(pid_t pid, int handle, const st
 		goto out;
 	}
 
-	ret = packet_get(packet, "ssiiddd", &pkgname, &id, &w, &h, &timestamp, &x, &y);
+	ret = packet_get(packet, "ssdii", &pkgname, &id, &timestamp, &x, &y);
 	if (ret != 7) {
 		ErrPrint("Parameter is not matched\n");
 		ret = -EINVAL;
@@ -2870,11 +3277,9 @@ static struct packet *client_lb_access_activate(pid_t pid, int handle, const str
 	const char *pkgname;
 	const char *id;
 	int ret;
-	int w;
-	int h;
 	double timestamp;
-	double x;
-	double y;
+	int x;
+	int y;
 	struct inst_info *inst;
 	const struct pkg_info *pkg;
 
@@ -2885,7 +3290,7 @@ static struct packet *client_lb_access_activate(pid_t pid, int handle, const str
 		goto out;
 	}
 
-	ret = packet_get(packet, "ssiiddd", &pkgname, &id, &w, &h, &timestamp, &x, &y);
+	ret = packet_get(packet, "ssdii", &pkgname, &id, &timestamp, &x, &y);
 	if (ret != 7) {
 		ErrPrint("Parameter is not matched\n");
 		ret = -EINVAL;
@@ -2987,11 +3392,9 @@ static struct packet *client_lb_key_down(pid_t pid, int handle, const struct pac
 	const char *pkgname;
 	const char *id;
 	int ret;
-	int w;
-	int h;
 	double timestamp;
-	double x;
-	double y;
+	int x;
+	int y;
 	struct inst_info *inst;
 	const struct pkg_info *pkg;
 
@@ -3002,7 +3405,7 @@ static struct packet *client_lb_key_down(pid_t pid, int handle, const struct pac
 		goto out;
 	}
 
-	ret = packet_get(packet, "ssiiddd", &pkgname, &id, &w, &h, &timestamp, &x, &y);
+	ret = packet_get(packet, "ssdii", &pkgname, &id, &timestamp, &x, &y);
 	if (ret != 7) {
 		ErrPrint("Parameter is not matched\n");
 		ret = -EINVAL;
@@ -3104,11 +3507,9 @@ static struct packet *client_lb_key_up(pid_t pid, int handle, const struct packe
 	const char *pkgname;
 	const char *id;
 	int ret;
-	int w;
-	int h;
 	double timestamp;
-	double x;
-	double y;
+	int x;
+	int y;
 	struct inst_info *inst;
 	const struct pkg_info *pkg;
 
@@ -3119,7 +3520,7 @@ static struct packet *client_lb_key_up(pid_t pid, int handle, const struct packe
 		goto out;
 	}
 
-	ret = packet_get(packet, "ssiiddd", &pkgname, &id, &w, &h, &timestamp, &x, &y);
+	ret = packet_get(packet, "ssdii", &pkgname, &id, &timestamp, &x, &y);
 	if (ret != 7) {
 		ErrPrint("Parameter is not matched\n");
 		ret = -EINVAL;
@@ -5262,6 +5663,22 @@ static struct method s_client_table[] = {
 	{
 		.cmd = "lb_mouse_leave",
 		.handler = client_lb_mouse_leave, /* pid, pkgname, filename, width, height, timestamp, x, y, ret */
+	},
+	{
+		.cmd = "lb_mouse_set",
+		.handler = client_lb_mouse_set,
+	},
+	{
+		.cmd = "lb_mouse_unset",
+		.handler = client_lb_mouse_unset,
+	},
+	{
+		.cmd = "pd_mouse_set",
+		.handler = client_pd_mouse_set,
+	},
+	{
+		.cmd = "pd_mouse_unset",
+		.handler = client_pd_mouse_unset,
 	},
 	{
 		.cmd = "change,visibility",

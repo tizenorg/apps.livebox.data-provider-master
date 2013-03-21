@@ -308,8 +308,8 @@ static struct packet *client_clicked(pid_t pid, int handle, const struct packet 
 	const char *id;
 	const char *event;
 	double timestamp;
-	int x;
-	int y;
+	double x;
+	double y;
 	int ret;
 	struct inst_info *inst;
 
@@ -320,14 +320,14 @@ static struct packet *client_clicked(pid_t pid, int handle, const struct packet 
 		goto out;
 	}
 
-	ret = packet_get(packet, "sssdii", &pkgname, &id, &event, &timestamp, &x, &y);
+	ret = packet_get(packet, "sssddd", &pkgname, &id, &event, &timestamp, &x, &y);
 	if (ret != 6) {
 		ErrPrint("Parameter is not matched\n");
 		ret = -EINVAL;
 		goto out;
 	}
 
-	DbgPrint("pid[%d] pkgname[%s] id[%s] event[%s] timestamp[%lf] x[%d] y[%d]\n", pid, pkgname, id, event, timestamp, x, y);
+	DbgPrint("pid[%d] pkgname[%s] id[%s] event[%s] timestamp[%lf] x[%lf] y[%lf]\n", pid, pkgname, id, event, timestamp, x, y);
 
 	/*!
 	 * \NOTE:

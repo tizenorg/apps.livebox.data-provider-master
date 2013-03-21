@@ -72,6 +72,11 @@ struct period_cbdata {
 	double period;
 };
 
+struct event_item {
+	int (*event_cb)(struct inst_info *inst, void *data);
+	void *data;
+};
+
 struct inst_info {
 	struct pkg_info *info;
 
@@ -129,6 +134,8 @@ struct inst_info {
 	int refcnt;
 
 	Ecore_Timer *update_timer; /*!< Only used for secured livebox */
+
+	Eina_List *delete_event_list;
 };
 
 #define CLIENT_SEND_EVENT(instance, packet)	((instance)->client ? client_rpc_async_request((instance)->client, (packet)) : client_broadcast((instance), (packet)))
@@ -442,12 +449,81 @@ static int send_pd_destroyed_to_client(struct inst_info *inst, int status)
 	return CLIENT_SEND_EVENT(inst, packet);
 }
 
+static inline void invoke_delete_callbacks(struct inst_info *inst)
+{
+	Eina_List *l;
+	Eina_List *n;
+	struct event_item *item;
+
+	EINA_LIST_FOREACH_SAFE(inst->delete_event_list, l, n, item) {
+		if (item->event_cb(inst, item->data) < 0) {
+			if (eina_list_data_find(inst->delete_event_list, item)) {
+				inst->delete_event_list = eina_list_remove(inst->delete_event_list, item);
+				free(item);
+			}
+		}
+	}
+}
+
+HAPI int instance_event_callback_add(struct inst_info *inst, enum instance_event type, int (*event_cb)(struct inst_info *inst, void *data), void *data)
+{
+	struct event_item *item;
+
+	if (!event_cb)
+		return -EINVAL;
+
+	switch (type) {
+	case INSTANCE_EVENT_DESTROY:
+		item = malloc(sizeof(*item));
+		if (!item) {
+			ErrPrint("Heap: %s\n", strerror(errno));
+			return -ENOMEM;
+		}
+
+		item->event_cb = event_cb;
+		item->data = data;
+
+		inst->delete_event_list = eina_list_append(inst->delete_event_list, item);
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+HAPI int instance_event_callback_del(struct inst_info *inst, enum instance_event type, int (*event_cb)(struct inst_info *inst, void *data))
+{
+	Eina_List *l;
+	Eina_List *n;
+	struct event_item *item;
+
+	switch (type) {
+	case INSTANCE_EVENT_DESTROY:
+		EINA_LIST_FOREACH_SAFE(inst->delete_event_list, l, n, item) {
+			if (item->event_cb == event_cb) {
+				inst->delete_event_list = eina_list_remove(inst->delete_event_list, item);
+				free(item);
+				return 0;
+			}
+		}
+		break;
+	default:
+		break;
+	}
+
+	return -ENOENT;
+}
+
 static inline void destroy_instance(struct inst_info *inst)
 {
 	struct pkg_info *pkg;
 	enum lb_type lb_type;
 	enum pd_type pd_type;
 	struct slave_node *slave;
+	struct event_item *item;
+
+	invoke_delete_callbacks(inst);
 
 	pkg = inst->info;
 
@@ -492,6 +568,9 @@ static inline void destroy_instance(struct inst_info *inst)
 	 * will be released by the package object
 	 * it is readonly value for instances
 	 */
+	EINA_LIST_FREE(inst->delete_event_list, item) {
+		free(item);
+	}
 	DbgFree(inst->category);
 	DbgFree(inst->cluster);
 	DbgFree(inst->content);
@@ -2425,14 +2504,12 @@ HAPI int instance_slave_open_pd(struct inst_info *inst, struct client_node *clie
 	 */
 	if (package_pd_type(info) == PD_TYPE_BUFFER) {
 		instance_ref(inst);
-		if (client_event_callback_add(client, CLIENT_EVENT_DEACTIVATE, pd_buffer_close_cb, inst) < 0) {
+		if (client_event_callback_add(client, CLIENT_EVENT_DEACTIVATE, pd_buffer_close_cb, inst) < 0)
 			instance_unref(inst);
-		}
 	} else if (package_pd_type(info) == PD_TYPE_SCRIPT) {
 		instance_ref(inst);
-		if (client_event_callback_add(client, CLIENT_EVENT_DEACTIVATE, pd_script_close_cb, inst) < 0) {
+		if (client_event_callback_add(client, CLIENT_EVENT_DEACTIVATE, pd_script_close_cb, inst) < 0)
 			instance_unref(inst);
-		}
 	}
 
 	inst->pd.owner = client;

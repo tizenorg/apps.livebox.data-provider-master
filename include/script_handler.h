@@ -30,7 +30,7 @@ extern int script_init(void);
 extern int script_fini(void);
 
 extern int script_signal_emit(Evas *e, const char *part, const char *signal, double sx, double sy, double ex, double ey);
-extern int script_handler_update_pointer(struct script_info *inst, double x, double y, int down);
+extern int script_handler_update_pointer(struct script_info *inst, int x, int y, int down);
 extern int script_handler_resize(struct script_info *info, int w, int h);
 
 /* End of a file */

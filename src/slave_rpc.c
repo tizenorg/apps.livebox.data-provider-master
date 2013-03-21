@@ -19,6 +19,7 @@
 #include <errno.h> /* errno */
 #include <unistd.h> /* pid_t */
 #include <stdlib.h> /* free */
+#include <assert.h>
 
 #include <Eina.h>
 #include <Ecore.h>
@@ -291,10 +292,21 @@ static int slave_deactivate_cb(struct slave_node *slave, void *data)
 		ErrPrint("slave has no pong timer\n");
 	}
 
-	EINA_LIST_FOREACH_SAFE(s_info.command_list, l, n, command) {
-		if (command->slave == slave) {
-			s_info.command_list = eina_list_remove(s_info.command_list, command);
+	if (rpc->handle < 0) {
+		EINA_LIST_FREE(rpc->pending_list, command) {
+			assert(command->slave == slave);
+			if (command->ret_cb)
+				command->ret_cb(command->slave, NULL, command->cbdata);
 			destroy_command(command);
+		}
+	} else {
+		EINA_LIST_FOREACH_SAFE(s_info.command_list, l, n, command) {
+			if (command->slave == slave) {
+				s_info.command_list = eina_list_remove(s_info.command_list, command);
+				if (command->ret_cb)
+					command->ret_cb(command->slave, NULL, command->cbdata);
+				destroy_command(command);
+			}
 		}
 	}
 
@@ -302,7 +314,7 @@ static int slave_deactivate_cb(struct slave_node *slave, void *data)
 	 * \note
 	 * Reset handle
 	 */
-	DbgPrint("Reset handle for %d\n", slave_pid(slave));
+	DbgPrint("Reset handle for %d (%d)\n", slave_pid(slave), rpc->handle);
 	rpc->handle = -1;
 
 	/*!

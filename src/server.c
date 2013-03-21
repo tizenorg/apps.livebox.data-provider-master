@@ -3937,8 +3937,13 @@ static struct packet *client_pd_move(pid_t pid, int handle, const struct packet 
 				"pd,move", util_uri_to_path(instance_id(inst)),
 				0.0, 0.0, 0.0, 0.0, x, y, 0);
 	} else if (package_pd_type(instance_package(inst)) == PD_TYPE_SCRIPT) {
+		int ix;
+		int iy;
+
 		instance_slave_set_pd_pos(inst, x, y);
-		script_handler_update_pointer(instance_pd_script(inst), x, y, 0);
+		ix = x * instance_pd_width(inst);
+		iy = y * instance_pd_height(inst);
+		script_handler_update_pointer(instance_pd_script(inst), ix, iy, 0);
 		ret = instance_signal_emit(inst,
 				"pd,move", util_uri_to_path(instance_id(inst)),
 				0.0, 0.0, 0.0, 0.0, x, y, 0);
@@ -4005,6 +4010,8 @@ static struct packet *client_create_pd(pid_t pid, int handle, const struct packe
 		 * instance_client_pd_created(inst);
 		 */
 	} else if (package_pd_type(instance_package(inst)) == PD_TYPE_SCRIPT) {
+		int ix;
+		int iy;
 		/*!
 		 * \note
 		 * ret value should be cared but in this case,
@@ -4015,7 +4022,9 @@ static struct packet *client_create_pd(pid_t pid, int handle, const struct packe
 		 * so we can hanle it later.
 		 */
 		instance_slave_set_pd_pos(inst, x, y);
-		script_handler_update_pointer(instance_pd_script(inst), x, y, 0);
+		ix = x * instance_pd_width(inst);
+		iy = y * instance_pd_height(inst);
+		script_handler_update_pointer(instance_pd_script(inst), ix, iy, 0);
 		ret = instance_slave_open_pd(inst, client);
 		ret = script_handler_load(instance_pd_script(inst), 1);
 

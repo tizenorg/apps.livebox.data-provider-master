@@ -1,5 +1,5 @@
 /*
- * Copyright 2012  Samsung Electronics Co., Ltd
+ * Copyright 2013  Samsung Electronics Co., Ltd
  *
  * Licensed under the Flora License, Version 1.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -98,7 +98,7 @@ extern int client_unsubscribe(struct client_node *client, const char *cluster, c
 extern int client_is_subscribed(struct client_node *client, const char *cluster, const char *category);
 
 extern int client_init(void);
-extern int client_fini(void);
+extern void client_fini(void);
 
 extern int client_browse_list(const char *cluster, const char *category, int (*cb)(struct client_node *client, void *data), void *data);
 extern int client_nr_of_subscriber(const char *cluster, const char *category);

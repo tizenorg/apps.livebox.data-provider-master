@@ -1,5 +1,5 @@
 /*
- * Copyright 2012  Samsung Electronics Co., Ltd
+ * Copyright 2013  Samsung Electronics Co., Ltd
  *
  * Licensed under the Flora License, Version 1.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -27,6 +27,7 @@
 #include <packet.h>
 #include <com-core_packet.h>
 #include <livebox-service.h>
+#include <livebox-errno.h>
 
 #include "conf.h"
 #include "util.h"
@@ -188,7 +189,7 @@ static int viewer_deactivated_cb(struct client_node *client, void *data)
 	DbgPrint("%d is deleted from the list of viewer of %s(%s)\n", client_pid(client), package_name(instance_package(inst)), instance_id(inst));
 	if (!eina_list_data_find(inst->client_list, client)) {
 		DbgPrint("Not found\n");
-		return -ENOENT;
+		return LB_STATUS_ERROR_NOT_EXIST;
 	}
 
 	inst->client_list = eina_list_remove(inst->client_list, client);
@@ -208,7 +209,7 @@ static inline int pause_livebox(struct inst_info *inst)
 	packet = packet_create_noack("lb_pause", "ss", package_name(inst->info), inst->id);
 	if (!packet) {
 		ErrPrint("Failed to create a new packet\n");
-		return -EFAULT;
+		return LB_STATUS_ERROR_FAULT;
 	}
 
 	return slave_rpc_request_only(package_slave(inst->info), package_name(inst->info), packet, 0);
@@ -222,7 +223,7 @@ static inline int resume_livebox(struct inst_info *inst)
 	packet = packet_create_noack("lb_resume", "ss", package_name(inst->info), inst->id);
 	if (!packet) {
 		ErrPrint("Failed to create a new packet\n");
-		return -EFAULT;
+		return LB_STATUS_ERROR_FAULT;
 	}
 
 	return slave_rpc_request_only(package_slave(inst->info), package_name(inst->info), packet, 0);
@@ -245,7 +246,7 @@ static inline int instance_recover_visible_state(struct inst_info *inst)
 		instance_freeze_updator(inst);
 		break;
 	default:
-		ret = -EINVAL;
+		ret = LB_STATUS_ERROR_INVALID;
 		break;
 	}
 
@@ -253,11 +254,16 @@ static inline int instance_recover_visible_state(struct inst_info *inst)
 	return ret;
 }
 
-HAPI void instance_send_resized_event(struct inst_info *inst, int is_pd, int w, int h, int status)
+static inline void instance_send_resized_event(struct inst_info *inst, int is_pd, int w, int h, int status)
 {
 	struct packet *packet;
 	const char *pkgname;
 	const char *id;
+
+	if (!inst->info) {
+		ErrPrint("Instance info is not ready to use\n");
+		return;
+	}
 
 	pkgname = package_name(inst->info);
 	id = inst->id;
@@ -282,7 +288,7 @@ HAPI int instance_unicast_created_event(struct inst_info *inst, struct client_no
 	if (!client) {
 		client = inst->client;
 		if (!client)
-			return 0;
+			return LB_STATUS_SUCCESS;
 	}
 
 	lb_type = package_lb_type(inst->info);
@@ -319,7 +325,7 @@ HAPI int instance_unicast_created_event(struct inst_info *inst, struct client_no
 			inst->is_pinned_up);
 	if (!packet) {
 		ErrPrint("Failed to build a packet for %s\n", package_name(inst->info));
-		return -EFAULT;
+		return LB_STATUS_ERROR_FAULT;
 	}
 
 	return client_rpc_async_request(client, packet);
@@ -329,11 +335,10 @@ static int update_client_list(struct client_node *client, void *data)
 {
 	struct inst_info *inst = data;
 
-	if (!instance_has_client(inst, client)) {
+	if (!instance_has_client(inst, client))
 		instance_add_client(inst, client);
-	}
 
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 static int instance_broadcast_created_event(struct inst_info *inst)
@@ -381,7 +386,7 @@ static int instance_broadcast_created_event(struct inst_info *inst)
 			inst->is_pinned_up);
 	if (!packet) {
 		ErrPrint("Failed to build a packet for %s\n", package_name(inst->info));
-		return -EFAULT;
+		return LB_STATUS_ERROR_FAULT;
 	}
 
 	return CLIENT_SEND_EVENT(inst, packet);
@@ -394,13 +399,13 @@ HAPI int instance_unicast_deleted_event(struct inst_info *inst, struct client_no
 	if (!client) {
 		client = inst->client;
 		if (!client)
-			return -EINVAL;
+			return LB_STATUS_ERROR_INVALID;
 	}
 
 	packet = packet_create_noack("deleted", "ssd", package_name(inst->info), inst->id, inst->timestamp);
 	if (!packet) {
 		ErrPrint("Failed to build a packet for %s\n", package_name(inst->info));
-		return -EFAULT;
+		return LB_STATUS_ERROR_FAULT;
 	}
 		
 	return client_rpc_async_request(client, packet);
@@ -417,7 +422,7 @@ static int instance_broadcast_deleted_event(struct inst_info *inst)
 	packet = packet_create_noack("deleted", "ssd", package_name(inst->info), inst->id, inst->timestamp);
 	if (!packet) {
 		ErrPrint("Failed to build a packet for %s\n", package_name(inst->info));
-		return -EFAULT;
+		return LB_STATUS_ERROR_FAULT;
 	}
 		
 	ret = CLIENT_SEND_EVENT(inst, packet);
@@ -433,7 +438,7 @@ static int client_deactivated_cb(struct client_node *client, void *data)
 {
 	struct inst_info *inst = data;
 	instance_destroy(inst);
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 static int send_pd_destroyed_to_client(struct inst_info *inst, int status)
@@ -443,7 +448,7 @@ static int send_pd_destroyed_to_client(struct inst_info *inst, int status)
 	packet = packet_create_noack("pd_destroyed", "ssi", package_name(inst->info), inst->id, status);
 	if (!packet) {
 		ErrPrint("Failed to create a packet\n");
-		return -EFAULT;
+		return LB_STATUS_ERROR_FAULT;
 	}
 
 	return CLIENT_SEND_EVENT(inst, packet);
@@ -470,14 +475,14 @@ HAPI int instance_event_callback_add(struct inst_info *inst, enum instance_event
 	struct event_item *item;
 
 	if (!event_cb)
-		return -EINVAL;
+		return LB_STATUS_ERROR_INVALID;
 
 	switch (type) {
 	case INSTANCE_EVENT_DESTROY:
 		item = malloc(sizeof(*item));
 		if (!item) {
 			ErrPrint("Heap: %s\n", strerror(errno));
-			return -ENOMEM;
+			return LB_STATUS_ERROR_MEMORY;
 		}
 
 		item->event_cb = event_cb;
@@ -486,10 +491,10 @@ HAPI int instance_event_callback_add(struct inst_info *inst, enum instance_event
 		inst->delete_event_list = eina_list_append(inst->delete_event_list, item);
 		break;
 	default:
-		return -EINVAL;
+		return LB_STATUS_ERROR_INVALID;
 	}
 
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 HAPI int instance_event_callback_del(struct inst_info *inst, enum instance_event type, int (*event_cb)(struct inst_info *inst, void *data))
@@ -504,7 +509,7 @@ HAPI int instance_event_callback_del(struct inst_info *inst, enum instance_event
 			if (item->event_cb == event_cb) {
 				inst->delete_event_list = eina_list_remove(inst->delete_event_list, item);
 				free(item);
-				return 0;
+				return LB_STATUS_SUCCESS;
 			}
 		}
 		break;
@@ -512,7 +517,7 @@ HAPI int instance_event_callback_del(struct inst_info *inst, enum instance_event
 		break;
 	}
 
-	return -ENOENT;
+	return LB_STATUS_ERROR_NOT_EXIST;
 }
 
 static inline void destroy_instance(struct inst_info *inst)
@@ -575,7 +580,7 @@ static inline void destroy_instance(struct inst_info *inst)
 	DbgFree(inst->cluster);
 	DbgFree(inst->content);
 	DbgFree(inst->title);
-	util_unlink(inst->id);
+	util_unlink(util_uri_to_path(inst->id));
 	DbgFree(inst->id);
 	package_del_instance(inst->info, inst);
 	DbgFree(inst);
@@ -600,14 +605,14 @@ static inline int fork_package(struct inst_info *inst, const char *pkgname)
 	info = package_find(pkgname);
 	if (!info) {
 		ErrPrint("%s is not found\n", pkgname);
-		return -ENOENT;
+		return LB_STATUS_ERROR_NOT_EXIST;
 	}
 
 	len = strlen(SCHEMA_FILE "%s%s_%d_%lf.png") + strlen(IMAGE_PATH) + strlen(package_name(info)) + 50;
 	inst->id = malloc(len);
 	if (!inst->id) {
 		ErrPrint("Heap: %s\n", strerror(errno));
-		return -ENOMEM;
+		return LB_STATUS_ERROR_MEMORY;
 	}
 
 	snprintf(inst->id, len, SCHEMA_FILE "%s%s_%d_%lf.png", IMAGE_PATH, package_name(info), client_pid(inst->client), inst->timestamp);
@@ -629,7 +634,7 @@ static inline int fork_package(struct inst_info *inst, const char *pkgname)
 			timer_freeze(inst); /* Freeze the update timer as default */
 	}
 
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 HAPI struct inst_info *instance_create(struct client_node *client, double timestamp, const char *pkgname, const char *content, const char *cluster, const char *category, double period, int width, int height)
@@ -811,12 +816,12 @@ static void deactivate_cb(struct slave_node *slave, const struct packet *packet,
 		}
 
 		break;
-	case -EINVAL:
+	case LB_STATUS_ERROR_INVALID:
 		/*!
 		 * \note
 		 * Slave has no instance of this package.
 		 */
-	case -ENOENT:
+	case LB_STATUS_ERROR_NOT_EXIST:
 		/*!
 		 * \note
 		 * This instance's previous state is only can be the INST_ACTIVATED.
@@ -833,7 +838,7 @@ static void deactivate_cb(struct slave_node *slave, const struct packet *packet,
 		/*!
 		 * \note
 		 * Failed to unload this instance.
-		 * This is not possible, slave will always return -ENOENT, -EINVAL, or 0.
+		 * This is not possible, slave will always return LB_STATUS_ERROR_NOT_EXIST, LB_STATUS_ERROR_INVALID, or 0.
 		 * but care this exceptional case.
 		 */
 		DbgPrint("[%s] instance destroying ret(%d)\n", package_name(inst->info), ret);
@@ -1072,8 +1077,8 @@ static void activate_cb(struct slave_node *slave, const struct packet *packet, v
 		/*!
 		 * \note
 		 * Anyway this instance is loaded to the slave,
-		 * so just increase the loaded instance counter
-		 * After that, do reset jobs.
+		 * just increase the loaded instance counter
+		 * And then reset jobs.
 		 */
 		instance_set_lb_info(inst, w, h, priority, content, title);
 
@@ -1182,7 +1187,7 @@ HAPI int instance_destroy(struct inst_info *inst)
 
 	if (!inst) {
 		ErrPrint("Invalid instance handle\n");
-		return -EINVAL;
+		return LB_STATUS_ERROR_INVALID;
 	}
 
 	switch (inst->state) {
@@ -1190,15 +1195,15 @@ HAPI int instance_destroy(struct inst_info *inst)
 	case INST_REQUEST_TO_DESTROY:
 	case INST_REQUEST_TO_REACTIVATE:
 		inst->requested_state = INST_DESTROYED;
-		return 0;
+		return LB_STATUS_SUCCESS;
 	case INST_INIT:
 		inst->state = INST_DESTROYED;
 		inst->requested_state = INST_DESTROYED;
 		instance_unref(inst);
-		return 0;
+		return LB_STATUS_SUCCESS;
 	case INST_DESTROYED:
 		inst->requested_state = INST_DESTROYED;
-		return 0;
+		return LB_STATUS_SUCCESS;
 	default:
 		break;
 	}
@@ -1206,7 +1211,7 @@ HAPI int instance_destroy(struct inst_info *inst)
 	packet = packet_create("delete", "ss", package_name(inst->info), inst->id);
 	if (!packet) {
 		ErrPrint("Failed to build a packet for %s\n", package_name(inst->info));
-		return -EFAULT;
+		return LB_STATUS_ERROR_FAULT;
 	}
 
 	inst->requested_state = INST_DESTROYED;
@@ -1282,11 +1287,11 @@ HAPI int instance_state_reset(struct inst_info *inst)
 
 	if (!inst) {
 		ErrPrint("Invalid instance handle\n");
-		return -EINVAL;
+		return LB_STATUS_ERROR_INVALID;
 	}
 
 	if (inst->state == INST_DESTROYED)
-		return 0;
+		return LB_STATUS_SUCCESS;
 
 	lb_type = package_lb_type(inst->info);
 	pd_type = package_pd_type(inst->info);
@@ -1308,7 +1313,7 @@ HAPI int instance_state_reset(struct inst_info *inst)
 
 	inst->state = INST_INIT;
 	inst->requested_state = INST_INIT;
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 HAPI int instance_reactivate(struct inst_info *inst)
@@ -1318,12 +1323,12 @@ HAPI int instance_reactivate(struct inst_info *inst)
 
 	if (!inst) {
 		ErrPrint("Invalid instance handle\n");
-		return -EINVAL;
+		return LB_STATUS_ERROR_INVALID;
 	}
 
 	if (package_is_fault(inst->info)) {
 		DbgPrint("Fault package [%s]\n", package_name(inst->info));
-		return -EFAULT;
+		return LB_STATUS_ERROR_FAULT;
 	}
 
 	switch (inst->state) {
@@ -1331,10 +1336,10 @@ HAPI int instance_reactivate(struct inst_info *inst)
 	case INST_REQUEST_TO_ACTIVATE:
 	case INST_REQUEST_TO_REACTIVATE:
 		inst->requested_state = INST_ACTIVATED;
-		return 0;
+		return LB_STATUS_SUCCESS;
 	case INST_DESTROYED:
 	case INST_ACTIVATED:
-		return 0;
+		return LB_STATUS_SUCCESS;
 	case INST_INIT:
 	default:
 		break;
@@ -1353,11 +1358,11 @@ HAPI int instance_reactivate(struct inst_info *inst)
 			package_abi(inst->info));
 	if (!packet) {
 		ErrPrint("Failed to build a packet for %s\n", package_name(inst->info));
-		return -EFAULT;
+		return LB_STATUS_ERROR_FAULT;
 	}
 
 	ret = slave_activate(package_slave(inst->info));
-	if (ret < 0 && ret != -EALREADY) {
+	if (ret < 0 && ret != LB_STATUS_ERROR_ALREADY) {
 		/*!
 		 * \note
 		 * If the master failed to launch the slave,
@@ -1382,12 +1387,12 @@ HAPI int instance_activate(struct inst_info *inst)
 
 	if (!inst) {
 		ErrPrint("Invalid instance handle\n");
-		return -EINVAL;
+		return LB_STATUS_ERROR_INVALID;
 	}
 
 	if (package_is_fault(inst->info)) {
 		DbgPrint("Fault package [%s]\n", package_name(inst->info));
-		return -EFAULT;
+		return LB_STATUS_ERROR_FAULT;
 	}
 
 	switch (inst->state) {
@@ -1395,10 +1400,10 @@ HAPI int instance_activate(struct inst_info *inst)
 	case INST_REQUEST_TO_ACTIVATE:
 	case INST_REQUEST_TO_DESTROY:
 		inst->requested_state = INST_ACTIVATED;
-		return 0;
+		return LB_STATUS_SUCCESS;
 	case INST_ACTIVATED:
 	case INST_DESTROYED:
-		return 0;
+		return LB_STATUS_SUCCESS;
 	case INST_INIT:
 	default:
 		break;
@@ -1419,11 +1424,11 @@ HAPI int instance_activate(struct inst_info *inst)
 			inst->lb.height);
 	if (!packet) {
 		ErrPrint("Failed to build a packet for %s\n", package_name(inst->info));
-		return -EFAULT;
+		return LB_STATUS_ERROR_FAULT;
 	}
 
 	ret = slave_activate(package_slave(inst->info));
-	if (ret < 0 && ret != -EALREADY) {
+	if (ret < 0 && ret != LB_STATUS_ERROR_ALREADY) {
 		/*!
 		 * \note
 		 * If the master failed to launch the slave,
@@ -1597,12 +1602,18 @@ HAPI void instance_set_lb_info(struct inst_info *inst, int w, int h, double prio
 	if (priority >= 0.0f && priority <= 1.0f)
 		inst->lb.priority = priority;
 
+	if (inst->lb.width != w || inst->lb.height != h)
+		instance_send_resized_event(inst, IS_LB, w, h, 0);
+
 	inst->lb.width = w;
 	inst->lb.height = h;
 }
 
 HAPI void instance_set_pd_info(struct inst_info *inst, int w, int h)
 {
+	if (inst->pd.width != w || inst->pd.height != h)
+		instance_send_resized_event(inst, IS_PD, w, h, 0);
+
 	inst->pd.width = w;
 	inst->pd.height = h;
 }
@@ -1619,7 +1630,7 @@ static void pinup_cb(struct slave_node *slave, const struct packet *packet, void
 		 * \todo
 		 * Send pinup failed event to client.
 		 */
-		ret = -EINVAL;
+		ret = LB_STATUS_ERROR_INVALID;
 		goto out;
 	}
 
@@ -1628,7 +1639,7 @@ static void pinup_cb(struct slave_node *slave, const struct packet *packet, void
 		 * \todo
 		 * Send pinup failed event to client
 		 */
-		ret = -EINVAL;
+		ret = LB_STATUS_ERROR_INVALID;
 		goto out;
 	}
 
@@ -1642,7 +1653,7 @@ static void pinup_cb(struct slave_node *slave, const struct packet *packet, void
 			 * \note
 			 * send pinup failed event to client
 			 */
-			ret = -ENOMEM;
+			ret = LB_STATUS_ERROR_MEMORY;
 			goto out;
 		}
 	
@@ -1676,23 +1687,23 @@ HAPI int instance_set_pinup(struct inst_info *inst, int pinup)
 
 	if (!inst) {
 		ErrPrint("Invalid instance handle\n");
-		return -EINVAL;
+		return LB_STATUS_ERROR_INVALID;
 	}
 
 	if (package_is_fault(inst->info)) {
 		DbgPrint("Fault package [%s]\n", package_name(inst->info));
-		return -EFAULT;
+		return LB_STATUS_ERROR_FAULT;
 	}
 
 	if (!package_pinup(inst->info))
-		return -EINVAL;
+		return LB_STATUS_ERROR_INVALID;
 
 	if (pinup == inst->is_pinned_up)
-		return -EINVAL;
+		return LB_STATUS_ERROR_INVALID;
 
 	cbdata = malloc(sizeof(*cbdata));
 	if (!cbdata)
-		return -ENOMEM;
+		return LB_STATUS_ERROR_MEMORY;
 
 	cbdata->inst = instance_ref(inst);
 	cbdata->pinup = pinup;
@@ -1702,7 +1713,7 @@ HAPI int instance_set_pinup(struct inst_info *inst, int pinup)
 		ErrPrint("Failed to build a packet for %s\n", package_name(inst->info));
 		instance_unref(cbdata->inst);
 		DbgFree(cbdata);
-		return -EFAULT;
+		return LB_STATUS_ERROR_FAULT;
 	}
 
 	return slave_rpc_async_request(package_slave(inst->info), package_name(inst->info), packet, pinup_cb, cbdata, 0);
@@ -1711,31 +1722,31 @@ HAPI int instance_set_pinup(struct inst_info *inst, int pinup)
 HAPI int instance_freeze_updator(struct inst_info *inst)
 {
 	if (!inst->update_timer)
-		return -EINVAL;
+		return LB_STATUS_ERROR_INVALID;
 
 	DbgPrint("Freeze the update timer (%s)\n", inst->id);
 	timer_freeze(inst);
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 HAPI int instance_thaw_updator(struct inst_info *inst)
 {
 	if (!inst->update_timer)
-		return -EINVAL;
+		return LB_STATUS_ERROR_INVALID;
 
 	if (client_is_all_paused() || setting_is_lcd_off()) {
 		DbgPrint("Skip thaw (%s)\n", inst->id);
-		return -EINVAL;
+		return LB_STATUS_ERROR_INVALID;
 	}
 
 	if (inst->visible == LB_HIDE_WITH_PAUSE) {
 		DbgPrint("Live box is invisible (%s)\n", inst->id);
-		return -EINVAL;
+		return LB_STATUS_ERROR_INVALID;
 	}
 
 	DbgPrint("Thaw the update timer (%s)\n", inst->id);
 	timer_thaw(inst);
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 HAPI enum livebox_visible_state instance_visible_state(struct inst_info *inst)
@@ -1747,7 +1758,7 @@ HAPI int instance_set_visible_state(struct inst_info *inst, enum livebox_visible
 {
 	if (inst->visible == state) {
 		DbgPrint("Visibility has no changed\n");
-		return 0;
+		return LB_STATUS_SUCCESS;
 	}
 
 	switch (state) {
@@ -1771,10 +1782,10 @@ HAPI int instance_set_visible_state(struct inst_info *inst, enum livebox_visible
 		break;
 
 	default:
-		return -EINVAL;
+		return LB_STATUS_ERROR_INVALID;
 	}
 
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 static void resize_cb(struct slave_node *slave, const struct packet *packet, void *data)
@@ -1784,7 +1795,7 @@ static void resize_cb(struct slave_node *slave, const struct packet *packet, voi
 
 	if (!packet) {
 		ErrPrint("Invalid packet\n");
-		instance_send_resized_event(cbdata->inst, IS_LB, cbdata->inst->lb.width, cbdata->inst->lb.height, -EFAULT);
+		instance_send_resized_event(cbdata->inst, IS_LB, cbdata->inst->lb.width, cbdata->inst->lb.height, LB_STATUS_ERROR_FAULT);
 		instance_unref(cbdata->inst);
 		DbgFree(cbdata);
 		return;
@@ -1792,17 +1803,48 @@ static void resize_cb(struct slave_node *slave, const struct packet *packet, voi
 
 	if (packet_get(packet, "i", &ret) != 1) {
 		ErrPrint("Invalid parameter\n");
-		instance_send_resized_event(cbdata->inst, IS_LB, cbdata->inst->lb.width, cbdata->inst->lb.height, -EINVAL);
+		instance_send_resized_event(cbdata->inst, IS_LB, cbdata->inst->lb.width, cbdata->inst->lb.height, LB_STATUS_ERROR_INVALID);
 		instance_unref(cbdata->inst);
 		DbgFree(cbdata);
 		return;
 	}
 
-	if (ret == 0) {
+	if (ret == LB_STATUS_SUCCESS) {
 		/*!
 		 * \note
 		 * else waiting the first update with new size
 		 */
+		if (cbdata->inst->lb.width == cbdata->w && cbdata->inst->lb.height == cbdata->h) {
+			/*!
+			 * \note
+			 * Right after the viewer adds a new box,
+			 * Box has no size information, then it will try to use the default size,
+			 * After a box returns created event.
+			 *
+			 * A box will start to generate default size content.
+			 * But the viewer doesn't know it,.
+			 *
+			 * So the viewer will try to change the size of a box.
+			 *
+			 * At that time, the provider gots the size changed event from the box.
+			 * So it sent the size changed event to the viewer.
+			 * But the viewer ignores it. if it doesn't care the size changed event.
+			 * (even if it cares the size changed event, there is a timing issue)
+			 *
+			 * And the provider receives resize request,
+			 * right before send the size changed event.
+			 * but there is no changes about the size.
+			 *
+			 * Now the view will waits size changed event forever.
+			 * To resolve this timing issue.
+			 *
+			 * Check the size of a box from here.
+			 * And if the size is already updated, send the ALREADY event to the viewer
+			 * to get the size changed event callback correctly.
+			 */
+			instance_send_resized_event(cbdata->inst, IS_LB, cbdata->inst->lb.width, cbdata->inst->lb.height, LB_STATUS_ERROR_ALREADY);
+			DbgPrint("Livebox is already resized\n");
+		}
 	} else {
 		DbgPrint("Livebox rejects the new size: %dx%d (%d)\n", cbdata->w, cbdata->h, ret);
 		instance_send_resized_event(cbdata->inst, IS_LB, cbdata->inst->lb.width, cbdata->inst->lb.height, ret);
@@ -1820,18 +1862,18 @@ HAPI int instance_resize(struct inst_info *inst, int w, int h)
 
 	if (!inst) {
 		ErrPrint("Invalid instance handle\n");
-		return -EINVAL;
+		return LB_STATUS_ERROR_INVALID;
 	}
 
 	if (package_is_fault(inst->info)) {
 		ErrPrint("Fault package: %s\n", package_name(inst->info));
-		return -EFAULT;
+		return LB_STATUS_ERROR_FAULT;
 	}
 
 	cbdata = malloc(sizeof(*cbdata));
 	if (!cbdata) {
 		ErrPrint("Heap: %s\n", strerror(errno));
-		return -ENOMEM;
+		return LB_STATUS_ERROR_MEMORY;
 	}
 
 	cbdata->inst = instance_ref(inst);
@@ -1844,7 +1886,7 @@ HAPI int instance_resize(struct inst_info *inst, int w, int h)
 		ErrPrint("Failed to build a packet for %s\n", package_name(inst->info));
 		instance_unref(cbdata->inst);
 		DbgFree(cbdata);
-		return -EFAULT;
+		return LB_STATUS_ERROR_FAULT;
 	}
 
 	ret = slave_rpc_async_request(package_slave(inst->info), package_name(inst->info), packet, resize_cb, cbdata, 0);
@@ -1858,12 +1900,12 @@ static void set_period_cb(struct slave_node *slave, const struct packet *packet,
 	struct packet *result;
 
 	if (!packet) {
-		ret = -EFAULT;
+		ret = LB_STATUS_ERROR_FAULT;
 		goto out;
 	}
 
 	if (packet_get(packet, "i", &ret) != 1) {
-		ret = -EINVAL;
+		ret = LB_STATUS_ERROR_INVALID;
 		goto out;
 	}
 
@@ -1930,12 +1972,12 @@ HAPI int instance_set_period(struct inst_info *inst, double period)
 
 	if (!inst) {
 		ErrPrint("Invalid instance handle\n");
-		return -EINVAL;
+		return LB_STATUS_ERROR_INVALID;
 	}
 
 	if (package_is_fault(inst->info)) {
 		DbgPrint("Fault package [%s]\n", package_name(inst->info));
-		return -EFAULT;
+		return LB_STATUS_ERROR_FAULT;
 	}
 
 	if (period < 0.0f) { /* Use the default period */
@@ -1947,7 +1989,7 @@ HAPI int instance_set_period(struct inst_info *inst, double period)
 	cbdata = malloc(sizeof(*cbdata));
 	if (!cbdata) {
 		ErrPrint("Heap: %s\n", strerror(errno));
-		return -ENOMEM;
+		return LB_STATUS_ERROR_MEMORY;
 	}
 
 	cbdata->period = period;
@@ -1963,7 +2005,7 @@ HAPI int instance_set_period(struct inst_info *inst, double period)
 		 */
 		if (!ecore_timer_add(DELAY_TIME, timer_updator_cb, cbdata))
 			timer_updator_cb(cbdata);
-		return 0;
+		return LB_STATUS_SUCCESS;
 	}
 
 	packet = packet_create("set_period", "ssd", package_name(inst->info), inst->id, period);
@@ -1971,7 +2013,7 @@ HAPI int instance_set_period(struct inst_info *inst, double period)
 		ErrPrint("Failed to build a packet for %s\n", package_name(inst->info));
 		instance_unref(cbdata->inst);
 		DbgFree(cbdata);
-		return -EFAULT;
+		return LB_STATUS_ERROR_FAULT;
 	}
 
 	return slave_rpc_async_request(package_slave(inst->info), package_name(inst->info), packet, set_period_cb, cbdata, 0);
@@ -1983,19 +2025,19 @@ HAPI int instance_clicked(struct inst_info *inst, const char *event, double time
 
 	if (!inst) {
 		ErrPrint("Invalid instance handle\n");
-		return -EINVAL;
+		return LB_STATUS_ERROR_INVALID;
 	}
 
 	if (package_is_fault(inst->info)) {
 		DbgPrint("Fault package [%s]\n", package_name(inst->info));
-		return -EFAULT;
+		return LB_STATUS_ERROR_FAULT;
 	}
 
 	/* NOTE: param is resued from here */
 	packet = packet_create_noack("clicked", "sssddd", package_name(inst->info), inst->id, event, timestamp, x, y);
 	if (!packet) {
 		ErrPrint("Failed to build a packet for %s\n", package_name(inst->info));
-		return -EFAULT;
+		return LB_STATUS_ERROR_FAULT;
 	}
 
 	return slave_rpc_request_only(package_slave(inst->info), package_name(inst->info), packet, 0);
@@ -2013,13 +2055,13 @@ HAPI int instance_signal_emit(struct inst_info *inst, const char *signal, const 
 	id = instance_id(inst);
 	if (!pkgname || !id) {
 		ErrPrint("Invalid instance\n");
-		return -EINVAL;
+		return LB_STATUS_ERROR_INVALID;
 	}
 
 	slave = package_slave(instance_package(inst));
 	if (!slave) {
 		ErrPrint("Slave is not valid\n");
-		return -EINVAL;
+		return LB_STATUS_ERROR_INVALID;
 	}
 
 	packet = packet_create_noack("script", "ssssddddddi",
@@ -2029,7 +2071,7 @@ HAPI int instance_signal_emit(struct inst_info *inst, const char *signal, const 
 			x, y, down);
 	if (!packet) {
 		ErrPrint("Failed to create param\n");
-		return -EFAULT;
+		return LB_STATUS_ERROR_FAULT;
 	}
 
 	DbgPrint("Signal emit: %s(%s), %s(%s), %lf, %lf, %lf, %lf, %lfx%lf, %d\n", pkgname, id, signal, part, sx, sy, ex, ey, x, y, down);
@@ -2043,18 +2085,18 @@ HAPI int instance_text_signal_emit(struct inst_info *inst, const char *emission,
 
 	if (!inst) {
 		ErrPrint("Invalid instance handle\n");
-		return -EINVAL;
+		return LB_STATUS_ERROR_INVALID;
 	}
 
 	if (package_is_fault(inst->info)) {
 		DbgPrint("Fault package [%s]\n", package_name(inst->info));
-		return -EFAULT;
+		return LB_STATUS_ERROR_FAULT;
 	}
 
 	packet = packet_create_noack("text_signal", "ssssdddd", package_name(inst->info), inst->id, emission, source, sx, sy, ex, ey);
 	if (!packet) {
 		ErrPrint("Failed to build a packet for %s\n", package_name(inst->info));
-		return -EFAULT;
+		return LB_STATUS_ERROR_FAULT;
 	}
 
 	return slave_rpc_request_only(package_slave(inst->info), package_name(inst->info), packet, 0);
@@ -2069,7 +2111,7 @@ static void change_group_cb(struct slave_node *slave, const struct packet *packe
 	if (!packet) {
 		DbgFree(cbdata->cluster);
 		DbgFree(cbdata->category);
-		ret = -EFAULT;
+		ret = LB_STATUS_ERROR_FAULT;
 		goto out;
 	}
 
@@ -2077,7 +2119,7 @@ static void change_group_cb(struct slave_node *slave, const struct packet *packe
 		ErrPrint("Invalid packet\n");
 		DbgFree(cbdata->cluster);
 		DbgFree(cbdata->category);
-		ret = -EINVAL;
+		ret = LB_STATUS_ERROR_INVALID;
 		goto out;
 	}
 
@@ -2112,25 +2154,25 @@ HAPI int instance_change_group(struct inst_info *inst, const char *cluster, cons
 
 	if (!inst) {
 		ErrPrint("Invalid instance handle\n");
-		return -EINVAL;
+		return LB_STATUS_ERROR_INVALID;
 	}
 
 	if (package_is_fault(inst->info)) {
 		DbgPrint("Fault package [%s]\n", package_name(inst->info));
-		return -EFAULT;
+		return LB_STATUS_ERROR_FAULT;
 	}
 
 	cbdata = malloc(sizeof(*cbdata));
 	if (!cbdata) {
 		ErrPrint("Heap: %s\n", strerror(errno));
-		return -ENOMEM;
+		return LB_STATUS_ERROR_MEMORY;
 	}
 
 	cbdata->cluster = strdup(cluster);
 	if (!cbdata->cluster) {
 		ErrPrint("Heap: %s\n", strerror(errno));
 		DbgFree(cbdata);
-		return -ENOMEM;
+		return LB_STATUS_ERROR_MEMORY;
 	}
 
 	cbdata->category = strdup(category);
@@ -2138,7 +2180,7 @@ HAPI int instance_change_group(struct inst_info *inst, const char *cluster, cons
 		ErrPrint("Heap: %s\n", strerror(errno));
 		DbgFree(cbdata->cluster);
 		DbgFree(cbdata);
-		return -ENOMEM;
+		return LB_STATUS_ERROR_MEMORY;
 	}
 
 	cbdata->inst = instance_ref(inst);
@@ -2150,7 +2192,7 @@ HAPI int instance_change_group(struct inst_info *inst, const char *cluster, cons
 		DbgFree(cbdata->category);
 		DbgFree(cbdata->cluster);
 		DbgFree(cbdata);
-		return -EFAULT;
+		return LB_STATUS_ERROR_FAULT;
 	}
 
 	return slave_rpc_async_request(package_slave(inst->info), package_name(inst->info), packet, change_group_cb, cbdata, 0);
@@ -2287,10 +2329,10 @@ HAPI int instance_destroyed(struct inst_info *inst)
 	case INST_DESTROYED:
 		break;
 	default:
-		return -EINVAL;
+		return LB_STATUS_ERROR_INVALID;
 	}
 
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 /*!
@@ -2302,7 +2344,7 @@ HAPI int instance_recover_state(struct inst_info *inst)
 
 	if (inst->changing_state) {
 		DbgPrint("Doesn't need to recover the state\n");
-		return 0;
+		return LB_STATUS_SUCCESS;
 	}
 
 	switch (inst->state) {
@@ -2389,7 +2431,7 @@ HAPI int instance_need_slave(struct inst_info *inst)
 			break;
 		}
 
-		return 0;
+		return LB_STATUS_SUCCESS;
 	}
 
 	switch (inst->state) {
@@ -2463,33 +2505,33 @@ HAPI int instance_slave_open_pd(struct inst_info *inst, struct client_node *clie
 		client = inst->pd.owner;
 		if (!client) {
 			ErrPrint("Client is not valid\n");
-			return -EINVAL;
+			return LB_STATUS_ERROR_INVALID;
 		}
 	} else if (inst->pd.owner) {
 		if (inst->pd.owner != client) {
 			ErrPrint("Client is already owned\n");
-			return -EBUSY;
+			return LB_STATUS_ERROR_ALREADY;
 		}
 	}
 
 	slave = package_slave(instance_package(inst));
 	if (!slave)
-		return -EFAULT;
+		return LB_STATUS_ERROR_FAULT;
 
 	info = instance_package(inst);
 	if (!info)
-		return -EINVAL;
+		return LB_STATUS_ERROR_INVALID;
 
 	pkgname = package_name(info);
 	id = instance_id(inst);
 
 	if (!pkgname || !id)
-		return -EINVAL;
+		return LB_STATUS_ERROR_INVALID;
 
 	packet = packet_create_noack("pd_show", "ssiidd", pkgname, id, instance_pd_width(inst), instance_pd_height(inst), inst->pd.x, inst->pd.y);
 	if (!packet) {
 		ErrPrint("Failed to create a packet\n");
-		return -EFAULT;
+		return LB_STATUS_ERROR_FAULT;
 	}
 
 	slave_freeze_ttl(slave);
@@ -2528,27 +2570,27 @@ HAPI int instance_slave_close_pd(struct inst_info *inst, struct client_node *cli
 
 	if (inst->pd.owner != client) {
 		ErrPrint("PD owner is not matched\n");
-		return -EINVAL;
+		return LB_STATUS_ERROR_INVALID;
 	}
 
 	slave = package_slave(instance_package(inst));
 	if (!slave)
-		return -EFAULT;
+		return LB_STATUS_ERROR_FAULT;
 
 	info = instance_package(inst);
 	if (!info)
-		return -EINVAL;
+		return LB_STATUS_ERROR_INVALID;
 
 	pkgname = package_name(info);
 	id = instance_id(inst);
 
 	if (!pkgname || !id)
-		return -EINVAL;
+		return LB_STATUS_ERROR_INVALID;
 
 	packet = packet_create_noack("pd_hide", "ss", pkgname, id);
 	if (!packet) {
 		ErrPrint("Failed to create a packet\n");
-		return -EFAULT;
+		return LB_STATUS_ERROR_FAULT;
 	}
 
 	slave_thaw_ttl(slave);
@@ -2567,7 +2609,7 @@ HAPI int instance_client_pd_created(struct inst_info *inst, int status)
 
 	if (inst->pd.need_to_send_close_event) {
 		DbgPrint("PD is already created\n");
-		return -EINVAL;
+		return LB_STATUS_ERROR_INVALID;
 	}
 
 	switch (package_pd_type(inst->info)) {
@@ -2590,7 +2632,7 @@ HAPI int instance_client_pd_created(struct inst_info *inst, int status)
 			inst->pd.width, inst->pd.height, status);
 	if (!packet) {
 		ErrPrint("Failed to create a packet\n");
-		return -EFAULT;
+		return LB_STATUS_ERROR_FAULT;
 	}
 
 	ret = CLIENT_SEND_EVENT(inst, packet);
@@ -2610,7 +2652,7 @@ HAPI int instance_client_pd_destroyed(struct inst_info *inst, int status)
 {
 	if (!inst->pd.need_to_send_close_event) {
 		DbgPrint("PD is not created\n");
-		return -EINVAL;
+		return LB_STATUS_ERROR_INVALID;
 	}
 
 	inst->pd.need_to_send_close_event = 0;
@@ -2622,30 +2664,30 @@ HAPI int instance_add_client(struct inst_info *inst, struct client_node *client)
 {
 	if (inst->client == client) {
 		ErrPrint("Owner cannot be the viewer\n");
-		return -EINVAL;
+		return LB_STATUS_ERROR_INVALID;
 	}
 
 	DbgPrint("%d is added to the list of viewer of %s(%s)\n", client_pid(client), package_name(instance_package(inst)), instance_id(inst));
 	if (client_event_callback_add(client, CLIENT_EVENT_DEACTIVATE, viewer_deactivated_cb, inst) < 0) {
 		ErrPrint("Failed to add a deactivate callback\n");
-		return -EFAULT;
+		return LB_STATUS_ERROR_FAULT;
 	}
 
 	instance_ref(inst);
 	inst->client_list = eina_list_append(inst->client_list, client);
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 HAPI int instance_del_client(struct inst_info *inst, struct client_node *client)
 {
 	if (inst->client == client) {
 		ErrPrint("Owner is not in the viewer list\n");
-		return -EINVAL;
+		return LB_STATUS_ERROR_INVALID;
 	}
 
 	client_event_callback_del(client, CLIENT_EVENT_DEACTIVATE, viewer_deactivated_cb, inst);
 	viewer_deactivated_cb(client, inst);
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 HAPI int instance_has_client(struct inst_info *inst, struct client_node *client)

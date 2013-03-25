@@ -1,5 +1,5 @@
 /*
- * Copyright 2012  Samsung Electronics Co., Ltd
+ * Copyright 2013  Samsung Electronics Co., Ltd
  *
  * Licensed under the Flora License, Version 1.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,6 +23,7 @@
 #include <Eina.h>
 #include <packet.h>
 #include <dlog.h>
+#include <livebox-errno.h>
 
 #include "util.h"
 #include "debug.h"
@@ -152,11 +153,11 @@ HAPI int fault_info_set(struct slave_node *slave, const char *pkgname, const cha
 
 	pkg = package_find(pkgname);
 	if (!pkg)
-		return -ENOENT;
+		return LB_STATUS_ERROR_NOT_EXIST;
 
 	ret = package_set_fault_info(pkg, util_timestamp(), id, func);
 	if (ret < 0)
-		return -EFAULT;
+		return LB_STATUS_ERROR_FAULT;
 
 	dump_fault_info(slave_name(slave), slave_pid(slave), pkgname, id, func);
 	ErrPrint("Set fault %s(%d)\n", !ret ? "Success" : "Failed", ret);
@@ -167,7 +168,7 @@ HAPI int fault_info_set(struct slave_node *slave, const char *pkgname, const cha
 	 * Update statistics
 	 */
 	s_info.fault_mark_count++;
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 HAPI int fault_check_pkgs(struct slave_node *slave)
@@ -296,21 +297,21 @@ HAPI int fault_func_call(struct slave_node *slave, const char *pkgname, const ch
 
 	info = malloc(sizeof(*info));
 	if (!info)
-		return -ENOMEM;
+		return LB_STATUS_ERROR_MEMORY;
 
 	info->slave = slave;
 
 	info->pkgname = strdup(pkgname);
 	if (!info->pkgname) {
 		DbgFree(info);
-		return -ENOMEM;
+		return LB_STATUS_ERROR_MEMORY;
 	}
 
 	info->filename = strdup(filename);
 	if (!info->filename) {
 		DbgFree(info->pkgname);
 		DbgFree(info);
-		return -ENOMEM;
+		return LB_STATUS_ERROR_MEMORY;
 	}
 
 	info->func = strdup(func);
@@ -318,7 +319,7 @@ HAPI int fault_func_call(struct slave_node *slave, const char *pkgname, const ch
 		DbgFree(info->filename);
 		DbgFree(info->pkgname);
 		DbgFree(info);
-		return -ENOMEM;
+		return LB_STATUS_ERROR_MEMORY;
 	}
 
 	info->timestamp = util_timestamp();
@@ -326,7 +327,7 @@ HAPI int fault_func_call(struct slave_node *slave, const char *pkgname, const ch
 	s_info.call_list = eina_list_append(s_info.call_list, info);
 
 	s_info.fault_mark_count++;
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 HAPI int fault_func_ret(struct slave_node *slave, const char *pkgname, const char *filename, const char *func)
@@ -357,7 +358,7 @@ HAPI int fault_func_ret(struct slave_node *slave, const char *pkgname, const cha
 		return 0;
 	} 
 
-	return -ENOENT;
+	return LB_STATUS_ERROR_NOT_EXIST;
 }
 
 /* End of a file */

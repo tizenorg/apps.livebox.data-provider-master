@@ -1,5 +1,5 @@
 /*
- * Copyright 2012  Samsung Electronics Co., Ltd
+ * Copyright 2013  Samsung Electronics Co., Ltd
  *
  * Licensed under the Flora License, Version 1.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -27,6 +27,7 @@
 #include <Eina.h>
 
 #include <dlog.h>
+#include <livebox-errno.h>
 
 #include "util.h"
 #include "debug.h"
@@ -52,7 +53,7 @@ HAPI int liveinfo_init(void)
 	return 0;
 }
 
-HAPI int liveinfo_fini(void)
+HAPI void liveinfo_fini(void)
 {
 	struct liveinfo *info;
 
@@ -61,8 +62,6 @@ HAPI int liveinfo_fini(void)
 		unlink(info->fifo_name);
 		DbgFree(info);
 	}
-
-	return 0;
 }
 
 static inline int valid_requestor(pid_t pid)
@@ -126,29 +125,26 @@ HAPI int liveinfo_open_fifo(struct liveinfo *info)
 	info->fp = fopen(info->fifo_name, "w");
 	if (!info->fp) {
 		ErrPrint("open: %s\n", strerror(errno));
-		return -EIO;
+		return LB_STATUS_ERROR_IO;
 	}
 
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
-HAPI int liveinfo_close_fifo(struct liveinfo *info)
+HAPI void liveinfo_close_fifo(struct liveinfo *info)
 {
 	if (info->fp) {
 		fclose(info->fp);
 		info->fp = NULL;
 	}
-
-	return 0;
 }
 
-HAPI int liveinfo_destroy(struct liveinfo *info)
+HAPI void liveinfo_destroy(struct liveinfo *info)
 {
 	s_info.info_list = eina_list_remove(s_info.info_list, info);
 	liveinfo_close_fifo(info);
 	unlink(info->fifo_name);
 	DbgFree(info);
-	return 0;
 }
 
 HAPI pid_t liveinfo_pid(struct liveinfo *info)

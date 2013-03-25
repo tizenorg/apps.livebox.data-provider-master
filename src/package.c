@@ -1,5 +1,5 @@
 /*
- * Copyright 2012  Samsung Electronics Co., Ltd
+ * Copyright 2013  Samsung Electronics Co., Ltd
  *
  * Licensed under the Flora License, Version 1.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,6 +24,7 @@
 #include <Ecore_Evas.h>
 
 #include <packet.h>
+#include <livebox-errno.h>
 
 #include "debug.h"
 #include "util.h"
@@ -307,7 +308,7 @@ static inline int load_conf(struct pkg_info *info)
 		info->script = strdup(DEFAULT_SCRIPT);
 		if (!info->script) {
 			ErrPrint("Heap: %s\n", strerror(errno));
-			return -ENOMEM;
+			return LB_STATUS_ERROR_MEMORY;
 		}
 
 		info->abi = strdup(DEFAULT_ABI);
@@ -315,13 +316,13 @@ static inline int load_conf(struct pkg_info *info)
 			ErrPrint("Heap: %s\n", strerror(errno));
 			DbgFree(info->script);
 			info->script = NULL;
-			return -ENOMEM;
+			return LB_STATUS_ERROR_MEMORY;
 		}
 
 		info->pd.width = g_conf.width;
 		info->pd.height = g_conf.height >> 2;
 		info->lb.pinup = 1;
-		return 0;
+		return LB_STATUS_SUCCESS;
 	}
 
 	info->lb.type = LB_TYPE_FILE;
@@ -338,7 +339,7 @@ static inline int load_conf(struct pkg_info *info)
 			if (!info->lb.info.script.path) {
 				ErrPrint("Heap: %s\n", strerror(errno));
 				parser_unload(parser);
-				return -ENOMEM;
+				return LB_STATUS_ERROR_MEMORY;
 			}
 
 			str = parser_lb_group(parser);
@@ -348,7 +349,7 @@ static inline int load_conf(struct pkg_info *info)
 					ErrPrint("Heap: %s\n", strerror(errno));
 					DbgFree(info->lb.info.script.path);
 					parser_unload(parser);
-					return -ENOMEM;
+					return LB_STATUS_ERROR_MEMORY;
 				}
 			}
 		}
@@ -370,7 +371,7 @@ static inline int load_conf(struct pkg_info *info)
 					DbgFree(info->lb.info.script.group);
 				}
 				parser_unload(parser);
-				return -ENOMEM;
+				return LB_STATUS_ERROR_MEMORY;
 			}
 
 			str = parser_pd_group(parser);
@@ -384,7 +385,7 @@ static inline int load_conf(struct pkg_info *info)
 						DbgFree(info->lb.info.script.group);
 					}
 					parser_unload(parser);
-					return -ENOMEM;
+					return LB_STATUS_ERROR_MEMORY;
 				}
 			}
 		}
@@ -406,7 +407,7 @@ static inline int load_conf(struct pkg_info *info)
 		}
 
 		parser_unload(parser);
-		return -ENOMEM;
+		return LB_STATUS_ERROR_MEMORY;
 	}
 
 	str = parser_abi(parser);
@@ -425,7 +426,7 @@ static inline int load_conf(struct pkg_info *info)
 			DbgFree(info->lb.info.script.group);
 		}
 		parser_unload(parser);
-		return -ENOMEM;
+		return LB_STATUS_ERROR_MEMORY;
 	}
 
 	info->lb.timeout = parser_timeout(parser);
@@ -456,7 +457,7 @@ static inline int load_conf(struct pkg_info *info)
 			DbgFree(info->lb.info.script.group);
 		}
 		parser_unload(parser);
-		return -ENOMEM;
+		return LB_STATUS_ERROR_MEMORY;
 	}
 
 	info->secured = parser_secured(parser);
@@ -469,7 +470,7 @@ static inline int load_conf(struct pkg_info *info)
 		ErrPrint("Failed to build cluster tree for %s{%s}\n", info->pkgname, group);
 
 	parser_unload(parser);
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 HAPI struct pkg_info *package_create(const char *pkgname)
@@ -519,7 +520,7 @@ HAPI struct pkg_info *package_create(const char *pkgname)
 HAPI int package_destroy(struct pkg_info *info)
 {
 	package_unref(info);
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 HAPI Eina_List *package_ctx_info(struct pkg_info *pkginfo)
@@ -622,25 +623,25 @@ HAPI struct inst_info *package_find_instance_by_timestamp(const char *pkgname, d
 HAPI int package_dump_fault_info(struct pkg_info *info)
 {
 	if (!info->fault_info)
-		return -ENOENT;
+		return LB_STATUS_ERROR_NOT_EXIST;
 
 	ErrPrint("=============\n");
 	ErrPrint("faulted at %lf\n", info->fault_info->timestamp);
 	ErrPrint("Package: %s\n", info->pkgname);
 	ErrPrint("Function: %s\n", info->fault_info->function);
 	ErrPrint("InstanceID: %s\n", info->fault_info->filename);
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 HAPI int package_get_fault_info(struct pkg_info *info, double *timestamp, const char **filename, const char **function)
 {
 	if (!info->fault_info)
-		return -ENOENT;
+		return LB_STATUS_ERROR_NOT_EXIST;
 
 	*timestamp = info->fault_info->timestamp;
 	*filename = info->fault_info->filename;
 	*function = info->fault_info->function;
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 HAPI int package_set_fault_info(struct pkg_info *info, double timestamp, const char *filename, const char *function)
@@ -652,7 +653,7 @@ HAPI int package_set_fault_info(struct pkg_info *info, double timestamp, const c
 	fault = calloc(1, sizeof(*fault));
 	if (!fault) {
 		ErrPrint("Heap: %s\n", strerror(errno));
-		return -ENOMEM;
+		return LB_STATUS_ERROR_MEMORY;
 	}
 
 	fault->timestamp = timestamp;
@@ -665,7 +666,7 @@ HAPI int package_set_fault_info(struct pkg_info *info, double timestamp, const c
 	if (!fault->filename) {
 		ErrPrint("Heap: %s\n", strerror(errno));
 		DbgFree(fault);
-		return -ENOMEM;
+		return LB_STATUS_ERROR_MEMORY;
 	}
 
 	fault->function = strdup(function);
@@ -673,18 +674,18 @@ HAPI int package_set_fault_info(struct pkg_info *info, double timestamp, const c
 		ErrPrint("Heap: %s\n", strerror(errno));
 		DbgFree(fault->filename);
 		DbgFree(fault);
-		return -ENOMEM;
+		return LB_STATUS_ERROR_MEMORY;
 	}
 
 	info->fault_info = fault;
 	info->fault_count++;
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 HAPI int package_clear_fault(struct pkg_info *info)
 {
 	if (!info->fault_info)
-		return -EINVAL;
+		return LB_STATUS_ERROR_INVALID;
 	
 	package_dump_fault_info(info);
 
@@ -692,7 +693,7 @@ HAPI int package_clear_fault(struct pkg_info *info)
 	DbgFree(info->fault_info->filename);
 	DbgFree(info->fault_info);
 	info->fault_info = NULL;
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 HAPI const int const package_is_fault(const struct pkg_info *info)
@@ -747,12 +748,12 @@ HAPI int package_set_script(struct pkg_info *info, const char *script)
 	tmp = strdup(script);
 	if (!tmp) {
 		ErrPrint("Heap: %s\n", strerror(errno));
-		return -ENOMEM;
+		return LB_STATUS_ERROR_MEMORY;
 	}
 
 	DbgFree(info->script);
 	info->script = tmp;
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 HAPI const char * const package_abi(const struct pkg_info *info)
@@ -766,12 +767,12 @@ HAPI int package_set_abi(struct pkg_info *info, const char *abi)
 	tmp = strdup(abi);
 	if (!tmp) {
 		ErrPrint("Heap: %s\n", strerror(errno));
-		return -ENOMEM;
+		return LB_STATUS_ERROR_MEMORY;
 	}
 
 	DbgFree(info->abi);
 	info->abi = tmp;
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 HAPI const char * const package_lb_path(const struct pkg_info *info)
@@ -787,17 +788,17 @@ HAPI int package_set_lb_path(struct pkg_info *info, const char *path)
 	char *tmp;
 
 	if (info->lb.type != LB_TYPE_SCRIPT)
-		return -EINVAL;
+		return LB_STATUS_ERROR_INVALID;
 
 	tmp = strdup(path);
 	if (!tmp) {
 		ErrPrint("Heap: %s\n", strerror(errno));
-		return -ENOMEM;
+		return LB_STATUS_ERROR_MEMORY;
 	}
 
 	DbgFree(info->lb.info.script.path);
 	info->lb.info.script.path = tmp;
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 HAPI const char * const package_lb_group(const struct pkg_info *info)
@@ -813,17 +814,17 @@ HAPI int package_set_lb_group(struct pkg_info *info, const char *group)
 	char *tmp;
 
 	if (info->lb.type != LB_TYPE_SCRIPT)
-		return -EINVAL;
+		return LB_STATUS_ERROR_INVALID;
 
 	tmp = strdup(group);
 	if (!tmp) {
 		ErrPrint("Heap: %s\n", strerror(errno));
-		return -ENOMEM;
+		return LB_STATUS_ERROR_MEMORY;
 	}
 
 	DbgFree(info->lb.info.script.group);
 	info->lb.info.script.group = tmp;
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 HAPI const char * const package_pd_path(const struct pkg_info *info)
@@ -839,17 +840,17 @@ HAPI int package_set_pd_path(struct pkg_info *info, const char *path)
 	char *tmp;
 
 	if (info->pd.type != PD_TYPE_SCRIPT)
-		return -EINVAL;
+		return LB_STATUS_ERROR_INVALID;
 
 	tmp = strdup(path);
 	if (!tmp) {
 		ErrPrint("Heap: %s\n", strerror(errno));
-		return -ENOMEM;
+		return LB_STATUS_ERROR_MEMORY;
 	}
 
 	DbgFree(info->pd.info.script.path);
 	info->pd.info.script.path = tmp;
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 HAPI const char * const package_pd_group(const struct pkg_info *info)
@@ -865,17 +866,17 @@ HAPI int package_set_pd_group(struct pkg_info *info, const char *group)
 	char *tmp;
 
 	if (info->pd.type != PD_TYPE_SCRIPT)
-		return -EINVAL;
+		return LB_STATUS_ERROR_INVALID;
 
 	tmp = strdup(group);
 	if (!tmp) {
 		ErrPrint("Heap: %s\n", strerror(errno));
-		return -ENOMEM;
+		return LB_STATUS_ERROR_MEMORY;
 	}
 
 	DbgFree(info->pd.info.script.group);
 	info->pd.info.script.group = tmp;
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 HAPI const int const package_pinup(const struct pkg_info *info)
@@ -984,12 +985,12 @@ HAPI int package_set_libexec(struct pkg_info *info, const char *libexec)
 	tmp = strdup(libexec);
 	if (!tmp) {
 		ErrPrint("Heap: %s\n", strerror(errno));
-		return -ENOMEM;
+		return LB_STATUS_ERROR_MEMORY;
 	}
 
 	DbgFree(info->lb.libexec);
 	info->lb.libexec = tmp;
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 HAPI int package_network(struct pkg_info *info)
@@ -1026,14 +1027,14 @@ static inline int assign_new_slave(struct pkg_info *info)
 	s_name = util_slavename();
 	if (!s_name) {
 		ErrPrint("Failed to get a new slave name\n");
-		return -EFAULT;
+		return LB_STATUS_ERROR_FAULT;
 	}
 
 	tmp = abi_find_slave(info->abi);
 	if (!tmp) {
 		DbgFree(s_name);
 		ErrPrint("Failed to find a proper pkgname of a slave\n");
-		return -EINVAL;
+		return LB_STATUS_ERROR_INVALID;
 	}
 
 	DbgPrint("Slave package: \"%s\" (abi: %s)\n", tmp, info->abi);
@@ -1044,7 +1045,7 @@ static inline int assign_new_slave(struct pkg_info *info)
 		if (!s_pkgname) {
 			ErrPrint("Heap: %s\n", strerror(errno));
 			DbgFree(s_name);
-			return -ENOMEM;
+			return LB_STATUS_ERROR_MEMORY;
 		}
 	}
 
@@ -1062,13 +1063,13 @@ static inline int assign_new_slave(struct pkg_info *info)
 		 * If the list method couldn't find an "info" from the list,
 		 * it just do nothing so I'll leave this.
 		 */
-		return -EFAULT;
+		return LB_STATUS_ERROR_FAULT;
 	}
 	/*!
 	 * \note
 	 * Slave is not activated yet.
 	 */
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 HAPI int package_add_instance(struct pkg_info *info, struct inst_info *inst)
@@ -1110,7 +1111,7 @@ HAPI int package_add_instance(struct pkg_info *info, struct inst_info *inst)
 	}
 
 	info->inst_list = eina_list_append(info->inst_list, inst);
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 HAPI int package_del_instance(struct pkg_info *info, struct inst_info *inst)
@@ -1118,7 +1119,7 @@ HAPI int package_del_instance(struct pkg_info *info, struct inst_info *inst)
 	info->inst_list = eina_list_remove(info->inst_list, inst);
 
 	if (info->inst_list)
-		return 0;
+		return LB_STATUS_SUCCESS;
 
 	if (info->slave) {
 		slave_unload_package(info->slave);
@@ -1142,7 +1143,7 @@ HAPI int package_del_instance(struct pkg_info *info, struct inst_info *inst)
 	if (info->is_uninstalled)
 		package_destroy(info);
 
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 HAPI Eina_List *package_instance_list(struct pkg_info *info)

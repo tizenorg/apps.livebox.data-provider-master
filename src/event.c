@@ -1,3 +1,19 @@
+/*
+ * Copyright 2013  Samsung Electronics Co., Ltd
+ *
+ * Licensed under the Flora License, Version 1.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.tizenopensource.org/license
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #define _GNU_SOURCE
 #include <stdio.h>
 #include <errno.h>
@@ -13,6 +29,7 @@
 #include <Eina.h>
 #include <Ecore.h>
 #include <dlog.h>
+#include <livebox-errno.h>
 
 #include "util.h"
 #include "debug.h"
@@ -94,9 +111,9 @@ HAPI int event_init(void)
 	ret = pthread_mutex_init(&s_info.event_list_lock, NULL);
 	if (ret != 0) {
 		ErrPrint("Mutex: %s\n", strerror(ret));
-		return -EFAULT;
+		return LB_STATUS_ERROR_FAULT;
 	}
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 HAPI int event_fini(void)
@@ -105,7 +122,7 @@ HAPI int event_fini(void)
 	ret = pthread_mutex_destroy(&s_info.event_list_lock);
 	if (ret != 0)
 		ErrPrint("Mutex destroy failed: %s\n", strerror(ret));
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 static inline int processing_input_event(struct input_event *event)
@@ -134,7 +151,7 @@ static inline int processing_input_event(struct input_event *event)
 				event_ch = EVENT_CH;
 				if (write(s_info.evt_pipe[PIPE_WRITE], &event_ch, sizeof(event_ch)) != sizeof(event_ch)) {
 					ErrPrint("Unable to send an event: %s\n", strerror(errno));
-					return -EIO;
+					return LB_STATUS_ERROR_IO;
 				}
 			}
 			break;
@@ -205,7 +222,7 @@ static inline int processing_input_event(struct input_event *event)
 		break;
 	}
 
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 static void *event_main(void *data)
@@ -237,20 +254,20 @@ static void *event_main(void *data)
 		} else if (ret == 0) {
 			ErrPrint("Timeout expired\n");
 			CANCEL_SECTION_END();
-			return (void *)-ETIMEDOUT;
+			return (void *)LB_STATUS_ERROR_TIMEOUT;
 		}
 		CANCEL_SECTION_END();
 
 		if (!FD_ISSET(s_info.handle, &set)) {
 			ErrPrint("Unexpected handle is toggled\n");
-			ret = -EINVAL;
+			ret = LB_STATUS_ERROR_INVALID;
 			break;
 		}
 
 		readsize = read(s_info.handle, ptr + offset, sizeof(input_event) - offset);
 		if (readsize < 0) {
 			ErrPrint("Unable to read device: %s / fd: %d / offset: %d / size: %d - %d\n", strerror(errno), s_info.handle, offset, sizeof(input_event), readsize);
-			ret = -EFAULT;
+			ret = LB_STATUS_ERROR_FAULT;
 			break;
 		}
 
@@ -258,7 +275,7 @@ static void *event_main(void *data)
 		if (offset == sizeof(input_event)) {
 			offset = 0;
 			if (processing_input_event(&input_event) < 0) {
-				ret = -EFAULT;
+				ret = LB_STATUS_ERROR_FAULT;
 				break;
 			}
 		}
@@ -317,13 +334,13 @@ HAPI int event_activate(int x, int y, int (*event_cb)(enum event_state state, st
 
 	if (s_info.handle >= 0) {
 		DbgPrint("Already activated\n");
-		return 0;
+		return LB_STATUS_SUCCESS;
 	}
 
 	s_info.handle = open(INPUT_PATH, O_RDONLY);
 	if (s_info.handle < 0) {
 		ErrPrint("Unable to access the device: %s\n", strerror(errno));
-		return -EIO;
+		return LB_STATUS_ERROR_IO;
 	}
 
 	if (fcntl(s_info.handle, F_SETFD, FD_CLOEXEC) < 0)
@@ -338,7 +355,7 @@ HAPI int event_activate(int x, int y, int (*event_cb)(enum event_state state, st
 		if (close(s_info.handle) < 0)
 			ErrPrint("Failed to close handle: %s\n", strerror(errno));
 		s_info.handle = -1;
-		return -EFAULT;
+		return LB_STATUS_ERROR_FAULT;
 	}
 
 	s_info.event_handler = ecore_main_fd_handler_add(s_info.evt_pipe[PIPE_READ], ECORE_FD_READ, event_read_cb, NULL, NULL, NULL);
@@ -353,7 +370,7 @@ HAPI int event_activate(int x, int y, int (*event_cb)(enum event_state state, st
 			ErrPrint("Failed to close handle: %s\n", strerror(errno));
 
 		s_info.handle = -1;
-		return -EFAULT;
+		return LB_STATUS_ERROR_FAULT;
 	}
 
 	status = pthread_create(&s_info.tid, NULL, event_main, NULL);
@@ -372,7 +389,7 @@ HAPI int event_activate(int x, int y, int (*event_cb)(enum event_state state, st
 		if (close(s_info.evt_pipe[PIPE_WRITE]) < 0)
 			ErrPrint("close: %s\n", strerror(errno));
 
-		return -EFAULT;
+		return LB_STATUS_ERROR_FAULT;
 	}
 
 	s_info.event_cb = event_cb;
@@ -381,7 +398,7 @@ HAPI int event_activate(int x, int y, int (*event_cb)(enum event_state state, st
 	s_info.y = y;
 
 	DbgPrint("Event handler activated\n");
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 HAPI int event_deactivate(void)
@@ -392,7 +409,7 @@ HAPI int event_deactivate(void)
 
 	if (s_info.handle < 0) {
 		ErrPrint("Event handler is not actiavated\n");
-		return 0;
+		return LB_STATUS_SUCCESS;
 	}
 
 	status = pthread_cancel(s_info.tid);
@@ -442,7 +459,7 @@ HAPI int event_deactivate(void)
 	s_info.event_data.x = -1;
 	s_info.event_data.y = -1;
 
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 HAPI int event_is_activated(void)

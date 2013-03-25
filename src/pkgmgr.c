@@ -1,5 +1,5 @@
 /*
- * Copyright 2012  Samsung Electronics Co., Ltd
+ * Copyright 2013  Samsung Electronics Co., Ltd
  *
  * Licensed under the Flora License, Version 1.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,6 +20,7 @@
 
 #include <dlog.h>
 #include <package-manager.h>
+#include <livebox-errno.h>
 
 #include <Ecore.h>
 #include "util.h"
@@ -196,14 +197,14 @@ static int start_cb(const char *pkgname, const char *val, void *data)
 	item = calloc(1, sizeof(*item));
 	if (!item) {
 		ErrPrint("Heap: %s\n", strerror(errno));
-		return -ENOMEM;
+		return LB_STATUS_ERROR_MEMORY;
 	}
 
 	item->pkgname = strdup(pkgname);
 	if (!item->pkgname) {
 		ErrPrint("Heap: %s\n", strerror(errno));
 		DbgFree(item);
-		return -ENOMEM;
+		return LB_STATUS_ERROR_MEMORY;
 	}
 
 	item->status = PKGMGR_STATUS_START;
@@ -223,11 +224,11 @@ static int start_cb(const char *pkgname, const char *val, void *data)
 		DbgFree(item->pkgname);
 		DbgFree(item);
 		ErrPrint("Invalid val: %s\n", val);
-		return -EINVAL;
+		return LB_STATUS_ERROR_INVALID;
 	}
 
 	invoke_callback(pkgname, item, 0.0f);
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 static int icon_path_cb(const char *pkgname, const char *val, void *data)
@@ -238,7 +239,7 @@ static int icon_path_cb(const char *pkgname, const char *val, void *data)
 
 	item = find_item(pkgname);
 	if (!item)
-		return -ENOENT;
+		return LB_STATUS_ERROR_NOT_EXIST;
 
 	if (item->icon)
 		DbgFree(item->icon);
@@ -246,10 +247,10 @@ static int icon_path_cb(const char *pkgname, const char *val, void *data)
 	item->icon = strdup(val);
 	if (!item->icon) {
 		ErrPrint("Heap: %s\n", strerror(errno));
-		return -ENOMEM;
+		return LB_STATUS_ERROR_MEMORY;
 	}
 
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 static int command_cb(const char *pkgname, const char *val, void *data)
@@ -260,16 +261,16 @@ static int command_cb(const char *pkgname, const char *val, void *data)
 
 	item = find_item(pkgname);
 	if (!item)
-		return -ENOENT;
+		return LB_STATUS_ERROR_NOT_EXIST;
 
 	if (!is_valid_status(item, val)) {
 		DbgPrint("Invalid status: %d, %s\n", item->type, val);
-		return -EINVAL;
+		return LB_STATUS_ERROR_INVALID;
 	}
 
 	item->status = PKGMGR_STATUS_COMMAND;
 	invoke_callback(pkgname, item, 0.0f);
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 static int error_cb(const char *pkgname, const char *val, void *data)
@@ -281,11 +282,11 @@ static int error_cb(const char *pkgname, const char *val, void *data)
 
 	item = find_item(pkgname);
 	if (!item)
-		return -ENOENT;
+		return LB_STATUS_ERROR_NOT_EXIST;
 
 	item->status = PKGMGR_STATUS_ERROR;
 	invoke_callback(pkgname, item, 0.0f);
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 static int change_pkgname_cb(const char *pkgname, const char *val, void *data)
@@ -297,17 +298,17 @@ static int change_pkgname_cb(const char *pkgname, const char *val, void *data)
 
 	item = find_item(pkgname);
 	if (!item)
-		return -ENOENT;
+		return LB_STATUS_ERROR_NOT_EXIST;
 
 	new_pkgname = strdup(val);
 	if (!new_pkgname) {
 		ErrPrint("Heap: %s\n", strerror(errno));
-		return -ENOMEM;
+		return LB_STATUS_ERROR_MEMORY;
 	}
 
 	DbgFree(item->pkgname);
 	item->pkgname = new_pkgname;
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 static int download_cb(const char *pkgname, const char *val, void *data)
@@ -321,7 +322,7 @@ static int download_cb(const char *pkgname, const char *val, void *data)
 	item = find_item(pkgname);
 	if (!item) {
 		DbgPrint("ITEM is not started from the start_cb\n");
-		return -EINVAL;
+		return LB_STATUS_ERROR_INVALID;
 	}
 
 	if (item->type != PKGMGR_EVENT_DOWNLOAD) {
@@ -337,18 +338,18 @@ static int download_cb(const char *pkgname, const char *val, void *data)
 		break;
 	default:
 		ErrPrint("Invalid state [%s, %s]\n", pkgname, val);
-		return -EINVAL;
+		return LB_STATUS_ERROR_INVALID;
 	}
 
 	if (val) {
 		if (sscanf(val, "%lf", &value) != 1)
-			value = (double)-EINVAL;
+			value = (double)LB_STATUS_ERROR_INVALID;
 	} else {
-		value = (double)-EINVAL;
+		value = (double)LB_STATUS_ERROR_INVALID;
 	}
 
 	invoke_download_event_handler(pkgname, item->status, value);
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 static int progress_cb(const char *pkgname, const char *val, void *data)
@@ -362,7 +363,7 @@ static int progress_cb(const char *pkgname, const char *val, void *data)
 	item = find_item(pkgname);
 	if (!item) {
 		ErrPrint("ITEM is not started from the start_cb\n");
-		return -EINVAL;
+		return LB_STATUS_ERROR_INVALID;
 	}
 
 	switch (item->status) {
@@ -373,18 +374,18 @@ static int progress_cb(const char *pkgname, const char *val, void *data)
 		break;
 	default:
 		ErrPrint("Invalid state [%s, %s]\n", pkgname, val);
-		return -EINVAL;
+		return LB_STATUS_ERROR_INVALID;
 	}
 
 	if (val) {
 		if (sscanf(val, "%lf", &value) != 1)
-			value = (double)-EINVAL;
+			value = (double)LB_STATUS_ERROR_INVALID;
 	} else {
-		value = (double)-EINVAL;
+		value = (double)LB_STATUS_ERROR_INVALID;
 	}
 
 	invoke_callback(pkgname, item, value);
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 static int end_cb(const char *pkgname, const char *val, void *data)
@@ -395,7 +396,7 @@ static int end_cb(const char *pkgname, const char *val, void *data)
 
 	item = find_item(pkgname);
 	if (!item)
-		return -ENOENT;
+		return LB_STATUS_ERROR_NOT_EXIST;
 
 	item->status = !strcasecmp(val, "ok") ? PKGMGR_STATUS_END : PKGMGR_STATUS_ERROR;
 
@@ -405,7 +406,7 @@ static int end_cb(const char *pkgname, const char *val, void *data)
 	DbgFree(item->icon);
 	DbgFree(item->pkgname);
 	DbgFree(item);
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 static struct pkgmgr_handler {
@@ -437,22 +438,22 @@ static int pkgmgr_cb(int req_id, const char *type, const char *pkgname, const ch
 						req_id, pkgname, type, key, val, ret);
 	}
 
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 HAPI int pkgmgr_init(void)
 {
 	if (s_info.listen_pc)
-		return -EALREADY;
+		return LB_STATUS_ERROR_ALREADY;
 
 	s_info.listen_pc = pkgmgr_client_new(PC_LISTENING);
 	if (!s_info.listen_pc)
-		return -EFAULT;
+		return LB_STATUS_ERROR_FAULT;
 
 	if (pkgmgr_client_listen_status(s_info.listen_pc, pkgmgr_cb, NULL) != PKGMGR_R_OK)
-		return -EFAULT;
+		return LB_STATUS_ERROR_FAULT;
 
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 HAPI int pkgmgr_fini(void)
@@ -461,10 +462,10 @@ HAPI int pkgmgr_fini(void)
 	struct item *ctx;
 
 	if (!s_info.listen_pc)
-		return -EINVAL;
+		return LB_STATUS_ERROR_INVALID;
 
 	if (pkgmgr_client_free(s_info.listen_pc) != PKGMGR_R_OK)
-		return -EFAULT;
+		return LB_STATUS_ERROR_FAULT;
 
 	s_info.listen_pc = NULL;
 
@@ -494,7 +495,7 @@ HAPI int pkgmgr_fini(void)
 		DbgFree(ctx);
 	}
 
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 HAPI int pkgmgr_add_event_callback(enum pkgmgr_event_type type, int (*cb)(const char *pkgname, enum pkgmgr_status status, double value, void *data), void *data)
@@ -504,7 +505,7 @@ HAPI int pkgmgr_add_event_callback(enum pkgmgr_event_type type, int (*cb)(const 
 	item = calloc(1, sizeof(*item));
 	if (!item) {
 		ErrPrint("Heap: %s\n", strerror(errno));
-		return -ENOMEM;
+		return LB_STATUS_ERROR_MEMORY;
 	}
 
 	item->cb = cb;
@@ -528,10 +529,10 @@ HAPI int pkgmgr_add_event_callback(enum pkgmgr_event_type type, int (*cb)(const 
 		break;
 	default:
 		DbgFree(item);
-		return -EINVAL;
+		return LB_STATUS_ERROR_INVALID;
 	}
 
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 HAPI void *pkgmgr_del_event_callback(enum pkgmgr_event_type type, int (*cb)(const char *pkgname, enum pkgmgr_status status, double value, void *data), void *data)

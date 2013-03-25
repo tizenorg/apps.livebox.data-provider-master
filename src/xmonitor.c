@@ -1,5 +1,5 @@
 /*
- * Copyright 2012  Samsung Electronics Co., Ltd
+ * Copyright 2013  Samsung Electronics Co., Ltd
  *
  * Licensed under the Flora License, Version 1.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -32,6 +32,7 @@
 
 #include <gio/gio.h>
 #include <dlog.h>
+#include <livebox-errno.h>
 
 #include "conf.h"
 #include "debug.h"
@@ -97,14 +98,14 @@ static inline int get_pid(Ecore_X_Window win)
 				sizeof(int), &in_pid, &num) == EINA_FALSE) {
 		if (ecore_x_netwm_pid_get(win, &pid) == EINA_FALSE) {
 			ErrPrint("Failed to get PID from a window 0x%X\n", win);
-			return -EINVAL;
+			return LB_STATUS_ERROR_INVALID;
 		}
 	} else if (in_pid) {
 		pid = *(int *)in_pid;
 		DbgFree(in_pid);
 	} else {
 		ErrPrint("Failed to get PID\n");
-		return -EINVAL;
+		return LB_STATUS_ERROR_INVALID;
 	}
 
 	return pid;
@@ -162,7 +163,7 @@ HAPI int xmonitor_update_state(int target_pid)
 	int pid;
 
 	if (!USE_XMONITOR)
-		return 0;
+		return LB_STATUS_SUCCESS;
 
 	win = ecore_x_window_focus_get();
 
@@ -174,7 +175,7 @@ HAPI int xmonitor_update_state(int target_pid)
 			DbgPrint("Client window has no focus now\n");
 			client_paused(client);
 		}
-		return -ENOENT;
+		return LB_STATUS_ERROR_NOT_EXIST;
 	}
 
 	client = client_find_by_pid(pid);
@@ -185,7 +186,7 @@ HAPI int xmonitor_update_state(int target_pid)
 			DbgPrint("Client window has no focus now\n");
 			client_paused(client);
 		}
-		return -EINVAL;
+		return LB_STATUS_ERROR_INVALID;
 	}
 
 	if (target_pid != pid) {
@@ -197,7 +198,7 @@ HAPI int xmonitor_update_state(int target_pid)
 	}
 
 	xmonitor_handle_state_changes();
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 static Eina_Bool client_cb(void *data, int type, void *event)
@@ -320,7 +321,7 @@ HAPI int xmonitor_pause(struct client_node *client)
 	DbgPrint("%d is paused\n", client_pid(client));
 	client_paused(client);
 	xmonitor_handle_state_changes();
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 HAPI int xmonitor_resume(struct client_node *client)
@@ -328,7 +329,7 @@ HAPI int xmonitor_resume(struct client_node *client)
 	DbgPrint("%d is resumed\n", client_pid(client));
 	client_resumed(client);
 	xmonitor_handle_state_changes();
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 static inline void disable_xmonitor(void)
@@ -352,7 +353,7 @@ static inline int enable_xmonitor(void)
 							create_cb, NULL);
 	if (!s_info.create_handler) {
 		ErrPrint("Failed to add create event handler\n");
-		return -EFAULT;
+		return LB_STATUS_ERROR_FAULT;
 	}
 
 	s_info.destroy_handler =
@@ -362,7 +363,7 @@ static inline int enable_xmonitor(void)
 		ErrPrint("Failed to add destroy event handler\n");
 		ecore_event_handler_del(s_info.create_handler);
 		s_info.create_handler = NULL;
-		return -EFAULT;
+		return LB_STATUS_ERROR_FAULT;
 	}
 
 	s_info.client_handler =
@@ -374,11 +375,11 @@ static inline int enable_xmonitor(void)
 		ecore_event_handler_del(s_info.destroy_handler);
 		s_info.create_handler = NULL;
 		s_info.destroy_handler = NULL;
-		return -EFAULT;
+		return LB_STATUS_ERROR_FAULT;
 	}
 
 	sniff_all_windows();
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 HAPI int xmonitor_init(void)
@@ -391,12 +392,12 @@ HAPI int xmonitor_init(void)
 	}
 
 	s_info.paused = client_is_all_paused() || setting_is_lcd_off();
-	if (s_info.paused) {
+	if (s_info.paused)
 		touch_paused_file();
-	} else {
+	else
 		remove_paused_file();
-	}
-	return 0;
+
+	return LB_STATUS_SUCCESS;
 }
 
 HAPI void xmonitor_fini(void)
@@ -412,7 +413,7 @@ HAPI int xmonitor_add_event_callback(enum xmonitor_event event, int (*cb)(void *
 	item = malloc(sizeof(*item));
 	if (!item) {
 		ErrPrint("Heap: %s\n", strerror(errno));
-		return -ENOMEM;
+		return LB_STATUS_ERROR_MEMORY;
 	}
 
 	item->cb = cb;
@@ -428,10 +429,10 @@ HAPI int xmonitor_add_event_callback(enum xmonitor_event event, int (*cb)(void *
 	default:
 		ErrPrint("Invalid event type\n");
 		DbgFree(item);
-		return -EINVAL;
+		return LB_STATUS_ERROR_INVALID;
 	}
 
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 HAPI int xmonitor_del_event_callback(enum xmonitor_event event, int (*cb)(void *user_data), void *user_data)
@@ -446,7 +447,7 @@ HAPI int xmonitor_del_event_callback(enum xmonitor_event event, int (*cb)(void *
 			if (item->cb == cb && item->user_data == user_data) {
 				s_info.pause_list = eina_list_remove(s_info.pause_list, item);
 				DbgFree(item);
-				return 0;
+				return LB_STATUS_SUCCESS;
 			}
 		}
 		break;
@@ -456,16 +457,16 @@ HAPI int xmonitor_del_event_callback(enum xmonitor_event event, int (*cb)(void *
 			if (item->cb == cb && item->user_data == user_data) {
 				s_info.resume_list = eina_list_remove(s_info.resume_list, item);
 				DbgFree(item);
-				return 0;
+				return LB_STATUS_SUCCESS;
 			}
 		}
 		break;
 	default:
 		ErrPrint("Invalid event type\n");
-		return -EINVAL;
+		return LB_STATUS_ERROR_INVALID;
 	}
 
-	return -ENOENT;
+	return LB_STATUS_ERROR_NOT_EXIST;
 }
 
 HAPI int xmonitor_is_paused(void)

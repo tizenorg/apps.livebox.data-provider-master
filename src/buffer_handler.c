@@ -1,5 +1,5 @@
 /*
- * Copyright 2012  Samsung Electronics Co., Ltd
+ * Copyright 2013  Samsung Electronics Co., Ltd
  *
  * Licensed under the Flora License, Version 1.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -42,6 +42,7 @@
 
 #include <dlog.h>
 #include <packet.h>
+#include <livebox-errno.h>
 
 #include "debug.h"
 #include "conf.h"
@@ -222,7 +223,7 @@ static inline int create_gem(struct buffer *buffer)
 	disp = ecore_x_display_get();
 	if (!disp) {
 		ErrPrint("Failed to get display\n");
-		return -EIO;
+		return LB_STATUS_ERROR_IO;
 	}
 
 	gem = (struct gem_data *)buffer->data;
@@ -231,11 +232,11 @@ static inline int create_gem(struct buffer *buffer)
 		gem->data = calloc(1, gem->w * gem->h * gem->depth);
 		if (!gem->data) {
 			ErrPrint("Heap: %s\n", strerror(errno));
-			return -ENOMEM;
+			return LB_STATUS_ERROR_MEMORY;
 		}
 
 		DbgPrint("DRI2(gem) is not supported - Fallback to the S/W Backend\n");
-		return 0;
+		return LB_STATUS_SUCCESS;
 	}
 
 	DRI2CreateDrawable(disp, gem->pixmap);
@@ -246,7 +247,7 @@ static inline int create_gem(struct buffer *buffer)
 	if (!gem->dri2_buffer || !gem->dri2_buffer->name) {
 		ErrPrint("Failed to get a gem buffer\n");
 		DRI2DestroyDrawable(disp, gem->pixmap);
-		return -EFAULT;
+		return LB_STATUS_ERROR_FAULT;
 	}
 	DbgPrint("dri2_buffer: %p, name: %p, %dx%d\n",
 				gem->dri2_buffer, gem->dri2_buffer->name, gem->w, gem->h);
@@ -260,7 +261,7 @@ static inline int create_gem(struct buffer *buffer)
 	if (!gem->pixmap_bo) {
 		ErrPrint("Failed to import BO\n");
 		DRI2DestroyDrawable(disp, gem->pixmap);
-		return -EFAULT;
+		return LB_STATUS_ERROR_FAULT;
 	}
 
 	if (gem->dri2_buffer->pitch != gem->w * gem->depth) {
@@ -274,7 +275,7 @@ static inline int create_gem(struct buffer *buffer)
 		}
 	}
 
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 static inline void *acquire_gem(struct buffer *buffer)
@@ -384,7 +385,7 @@ static inline int destroy_pixmap(struct buffer *buffer)
 
 		disp = ecore_x_display_get();
 		if (!disp)
-			return -EIO;
+			return LB_STATUS_ERROR_IO;
 
 		DbgPrint("Free pixmap 0x%X\n", gem->pixmap);
 		XFreePixmap(disp, gem->pixmap);
@@ -392,7 +393,7 @@ static inline int destroy_pixmap(struct buffer *buffer)
 
 	buffer->state = DESTROYED;
 	DbgFree(buffer);
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 static inline int destroy_gem(struct buffer *buffer)
@@ -400,14 +401,14 @@ static inline int destroy_gem(struct buffer *buffer)
 	struct gem_data *gem;
 
 	if (!buffer)
-		return -EINVAL;
+		return LB_STATUS_ERROR_INVALID;
 
 	/*!
 	 * Forcely release the acquire_buffer.
 	 */
 	gem = (struct gem_data *)buffer->data;
 	if (!gem)
-		return -EFAULT;
+		return LB_STATUS_ERROR_FAULT;
 
 	if (s_info.fd >= 0) {
 		if (gem->compensate_data) {
@@ -430,7 +431,7 @@ static inline int destroy_gem(struct buffer *buffer)
 		gem->data = NULL;
 	}
 
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 static inline int load_file_buffer(struct buffer_info *info)
@@ -445,7 +446,7 @@ static inline int load_file_buffer(struct buffer_info *info)
 	new_id = malloc(len);
 	if (!new_id) {
 		ErrPrint("Heap: %s\n", strerror(errno));
-		return -ENOMEM;
+		return LB_STATUS_ERROR_MEMORY;
 	}
 
 	timestamp = util_timestamp();
@@ -455,14 +456,14 @@ static inline int load_file_buffer(struct buffer_info *info)
 	if (!size) {
 		ErrPrint("Canvas buffer size is ZERO\n");
 		DbgFree(new_id);
-		return -EINVAL;
+		return LB_STATUS_ERROR_INVALID;
 	}
 
 	buffer = calloc(1, size);
 	if (!buffer) {
 		ErrPrint("Failed to allocate buffer\n");
 		DbgFree(new_id);
-		return -ENOMEM;
+		return LB_STATUS_ERROR_MEMORY;
 	}
 
 	buffer->type = BUFFER_TYPE_FILE;
@@ -476,7 +477,7 @@ static inline int load_file_buffer(struct buffer_info *info)
 	info->is_loaded = 1;
 
 	DbgPrint("FILE type %d created\n", size);
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 static inline int load_shm_buffer(struct buffer_info *info)
@@ -490,13 +491,13 @@ static inline int load_shm_buffer(struct buffer_info *info)
 	size = info->w * info->h * info->pixel_size;
 	if (!size) {
 		ErrPrint("Invalid buffer size\n");
-		return -EINVAL;
+		return LB_STATUS_ERROR_INVALID;
 	}
 
 	id = shmget(IPC_PRIVATE, size + sizeof(*buffer), IPC_CREAT | 0666);
 	if (id < 0) {
 		ErrPrint("shmget: %s\n", strerror(errno));
-		return -EFAULT;
+		return LB_STATUS_ERROR_FAULT;
 	}
 
 	buffer = shmat(id, NULL, 0);
@@ -506,7 +507,7 @@ static inline int load_shm_buffer(struct buffer_info *info)
 		if (shmctl(id, IPC_RMID, 0) < 0)
 			ErrPrint("%s shmctl: %s\n", info->id, strerror(errno));
 
-		return -EFAULT;
+		return LB_STATUS_ERROR_FAULT;
 	}
 
 	buffer->type = BUFFER_TYPE_SHM;
@@ -525,7 +526,7 @@ static inline int load_shm_buffer(struct buffer_info *info)
 		if (shmctl(id, IPC_RMID, 0) < 0)
 			ErrPrint("shmctl: %s\n", strerror(errno));
 
-		return -ENOMEM;
+		return LB_STATUS_ERROR_MEMORY;
 	}
 
 	snprintf(new_id, len, SCHEMA_SHM "%d", id);
@@ -534,7 +535,7 @@ static inline int load_shm_buffer(struct buffer_info *info)
 	info->id = new_id;
 	info->buffer = buffer;
 	info->is_loaded = 1;
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 static inline int load_pixmap_buffer(struct buffer_info *info)
@@ -559,7 +560,7 @@ static inline int load_pixmap_buffer(struct buffer_info *info)
 	if (!buffer) {
 		DbgPrint("Failed to make a reference of a pixmap\n");
 		info->is_loaded = 0;
-		return -EFAULT;
+		return LB_STATUS_ERROR_FAULT;
 	}
 
 	len = strlen(SCHEMA_PIXMAP) + 30; /* strlen("pixmap://") + 30 */
@@ -568,7 +569,7 @@ static inline int load_pixmap_buffer(struct buffer_info *info)
 		info->is_loaded = 0;
 		ErrPrint("Heap: %s\n", strerror(errno));
 		buffer_handler_pixmap_unref(buffer);
-		return -ENOMEM;
+		return LB_STATUS_ERROR_MEMORY;
 	}
 
 	DbgPrint("Releaseo old id (%s)\n", info->id);
@@ -581,7 +582,7 @@ static inline int load_pixmap_buffer(struct buffer_info *info)
 	snprintf(info->id, len, SCHEMA_PIXMAP "%d", (int)gem->pixmap);
 	DbgPrint("info->id: %s\n", info->id);
 
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 HAPI int buffer_handler_load(struct buffer_info *info)
@@ -590,12 +591,12 @@ HAPI int buffer_handler_load(struct buffer_info *info)
 
 	if (!info) {
 		DbgPrint("buffer handler is nil\n");
-		return -EINVAL;
+		return LB_STATUS_ERROR_INVALID;
 	}
 
 	if (info->is_loaded) {
 		DbgPrint("Buffer is already loaded\n");
-		return 0;
+		return LB_STATUS_SUCCESS;
 	}
 
 	switch (info->type) {
@@ -610,7 +611,7 @@ HAPI int buffer_handler_load(struct buffer_info *info)
 		break;
 	default:
 		ErrPrint("Invalid buffer\n");
-		ret = -EINVAL;
+		ret = LB_STATUS_ERROR_INVALID;
 		break;
 	}
 
@@ -625,7 +626,7 @@ static inline int unload_file_buffer(struct buffer_info *info)
 	new_id = strdup(SCHEMA_FILE "/tmp/.live.undefined");
 	if (!new_id) {
 		ErrPrint("Heap: %s\n", strerror(errno));
-		return -ENOMEM;
+		return LB_STATUS_ERROR_MEMORY;
 	}
 
 	DbgFree(info->buffer);
@@ -637,7 +638,7 @@ static inline int unload_file_buffer(struct buffer_info *info)
 
 	DbgFree(info->id);
 	info->id = new_id;
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 static inline int unload_shm_buffer(struct buffer_info *info)
@@ -648,19 +649,19 @@ static inline int unload_shm_buffer(struct buffer_info *info)
 	new_id = strdup(SCHEMA_SHM "-1");
 	if (!new_id) {
 		ErrPrint("Heap: %s\n", strerror(errno));
-		return -ENOMEM;
+		return LB_STATUS_ERROR_MEMORY;
 	}
 
 	if (sscanf(info->id, SCHEMA_SHM "%d", &id) != 1) {
 		ErrPrint("%s Invalid ID\n", info->id);
 		DbgFree(new_id);
-		return -EINVAL;
+		return LB_STATUS_ERROR_INVALID;
 	}
 
 	if (id < 0) {
 		ErrPrint("(%s) Invalid id: %d\n", info->id, id);
 		DbgFree(new_id);
-		return -EINVAL;
+		return LB_STATUS_ERROR_INVALID;
 	}
 
 	if (shmdt(info->buffer) < 0)
@@ -673,7 +674,7 @@ static inline int unload_shm_buffer(struct buffer_info *info)
 
 	DbgFree(info->id);
 	info->id = new_id;
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 static inline int unload_pixmap_buffer(struct buffer_info *info)
@@ -684,19 +685,19 @@ static inline int unload_pixmap_buffer(struct buffer_info *info)
 	new_id = strdup(SCHEMA_PIXMAP "0");
 	if (!new_id) {
 		ErrPrint("Heap: %s\n", strerror(errno));
-		return -ENOMEM;
+		return LB_STATUS_ERROR_MEMORY;
 	}
 
 	if (sscanf(info->id, SCHEMA_PIXMAP "%d", &id) != 1) {
 		ErrPrint("Invalid ID (%s)\n", info->id);
 		DbgFree(new_id);
-		return -EINVAL;
+		return LB_STATUS_ERROR_INVALID;
 	}
 
 	if (id == 0) {
 		ErrPrint("(%s) Invalid id: %d\n", info->id, id);
 		DbgFree(new_id);
-		return -EINVAL;
+		return LB_STATUS_ERROR_INVALID;
 	}
 
 	/*!
@@ -713,7 +714,7 @@ static inline int unload_pixmap_buffer(struct buffer_info *info)
 
 	DbgFree(info->id);
 	info->id = new_id;
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 HAPI int buffer_handler_unload(struct buffer_info *info)
@@ -722,12 +723,12 @@ HAPI int buffer_handler_unload(struct buffer_info *info)
 
 	if (!info) {
 		DbgPrint("buffer handler is nil\n");
-		return -EINVAL;
+		return LB_STATUS_ERROR_INVALID;
 	}
 
 	if (!info->is_loaded) {
 		ErrPrint("Buffer is not loaded\n");
-		return -EINVAL;
+		return LB_STATUS_ERROR_INVALID;
 	}
 
 	switch (info->type) {
@@ -742,7 +743,7 @@ HAPI int buffer_handler_unload(struct buffer_info *info)
 		break;
 	default:
 		ErrPrint("Invalid buffer\n");
-		ret = -EINVAL;
+		ret = LB_STATUS_ERROR_INVALID;
 		break;
 	}
 
@@ -759,7 +760,7 @@ HAPI int buffer_handler_destroy(struct buffer_info *info)
 
 	if (!info) {
 		DbgPrint("Buffer is not created yet. info is nil\n");
-		return 0;
+		return LB_STATUS_SUCCESS;
 	}
 
 	EINA_LIST_FOREACH(s_info.pixmap_list, l, buffer) {
@@ -770,7 +771,7 @@ HAPI int buffer_handler_destroy(struct buffer_info *info)
 	buffer_handler_unload(info);
 	DbgFree(info->id);
 	DbgFree(info);
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 HAPI const char *buffer_handler_id(const struct buffer_info *info)
@@ -968,7 +969,7 @@ HAPI int buffer_handler_pixmap_release_buffer(void *canvas)
 	void *_ptr;
 
 	if (!canvas)
-		return -EINVAL;
+		return LB_STATUS_ERROR_INVALID;
 
 	EINA_LIST_FOREACH_SAFE(s_info.pixmap_list, l, n, buffer) {
 		if (!buffer || buffer->state != CREATED || buffer->type != BUFFER_TYPE_PIXMAP) {
@@ -985,11 +986,11 @@ HAPI int buffer_handler_pixmap_release_buffer(void *canvas)
 		if (_ptr == canvas) {
 			release_gem(buffer);
 			buffer_handler_pixmap_unref(buffer);
-			return 0;
+			return LB_STATUS_SUCCESS;
 		}
 	}
 
-	return -ENOENT;
+	return LB_STATUS_ERROR_NOT_EXIST;
 }
 
 /*!
@@ -1005,7 +1006,7 @@ HAPI int buffer_handler_pixmap_unref(void *buffer_ptr)
 
 	buffer->refcnt--;
 	if (buffer->refcnt > 0)
-		return 0; /* Return NULL means, gem buffer still in use */
+		return LB_STATUS_SUCCESS; /* Return NULL means, gem buffer still in use */
 
 	s_info.pixmap_list = eina_list_remove(s_info.pixmap_list, buffer);
 
@@ -1019,7 +1020,7 @@ HAPI int buffer_handler_pixmap_unref(void *buffer_ptr)
 	if (info && info->buffer == buffer)
 		info->buffer = NULL;
 
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 HAPI int buffer_handler_is_loaded(const struct buffer_info *info)
@@ -1042,19 +1043,19 @@ HAPI int buffer_handler_resize(struct buffer_info *info, int w, int h)
 
 	if (!info) {
 		ErrPrint("Invalid handler\n");
-		return -EINVAL;
+		return LB_STATUS_ERROR_INVALID;
 	}
 
 	if (info->w == w && info->h == h) {
 		DbgPrint("No changes\n");
-		return 0;
+		return LB_STATUS_SUCCESS;
 	}
 
 	buffer_handler_update_size(info, w, h);
 
 	if (!info->is_loaded) {
 		DbgPrint("Not yet loaded, just update the size [%dx%d]\n", w, h);
-		return 0;
+		return LB_STATUS_SUCCESS;
 	}
 
 	ret = buffer_handler_unload(info);
@@ -1065,20 +1066,20 @@ HAPI int buffer_handler_resize(struct buffer_info *info, int w, int h)
 	if (ret < 0)
 		ErrPrint("Load: %d\n", ret);
 
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 HAPI int buffer_handler_get_size(struct buffer_info *info, int *w, int *h)
 {
 	if (!info)
-		return -EINVAL;
+		return LB_STATUS_ERROR_INVALID;
 
 	if (w)
 		*w = info->w;
 	if (h)
 		*h = info->h;
 
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 HAPI struct inst_info *buffer_handler_instance(struct buffer_info *info)
@@ -1102,30 +1103,30 @@ static inline int sync_for_pixmap(struct buffer *buffer)
 
 	if (buffer->state != CREATED) {
 		ErrPrint("Invalid state of a FB\n");
-		return -EINVAL;
+		return LB_STATUS_ERROR_INVALID;
 	}
 
 	if (buffer->type != BUFFER_TYPE_PIXMAP) {
 		DbgPrint("Invalid buffer\n");
-		return 0;
+		return LB_STATUS_SUCCESS;
 	}
 
 	disp = ecore_x_display_get();
 	if (!disp) {
 		ErrPrint("Failed to get a display\n");
-		return -EFAULT;
+		return LB_STATUS_ERROR_FAULT;
 	}
 
 	gem = (struct gem_data *)buffer->data;
 	if (gem->w == 0 || gem->h == 0) {
 		DbgPrint("Nothing can be sync\n");
-		return 0;
+		return LB_STATUS_SUCCESS;
 	}
 
 	si.shmid = shmget(IPC_PRIVATE, gem->w * gem->h * gem->depth, IPC_CREAT | 0666);
 	if (si.shmid < 0) {
 		ErrPrint("shmget: %s\n", strerror(errno));
-		return -EFAULT;
+		return LB_STATUS_ERROR_FAULT;
 	}
 
 	si.readOnly = False;
@@ -1133,7 +1134,7 @@ static inline int sync_for_pixmap(struct buffer *buffer)
 	if (si.shmaddr == (void *)-1) {
 		if (shmctl(si.shmid, IPC_RMID, 0) < 0)
 			ErrPrint("shmctl: %s\n", strerror(errno));
-		return -EFAULT;
+		return LB_STATUS_ERROR_FAULT;
 	}
 
 	screen = DefaultScreenOfDisplay(disp);
@@ -1149,7 +1150,7 @@ static inline int sync_for_pixmap(struct buffer *buffer)
 
 		if (shmctl(si.shmid, IPC_RMID, 0) < 0)
 			ErrPrint("shmctl: %s\n", strerror(errno));
-		return -EFAULT;
+		return LB_STATUS_ERROR_FAULT;
 	}
 
 	xim->data = si.shmaddr;
@@ -1167,7 +1168,7 @@ static inline int sync_for_pixmap(struct buffer *buffer)
 		if (shmctl(si.shmid, IPC_RMID, 0) < 0)
 			ErrPrint("shmctl: %s\n", strerror(errno));
 
-		return -EFAULT;
+		return LB_STATUS_ERROR_FAULT;
 	}
 
 	memcpy(xim->data, gem->data, gem->w * gem->h * gem->depth);
@@ -1189,7 +1190,7 @@ static inline int sync_for_pixmap(struct buffer *buffer)
 	if (shmctl(si.shmid, IPC_RMID, 0) < 0)
 		ErrPrint("shmctl: %s\n", strerror(errno));
 
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 HAPI void buffer_handler_flush(struct buffer_info *info)
@@ -1246,21 +1247,21 @@ HAPI int buffer_handler_init(void)
 
 	if (!DRI2QueryExtension(ecore_x_display_get(), &s_info.evt_base, &s_info.err_base)) {
 		DbgPrint("DRI2 is not supported\n");
-		return 0;
+		return LB_STATUS_SUCCESS;
 	}
 
 	if (!DRI2QueryVersion(ecore_x_display_get(), &dri2Major, &dri2Minor)) {
 		DbgPrint("DRI2 is not supported\n");
 		s_info.evt_base = 0;
 		s_info.err_base = 0;
-		return 0;
+		return LB_STATUS_SUCCESS;
 	}
 
 	if (!DRI2Connect(ecore_x_display_get(), DefaultRootWindow(ecore_x_display_get()), &driverName, &deviceName)) {
 		DbgPrint("DRI2 is not supported\n");
 		s_info.evt_base = 0;
 		s_info.err_base = 0;
-		return 0;
+		return LB_STATUS_SUCCESS;
 	}
 
 	DbgPrint("Open: %s (driver: %s)", deviceName, driverName);
@@ -1271,7 +1272,7 @@ HAPI int buffer_handler_init(void)
 		s_info.err_base = 0;
 		DbgFree(deviceName);
 		DbgFree(driverName);
-		return 0;
+		return LB_STATUS_SUCCESS;
 	}
 
 	s_info.fd = open(deviceName, O_RDWR);
@@ -1281,7 +1282,7 @@ HAPI int buffer_handler_init(void)
 		DbgPrint("Failed to open a drm device: (%s)\n", strerror(errno));
 		s_info.evt_base = 0;
 		s_info.err_base = 0;
-		return 0;
+		return LB_STATUS_SUCCESS;
 	}
 
 	drmGetMagic(s_info.fd, &magic);
@@ -1292,7 +1293,7 @@ HAPI int buffer_handler_init(void)
 		s_info.fd = -1;
 		s_info.evt_base = 0;
 		s_info.err_base = 0;
-		return 0;
+		return LB_STATUS_SUCCESS;
 	}
 
 	s_info.slp_bufmgr = tbm_bufmgr_init(s_info.fd);
@@ -1302,10 +1303,10 @@ HAPI int buffer_handler_init(void)
 		s_info.fd = -1;
 		s_info.evt_base = 0;
 		s_info.err_base = 0;
-		return 0;
+		return LB_STATUS_SUCCESS;
 	}
 
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 HAPI int buffer_handler_fini(void)
@@ -1320,7 +1321,7 @@ HAPI int buffer_handler_fini(void)
 		s_info.slp_bufmgr = NULL;
 	}
 
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 /* End of a file */

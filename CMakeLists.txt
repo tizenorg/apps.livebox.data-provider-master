@@ -41,9 +41,6 @@ ADD_DEFINITIONS("-DPATH_MAX=256")
 ADD_DEFINITIONS("-DPACKAGE=\"${PACKAGE}\"")
 ADD_DEFINITIONS("-DLOCALEDIR=\"${LOCALEDIR}\"")
 
-
-
-
 ADD_DEFINITIONS("-DINFO_SOCKET=\"/opt/usr/share/live_magazine/.live.socket\"")
 ADD_DEFINITIONS("-DCLIENT_SOCKET=\"/opt/usr/share/live_magazine/.client.socket\"")
 ADD_DEFINITIONS("-DSLAVE_SOCKET=\"/opt/usr/share/live_magazine/.slave.socket\"")

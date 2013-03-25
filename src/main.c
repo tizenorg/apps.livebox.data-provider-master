@@ -1,5 +1,5 @@
 /*
- * Copyright 2012  Samsung Electronics Co., Ltd
+ * Copyright 2013  Samsung Electronics Co., Ltd
  *
  * Licensed under the Flora License, Version 1.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -131,8 +131,7 @@ static inline int app_terminate(void)
 	ret = package_fini();
 	DbgPrint("Finalize package info: %d\n", ret);
 
-	ret = client_fini();
-	DbgPrint("Finalize client connections : %d\n", ret);
+	client_fini();
 
 	ret = server_fini();
 	DbgPrint("Finalize dbus: %d\n", ret);

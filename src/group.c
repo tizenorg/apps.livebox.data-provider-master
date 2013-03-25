@@ -1,5 +1,5 @@
 /*
- * Copyright 2012  Samsung Electronics Co., Ltd
+ * Copyright 2013  Samsung Electronics Co., Ltd
  *
  * Licensed under the Flora License, Version 1.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,6 +22,7 @@
 
 #include <dlog.h>
 #include <Eina.h>
+#include <livebox-errno.h>
 
 #include "util.h"
 #include "debug.h"
@@ -144,14 +145,14 @@ HAPI int group_add_option(struct context_item *item, const char *key, const char
 	option = calloc(1, sizeof(*option));
 	if (!option) {
 		ErrPrint("Heap: %s\n", strerror(errno));
-		return -ENOMEM;
+		return LB_STATUS_ERROR_MEMORY;
 	}
 
 	option->key = strdup(key);
 	if (!option->key) {
 		ErrPrint("Heap: %s\n", strerror(errno));
 		DbgFree(option);
-		return -ENOMEM;
+		return LB_STATUS_ERROR_MEMORY;
 	}
 
 	option->value = strdup(value);
@@ -159,12 +160,12 @@ HAPI int group_add_option(struct context_item *item, const char *key, const char
 		ErrPrint("Heap: %s\n", strerror(errno));
 		DbgFree(option->key);
 		DbgFree(option);
-		return -ENOMEM;
+		return LB_STATUS_ERROR_MEMORY;
 	}
 
 	option->item = item;
 	item->option_list = eina_list_append(item->option_list, option);
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 HAPI int group_destroy_context_info(struct context_info *info)
@@ -174,7 +175,7 @@ HAPI int group_destroy_context_info(struct context_info *info)
 	category = info->category;
 	if (!category) {
 		ErrPrint("No category found\n");
-		return -EINVAL;
+		return LB_STATUS_ERROR_INVALID;
 	}
 
 	category->info_list = eina_list_remove(category->info_list, info);
@@ -182,7 +183,7 @@ HAPI int group_destroy_context_info(struct context_info *info)
 	del_context_item(info);
 	DbgFree(info->pkgname);
 	DbgFree(info);
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 HAPI struct cluster *group_create_cluster(const char *name)
@@ -272,11 +273,11 @@ HAPI int group_destroy_cluster(struct cluster *cluster)
 		if (item == cluster) {
 			s_info.cluster_list = eina_list_remove_list(s_info.cluster_list, l);
 			destroy_cluster(cluster);
-			return 0;
+			return LB_STATUS_SUCCESS;
 		}
 	}
 
-	return -ENOENT;
+	return LB_STATUS_ERROR_NOT_EXIST;
 }
 
 static inline void destroy_category(struct category *category)
@@ -303,7 +304,7 @@ HAPI int group_destroy_category(struct category *category)
 		cluster->category_list = eina_list_remove(cluster->category_list, category);
 
 	destroy_category(category);
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 HAPI struct category *group_find_category(struct cluster *cluster, const char *name)
@@ -380,17 +381,17 @@ HAPI int group_context_item_add_data(struct context_item *item, const char *tag,
 
 	tmp = malloc(sizeof(*tmp));
 	if (!tmp)
-		return -ENOMEM;
+		return LB_STATUS_ERROR_MEMORY;
 
 	tmp->tag = strdup(tag);
 	if (!tmp->tag) {
 		DbgFree(tmp);
-		return -ENOMEM;
+		return LB_STATUS_ERROR_MEMORY;
 	}
 
 	tmp->data = data;
 	item->data_list = eina_list_append(item->data_list, tmp);
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 HAPI void *group_context_item_data(struct context_item *item, const char *tag)
@@ -513,7 +514,7 @@ HAPI int group_add_livebox(const char *group, const char *pkgname)
 			name = get_token(ptr, &len);
 			if (!name) {
 				ErrPrint("Failed to get token\n");
-				return -EFAULT;
+				return LB_STATUS_ERROR_FAULT;
 			}
 			/* cluster{category{context{key=value,key=value},context{key=value}}} */
 			/* cluster{category} */
@@ -527,7 +528,7 @@ HAPI int group_add_livebox(const char *group, const char *pkgname)
 				if (!cluster) {
 					ErrPrint("Failed to get cluster\n");
 					DbgFree(name);
-					return -EFAULT;
+					return LB_STATUS_ERROR_FAULT;
 				}
 
 				state = CATEGORY;
@@ -541,14 +542,14 @@ HAPI int group_add_livebox(const char *group, const char *pkgname)
 				if (!category) {
 					ErrPrint("Failed to get category\n");
 					DbgFree(name);
-					return -EFAULT;
+					return LB_STATUS_ERROR_FAULT;
 				}
 
 				info = group_create_context_info(category, pkgname);
 				if (!info) {
 					ErrPrint("Failed to create ctx info\n");
 					DbgFree(name);
-					return -EFAULT;
+					return LB_STATUS_ERROR_FAULT;
 				}
 
 				state = CONTEXT_ITEM;
@@ -559,7 +560,7 @@ HAPI int group_add_livebox(const char *group, const char *pkgname)
 				if (!item) {
 					ErrPrint("Failed to create a context item\n");
 					DbgFree(name);
-					return -EFAULT;
+					return LB_STATUS_ERROR_FAULT;
 				}
 
 				state = CONTEXT_OPTION_KEY;
@@ -570,7 +571,7 @@ HAPI int group_add_livebox(const char *group, const char *pkgname)
 			default:
 				ErrPrint("Invalid state\n");
 				DbgFree(name);
-				return -EFAULT;
+				return LB_STATUS_ERROR_FAULT;
 			}
 
 			DbgFree(name);
@@ -594,7 +595,7 @@ HAPI int group_add_livebox(const char *group, const char *pkgname)
 				if (is_open != 0) {
 					ErrPrint("Invalid state\n");
 					DbgFree(name);
-					return -EFAULT;
+					return LB_STATUS_ERROR_FAULT;
 				}
 				cluster = group_find_cluster(name);
 				if (!cluster)
@@ -603,7 +604,7 @@ HAPI int group_add_livebox(const char *group, const char *pkgname)
 				if (!cluster) {
 					ErrPrint("Failed to get cluster\n");
 					DbgFree(name);
-					return -EFAULT;
+					return LB_STATUS_ERROR_FAULT;
 				}
 
 				state = CATEGORY;
@@ -613,7 +614,7 @@ HAPI int group_add_livebox(const char *group, const char *pkgname)
 				if (is_open != 1) {
 					ErrPrint("Invalid state\n");
 					DbgFree(name);
-					return -EFAULT;
+					return LB_STATUS_ERROR_FAULT;
 				}
 				category = group_find_category(cluster, name);
 				if (!category)
@@ -622,14 +623,14 @@ HAPI int group_add_livebox(const char *group, const char *pkgname)
 				if (!category) {
 					ErrPrint("Failed to get category\n");
 					DbgFree(name);
-					return -EFAULT;
+					return LB_STATUS_ERROR_FAULT;
 				}
 
 				info = group_create_context_info(category, pkgname);
 				if (!info) {
 					ErrPrint("Failed to create ctx info\n");
 					DbgFree(name);
-					return -EFAULT;
+					return LB_STATUS_ERROR_FAULT;
 				}
 
 				state = CONTEXT_ITEM;
@@ -643,14 +644,14 @@ HAPI int group_add_livebox(const char *group, const char *pkgname)
 					if (!category) {
 						ErrPrint("Failed to get category\n");
 						DbgFree(name);
-						return -EFAULT;
+						return LB_STATUS_ERROR_FAULT;
 					}
 
 					info = group_create_context_info(category, pkgname);
 					if (!info) {
 						ErrPrint("Failed to create ctx info\n");
 						DbgFree(name);
-						return -EFAULT;
+						return LB_STATUS_ERROR_FAULT;
 					}
 					DbgPrint("Keep this syntax only for the compatibility\n");
 				} else if (is_open == 2) {
@@ -658,13 +659,13 @@ HAPI int group_add_livebox(const char *group, const char *pkgname)
 					if (!item) {
 						ErrPrint("Failed to create a context item\n");
 						DbgFree(name);
-						return -EFAULT;
+						return LB_STATUS_ERROR_FAULT;
 					}
 					state = CONTEXT_OPTION_KEY;
 				} else {
 					ErrPrint("Invalid state\n");
 					DbgFree(name);
-					return -EFAULT;
+					return LB_STATUS_ERROR_FAULT;
 				}
 
 				break;
@@ -672,7 +673,7 @@ HAPI int group_add_livebox(const char *group, const char *pkgname)
 				if (is_open != 3) {
 					ErrPrint("Invalid state\n");
 					DbgFree(name);
-					return -EFAULT;
+					return LB_STATUS_ERROR_FAULT;
 				}
 
 				if (group_add_option(item, key, name) < 0)
@@ -687,7 +688,7 @@ HAPI int group_add_livebox(const char *group, const char *pkgname)
 			default:
 				ErrPrint("Invalid state (%s)\n", name);
 				DbgFree(name);
-				return -EFAULT;
+				return LB_STATUS_ERROR_FAULT;
 			}
 
 			DbgFree(name);
@@ -698,13 +699,13 @@ HAPI int group_add_livebox(const char *group, const char *pkgname)
 		} else if (*ptr == '=') {
 			if (is_open != 3 || state != CONTEXT_OPTION_KEY) {
 				ErrPrint("Invalid state\n");
-				return -EFAULT;
+				return LB_STATUS_ERROR_FAULT;
 			}
 
 			key = get_token(ptr, &len);
 			if (!key) {
 				ErrPrint("Failed to get token\n");
-				return -EFAULT;
+				return LB_STATUS_ERROR_FAULT;
 			}
 
 			state = CONTEXT_OPTION_VALUE;
@@ -715,7 +716,7 @@ HAPI int group_add_livebox(const char *group, const char *pkgname)
 		} else if (*ptr == '}') {
 			if (is_open <= 0) {
 				ErrPrint("Invalid state\n");
-				return -EFAULT;
+				return LB_STATUS_ERROR_FAULT;
 			}
 
 			name = get_token(ptr, &len);
@@ -737,14 +738,14 @@ HAPI int group_add_livebox(const char *group, const char *pkgname)
 				if (!category) {
 					ErrPrint("Failed to get category\n");
 					DbgFree(name);
-					return -EFAULT;
+					return LB_STATUS_ERROR_FAULT;
 				}
 
 				info = group_create_context_info(category, pkgname);
 				if (!info) {
 					ErrPrint("Failed to create ctx info\n");
 					DbgFree(name);
-					return -EFAULT;
+					return LB_STATUS_ERROR_FAULT;
 				}
 
 				DbgPrint("Keep this syntax only for the compatibility: %s\n", name);
@@ -759,14 +760,14 @@ HAPI int group_add_livebox(const char *group, const char *pkgname)
 					if (!category) {
 						ErrPrint("Failed to get category\n");
 						DbgFree(name);
-						return -EFAULT;
+						return LB_STATUS_ERROR_FAULT;
 					}
 
 					info = group_create_context_info(category, pkgname);
 					if (!info) {
 						ErrPrint("Failed to create ctx info\n");
 						DbgFree(name);
-						return -EFAULT;
+						return LB_STATUS_ERROR_FAULT;
 					}
 
 					DbgPrint("Keep this syntax only for the compatibility: %s\n", name);
@@ -776,14 +777,14 @@ HAPI int group_add_livebox(const char *group, const char *pkgname)
 				} else {
 					ErrPrint("Invalid state\n");
 					DbgFree(name);
-					return -EFAULT;
+					return LB_STATUS_ERROR_FAULT;
 				}
 				break;
 			case CONTEXT_OPTION_VALUE:
 				if (is_open != 2) {
 					ErrPrint("Invalid state (%s)\n", name);
 					DbgFree(name);
-					return -EFAULT;
+					return LB_STATUS_ERROR_FAULT;
 				}
 
 				if (group_add_option(item, key, name) < 0)
@@ -814,9 +815,9 @@ HAPI int group_add_livebox(const char *group, const char *pkgname)
 	}
 
 	if (state != CLUSTER)
-		return -EINVAL;
+		return LB_STATUS_ERROR_INVALID;
 
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 HAPI int group_del_livebox(const char *pkgname)
@@ -846,12 +847,12 @@ HAPI int group_del_livebox(const char *pkgname)
 			group_destroy_cluster(cluster);
 	}
 
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 HAPI int group_init(void)
 {
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 HAPI int group_fini(void)
@@ -867,7 +868,7 @@ HAPI int group_fini(void)
 
 		destroy_cluster(cluster);
 	}
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 /* End of a file */

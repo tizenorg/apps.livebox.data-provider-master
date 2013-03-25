@@ -1,5 +1,5 @@
 /*
- * Copyright 2012  Samsung Electronics Co., Ltd
+ * Copyright 2013  Samsung Electronics Co., Ltd
  *
  * Licensed under the Flora License, Version 1.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -26,6 +26,7 @@
 
 #include <packet.h>
 #include <com-core_packet.h>
+#include <livebox-errno.h>
 
 #include "conf.h"
 #include "debug.h"
@@ -82,11 +83,11 @@ static int event_lb_route_cb(enum event_state state, struct event_data *event_in
 
 	pkg = instance_package(inst);
 	if (!pkg)
-		return -EINVAL;
+		return LB_STATUS_ERROR_INVALID;
 
 	slave = package_slave(pkg);
 	if (!slave)
-		return -EINVAL;
+		return LB_STATUS_ERROR_INVALID;
 
 	switch (state) {
 	case EVENT_STATE_ACTIVATE:
@@ -99,12 +100,12 @@ static int event_lb_route_cb(enum event_state state, struct event_data *event_in
 		cmdstr = "lb_mouse_up";
 		break;
 	default:
-		return -EINVAL;
+		return LB_STATUS_ERROR_INVALID;
 	}
 
 	packet = packet_create_noack(cmdstr, "ssdii", package_name(pkg), instance_id(inst), util_timestamp(), event_info->x, event_info->y);
 	if (!packet)
-		return -EFAULT;
+		return LB_STATUS_ERROR_FAULT;
 
 	return slave_rpc_request_only(slave, package_name(pkg), packet, 0);
 }
@@ -123,11 +124,11 @@ static int event_lb_consume_cb(enum event_state state, struct event_data *event_
 
 	script = instance_lb_script(inst);
 	if (!script)
-		return -EFAULT;
+		return LB_STATUS_ERROR_FAULT;
 
 	e = script_handler_evas(script);
 	if (!e)
-		return -EFAULT;
+		return LB_STATUS_ERROR_FAULT;
 
 	timestamp = util_timestamp();
 
@@ -163,11 +164,11 @@ static int event_pd_route_cb(enum event_state state, struct event_data *event_in
 
 	pkg = instance_package(inst);
 	if (!pkg)
-		return -EINVAL;
+		return LB_STATUS_ERROR_INVALID;
 
 	slave = package_slave(pkg);
 	if (!slave)
-		return -EINVAL;
+		return LB_STATUS_ERROR_INVALID;
 
 	DbgPrint("Event: %dx%d\n", event_info->x, event_info->y);
 	switch (state) {
@@ -181,12 +182,12 @@ static int event_pd_route_cb(enum event_state state, struct event_data *event_in
 		cmdstr = "pd_mouse_up";
 		break;
 	default:
-		return -EINVAL;
+		return LB_STATUS_ERROR_INVALID;
 	}
 
 	packet = packet_create_noack(cmdstr, "ssdii", package_name(pkg), instance_id(inst), util_timestamp(), event_info->x, event_info->y);
 	if (!packet)
-		return -EFAULT;
+		return LB_STATUS_ERROR_FAULT;
 
 	return slave_rpc_request_only(slave, package_name(pkg), packet, 0);
 }
@@ -205,11 +206,11 @@ static int event_pd_consume_cb(enum event_state state, struct event_data *event_
 
 	script = instance_pd_script(inst);
 	if (!script)
-		return -EFAULT;
+		return LB_STATUS_ERROR_FAULT;
 
 	e = script_handler_evas(script);
 	if (!e)
-		return -EFAULT;
+		return LB_STATUS_ERROR_FAULT;
 
 	DbgPrint("Event: %dx%d\n", event_info->x, event_info->y);
 	timestamp = util_timestamp();
@@ -245,13 +246,13 @@ static struct packet *client_acquire(pid_t pid, int handle, const struct packet 
 	client = client_find_by_pid(pid);
 	if (client) {
 		ErrPrint("Client is already exists %d\n", pid);
-		ret = -EEXIST;
+		ret = LB_STATUS_ERROR_EXIST;
 		goto out;
 	}
 
 	if (packet_get(packet, "d", &timestamp) != 1) {
 		ErrPrint("Invalid arguemnt\n");
-		ret = -EINVAL;
+		ret = LB_STATUS_ERROR_INVALID;
 		goto out;
 	}
 
@@ -265,7 +266,7 @@ static struct packet *client_acquire(pid_t pid, int handle, const struct packet 
 	client = client_create(pid, handle);
 	if (!client) {
 		ErrPrint("Failed to create a new client for %d\n", pid);
-		ret = -EFAULT;
+		ret = LB_STATUS_ERROR_FAULT;
 	}
 
 out:
@@ -285,7 +286,7 @@ static struct packet *cilent_release(pid_t pid, int handle, const struct packet 
 	client = client_find_by_pid(pid);
 	if (!client) {
 		ErrPrint("Client %d is not exists\n", pid);
-		ret = -ENOENT;
+		ret = LB_STATUS_ERROR_NOT_EXIST;
 		goto out;
 	}
 
@@ -316,14 +317,14 @@ static struct packet *client_clicked(pid_t pid, int handle, const struct packet 
 	client = client_find_by_pid(pid);
 	if (!client) {
 		ErrPrint("Client %d is not exists\n", pid);
-		ret = -ENOENT;
+		ret = LB_STATUS_ERROR_NOT_EXIST;
 		goto out;
 	}
 
 	ret = packet_get(packet, "sssddd", &pkgname, &id, &event, &timestamp, &x, &y);
 	if (ret != 6) {
 		ErrPrint("Parameter is not matched\n");
-		ret = -EINVAL;
+		ret = LB_STATUS_ERROR_INVALID;
 		goto out;
 	}
 
@@ -336,9 +337,9 @@ static struct packet *client_clicked(pid_t pid, int handle, const struct packet 
 	 */
 	inst = package_find_instance_by_id(pkgname, id);
 	if (!inst)
-		ret = -ENOENT;
+		ret = LB_STATUS_ERROR_NOT_EXIST;
 	else if (package_is_fault(instance_package(inst)))
-		ret = -EFAULT;
+		ret = LB_STATUS_ERROR_FAULT;
 	else
 		ret = instance_clicked(inst, event, timestamp, x, y);
 
@@ -366,14 +367,14 @@ static struct packet *client_text_signal(pid_t pid, int handle, const struct pac
 	client = client_find_by_pid(pid);
 	if (!client) {
 		ErrPrint("Client %d is not exists\n", pid);
-		ret = -ENOENT;
+		ret = LB_STATUS_ERROR_NOT_EXIST;
 		goto out;
 	}
 
 	ret = packet_get(packet, "ssssdddd", &pkgname, &id, &emission, &source, &sx, &sy, &ex, &ey);
 	if (ret != 8) {
 		ErrPrint("Parameter is not matched\n");
-		ret = -EINVAL;
+		ret = LB_STATUS_ERROR_INVALID;
 		goto out;
 	}
 
@@ -386,9 +387,9 @@ static struct packet *client_text_signal(pid_t pid, int handle, const struct pac
 	 */
 	inst = package_find_instance_by_id(pkgname, id);
 	if (!inst)
-		ret = -ENOENT;
+		ret = LB_STATUS_ERROR_NOT_EXIST;
 	else if (package_is_fault(instance_package(inst)))
-		ret = -EFAULT;
+		ret = LB_STATUS_ERROR_FAULT;
 	else
 		ret = instance_text_signal_emit(inst, emission, source, sx, sy, ex, ey);
 
@@ -433,14 +434,14 @@ static struct packet *client_delete(pid_t pid, int handle, const struct packet *
 	client = client_find_by_pid(pid);
 	if (!client) {
 		ErrPrint("Client %d is not exists\n", pid);
-		ret = -ENOENT;
+		ret = LB_STATUS_ERROR_NOT_EXIST;
 		goto out;
 	}
 
 	ret = packet_get(packet, "ss", &pkgname, &id);
 	if (ret != 2) {
 		ErrPrint("Parameter is not matched\n");
-		ret = -EINVAL;
+		ret = LB_STATUS_ERROR_INVALID;
 		goto out;
 	}
 
@@ -453,9 +454,9 @@ static struct packet *client_delete(pid_t pid, int handle, const struct packet *
 	 */
 	inst = package_find_instance_by_id(pkgname, id);
 	if (!inst) {
-		ret = -ENOENT;
+		ret = LB_STATUS_ERROR_NOT_EXIST;
 	} else if (package_is_fault(instance_package(inst))) {
-		ret = -EFAULT;
+		ret = LB_STATUS_ERROR_FAULT;
 	} else if (instance_client(inst) != client) {
 		if (instance_has_client(inst, client)) {
 			struct deleted_item *item;
@@ -463,7 +464,7 @@ static struct packet *client_delete(pid_t pid, int handle, const struct packet *
 			item = malloc(sizeof(*item));
 			if (!item) {
 				ErrPrint("Heap: %s\n", strerror(errno));
-				ret = -ENOMEM;
+				ret = LB_STATUS_ERROR_MEMORY;
 			} else {
 				ret = 0;
 				/*!
@@ -483,11 +484,11 @@ static struct packet *client_delete(pid_t pid, int handle, const struct packet *
 					client_unref(client);
 					instance_unref(inst);
 					DbgFree(item);
-					ret = -EFAULT;
+					ret = LB_STATUS_ERROR_FAULT;
 				}
 			}
 		} else {
-			ret = -EPERM;
+			ret = LB_STATUS_ERROR_PERMISSION;
 		}
 	} else {
 		ret = instance_destroy(inst);
@@ -515,14 +516,14 @@ static struct packet *client_resize(pid_t pid, int handle, const struct packet *
 	client = client_find_by_pid(pid);
 	if (!client) {
 		ErrPrint("Client %d is not exists\n", pid);
-		ret = -ENOENT;
+		ret = LB_STATUS_ERROR_NOT_EXIST;
 		goto out;
 	}
 
 	ret = packet_get(packet, "ssii", &pkgname, &id, &w, &h);
 	if (ret != 4) {
 		ErrPrint("Parameter is not matched\n");
-		ret = -EINVAL;
+		ret = LB_STATUS_ERROR_INVALID;
 		goto out;
 	}
 
@@ -535,11 +536,11 @@ static struct packet *client_resize(pid_t pid, int handle, const struct packet *
 	 */
 	inst = package_find_instance_by_id(pkgname, id);
 	if (!inst) {
-		ret = -ENOENT;
+		ret = LB_STATUS_ERROR_NOT_EXIST;
 	} else if (package_is_fault(instance_package(inst))) {
-		ret = -EFAULT;
+		ret = LB_STATUS_ERROR_FAULT;
 	} else if (instance_client(inst) != client) {
-		ret = -EPERM;
+		ret = LB_STATUS_ERROR_PERMISSION;
 	} else {
 		ret = instance_resize(inst, w, h);
 	}
@@ -571,14 +572,14 @@ static struct packet *client_new(pid_t pid, int handle, const struct packet *pac
 	client = client_find_by_pid(pid);
 	if (!client) {
 		ErrPrint("Client %d is not exists\n", pid);
-		ret = -ENOENT;
+		ret = LB_STATUS_ERROR_NOT_EXIST;
 		goto out;
 	}
 
 	ret = packet_get(packet, "dssssdii", &timestamp, &pkgname, &content, &cluster, &category, &period, &width, &height);
 	if (ret != 8) {
 		ErrPrint("Parameter is not matched\n");
-		ret = -EINVAL;
+		ret = LB_STATUS_ERROR_INVALID;
 		goto out;
 	}
 
@@ -588,7 +589,7 @@ static struct packet *client_new(pid_t pid, int handle, const struct packet *pac
 	lb_pkgname = package_lb_pkgname(pkgname);
 	if (!lb_pkgname) {
 		ErrPrint("This %s has no livebox package\n", pkgname);
-		ret = -EINVAL;
+		ret = LB_STATUS_ERROR_INVALID;
 		goto out;
 	}
 
@@ -597,12 +598,12 @@ static struct packet *client_new(pid_t pid, int handle, const struct packet *pac
 		info = package_create(lb_pkgname);
 
 	if (!info) {
-		ret = -EFAULT;
+		ret = LB_STATUS_ERROR_FAULT;
 	} else if (package_is_fault(info)) {
-		ret = -EFAULT;
+		ret = LB_STATUS_ERROR_FAULT;
 	} else if (util_free_space(IMAGE_PATH) < MINIMUM_SPACE) {
 		ErrPrint("Not enough space\n");
-		ret = -ENOSPC;
+		ret = LB_STATUS_ERROR_NO_SPACE;
 	} else {
 		struct inst_info *inst;
 
@@ -617,7 +618,7 @@ static struct packet *client_new(pid_t pid, int handle, const struct packet *pac
 		 * \note
 		 * Using the "inst" without validate its value is at my disposal. ;)
 		 */
-		ret = inst ? 0 : -EFAULT;
+		ret = inst ? 0 : LB_STATUS_ERROR_FAULT;
 	}
 
 	DbgFree(lb_pkgname);
@@ -642,14 +643,14 @@ static struct packet *client_change_visibility(pid_t pid, int handle, const stru
 	client = client_find_by_pid(pid);
 	if (!client) {
 		ErrPrint("Client %d is not exists\n", pid);
-		ret = -ENOENT;
+		ret = LB_STATUS_ERROR_NOT_EXIST;
 		goto out;
 	}
 
 	ret = packet_get(packet, "ssi", &pkgname, &id, (int *)&state);
 	if (ret != 3) {
 		ErrPrint("Parameter is not matched\n");
-		ret = -EINVAL;
+		ret = LB_STATUS_ERROR_INVALID;
 		goto out;
 	}
 
@@ -662,11 +663,11 @@ static struct packet *client_change_visibility(pid_t pid, int handle, const stru
 	 */
 	inst = package_find_instance_by_id(pkgname, id);
 	if (!inst) {
-		ret = -ENOENT;
+		ret = LB_STATUS_ERROR_NOT_EXIST;
 	} else if (package_is_fault(instance_package(inst))) {
-		ret = -EFAULT;
+		ret = LB_STATUS_ERROR_FAULT;
 	} else if (instance_client(inst) != client) {
-		ret = -EPERM;
+		ret = LB_STATUS_ERROR_PERMISSION;
 	} else {
 		ret = instance_set_visible_state(inst, state);
 	}
@@ -689,14 +690,14 @@ static struct packet *client_set_period(pid_t pid, int handle, const struct pack
 	client = client_find_by_pid(pid);
 	if (!client) {
 		ErrPrint("Client %d is not exists\n", pid);
-		ret = -ENOENT;
+		ret = LB_STATUS_ERROR_NOT_EXIST;
 		goto out;
 	}
 
 	ret = packet_get(packet, "ssd", &pkgname, &id, &period);
 	if (ret != 3) {
 		ErrPrint("Parameter is not matched\n");
-		ret = -EINVAL;
+		ret = LB_STATUS_ERROR_INVALID;
 		goto out;
 	}
 
@@ -709,11 +710,11 @@ static struct packet *client_set_period(pid_t pid, int handle, const struct pack
 	 */
 	inst = package_find_instance_by_id(pkgname, id);
 	if (!inst) {
-		ret = -ENOENT;
+		ret = LB_STATUS_ERROR_NOT_EXIST;
 	} else if (package_is_fault(instance_package(inst))) {
-		ret = -EFAULT;
+		ret = LB_STATUS_ERROR_FAULT;
 	} else if (instance_client(inst) != client) {
-		ret = -EPERM;
+		ret = LB_STATUS_ERROR_PERMISSION;
 	} else {
 		ret = instance_set_period(inst, period);
 	}
@@ -740,14 +741,14 @@ static struct packet *client_change_group(pid_t pid, int handle, const struct pa
 	client = client_find_by_pid(pid);
 	if (!client) {
 		ErrPrint("Client %d is not exists\n", pid);
-		ret = -ENOENT;
+		ret = LB_STATUS_ERROR_NOT_EXIST;
 		goto out;
 	}
 
 	ret = packet_get(packet, "ssss", &pkgname, &id, &cluster, &category);
 	if (ret != 4) {
 		ErrPrint("Parameter is not matched\n");
-		ret = -EINVAL;
+		ret = LB_STATUS_ERROR_INVALID;
 		goto out;
 	}
 
@@ -760,11 +761,11 @@ static struct packet *client_change_group(pid_t pid, int handle, const struct pa
 	 */
 	inst = package_find_instance_by_id(pkgname, id);
 	if (!inst) {
-		ret = -ENOENT;
+		ret = LB_STATUS_ERROR_NOT_EXIST;
 	} else if (package_is_fault(instance_package(inst))) {
-		ret = -EFAULT;
+		ret = LB_STATUS_ERROR_FAULT;
 	} else if (instance_client(inst) != client) {
-		ret = -EPERM;
+		ret = LB_STATUS_ERROR_PERMISSION;
 	} else {
 		ret = instance_change_group(inst, cluster, category);
 	}
@@ -792,14 +793,14 @@ static struct packet *client_pd_mouse_enter(pid_t pid, int handle, const struct 
 	client = client_find_by_pid(pid);
 	if (!client) {
 		ErrPrint("Client %d is not exists\n", pid);
-		ret = -ENOENT;
+		ret = LB_STATUS_ERROR_NOT_EXIST;
 		goto out;
 	}
 
 	ret = packet_get(packet, "ssdii", &pkgname, &id, &timestamp, &x, &y);
 	if (ret != 5) {
 		ErrPrint("Invalid parameter\n");
-		ret = -EINVAL;
+		ret = LB_STATUS_ERROR_INVALID;
 		goto out;
 	}
 
@@ -811,14 +812,14 @@ static struct packet *client_pd_mouse_enter(pid_t pid, int handle, const struct 
 	inst = package_find_instance_by_id(pkgname, id);
 	if (!inst) {
 		ErrPrint("Instance[%s] is not exists\n", id);
-		ret = -ENOENT;
+		ret = LB_STATUS_ERROR_NOT_EXIST;
 		goto out;
 	}
 
 	pkg = instance_package(inst);
 	if (!pkg) {
 		ErrPrint("Package[%s] info is not found\n", pkgname);
-		ret = -EFAULT;
+		ret = LB_STATUS_ERROR_FAULT;
 		goto out;
 	}
 
@@ -829,7 +830,7 @@ static struct packet *client_pd_mouse_enter(pid_t pid, int handle, const struct 
 		 * slave has not load it, so we don't need to do anything at here!
 		 */
 		DbgPrint("Package[%s] is faulted\n", pkgname);
-		ret = -EFAULT;
+		ret = LB_STATUS_ERROR_FAULT;
 	} else if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
 		struct buffer_info *buffer;
 		struct slave_node *slave;
@@ -838,14 +839,14 @@ static struct packet *client_pd_mouse_enter(pid_t pid, int handle, const struct 
 		buffer = instance_pd_buffer(inst);
 		if (!buffer) {
 			ErrPrint("Instance[%s] has no buffer\n", id);
-			ret = -EFAULT;
+			ret = LB_STATUS_ERROR_FAULT;
 			goto out;
 		}
 
 		slave = package_slave(pkg);
 		if (!slave) {
 			ErrPrint("Package[%s] has no slave\n", pkgname);
-			ret = -EINVAL;
+			ret = LB_STATUS_ERROR_INVALID;
 			goto out;
 		}
 
@@ -853,7 +854,7 @@ static struct packet *client_pd_mouse_enter(pid_t pid, int handle, const struct 
 		packet = packet_create_noack("pd_mouse_enter", "ssiiddd", pkgname, id, w, h, timestamp, x, y);
 		if (!packet) {
 			ErrPrint("Failed to create a packet[%s]\n", pkgname);
-			ret = -EFAULT;
+			ret = LB_STATUS_ERROR_FAULT;
 			goto out;
 		}
 		*/
@@ -866,13 +867,13 @@ static struct packet *client_pd_mouse_enter(pid_t pid, int handle, const struct 
 
 		script = instance_pd_script(inst);
 		if (!script) {
-			ret = -EFAULT;
+			ret = LB_STATUS_ERROR_FAULT;
 			goto out;
 		}
 
 		e = script_handler_evas(script);
 		if (!e) {
-			ret = -EFAULT;
+			ret = LB_STATUS_ERROR_FAULT;
 			goto out;
 		}
 
@@ -881,7 +882,7 @@ static struct packet *client_pd_mouse_enter(pid_t pid, int handle, const struct 
 		ret = 0;
 	} else {
 		ErrPrint("Unsupported package\n");
-		ret = -EINVAL;
+		ret = LB_STATUS_ERROR_INVALID;
 	}
 
 out:
@@ -904,14 +905,14 @@ static struct packet *client_pd_mouse_leave(pid_t pid, int handle, const struct 
 	client = client_find_by_pid(pid);
 	if (!client) {
 		ErrPrint("Client %d is not exists\n", pid);
-		ret = -ENOENT;
+		ret = LB_STATUS_ERROR_NOT_EXIST;
 		goto out;
 	}
 
 	ret = packet_get(packet, "ssdii", &pkgname, &id, &timestamp, &x, &y);
 	if (ret != 5) {
 		ErrPrint("Parameter is not matched\n");
-		ret = -EINVAL;
+		ret = LB_STATUS_ERROR_INVALID;
 		goto out;
 	}
 
@@ -923,14 +924,14 @@ static struct packet *client_pd_mouse_leave(pid_t pid, int handle, const struct 
 	inst = package_find_instance_by_id(pkgname, id);
 	if (!inst) {
 		ErrPrint("Instance[%s] is not exists\n", id);
-		ret = -ENOENT;
+		ret = LB_STATUS_ERROR_NOT_EXIST;
 		goto out;
 	}
 
 	pkg = instance_package(inst);
 	if (!pkg) {
 		ErrPrint("Package[%s] info is not found\n", pkgname);
-		ret = -EFAULT;
+		ret = LB_STATUS_ERROR_FAULT;
 		goto out;
 	}
 
@@ -941,7 +942,7 @@ static struct packet *client_pd_mouse_leave(pid_t pid, int handle, const struct 
 		 * slave has not load it, so we don't need to do anything at here!
 		 */
 		DbgPrint("Package[%s] is faulted\n", pkgname);
-		ret = -EFAULT;
+		ret = LB_STATUS_ERROR_FAULT;
 	} else if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
 		struct buffer_info *buffer;
 		struct slave_node *slave;
@@ -950,14 +951,14 @@ static struct packet *client_pd_mouse_leave(pid_t pid, int handle, const struct 
 		buffer = instance_pd_buffer(inst);
 		if (!buffer) {
 			ErrPrint("Instance[%s] has no buffer\n", id);
-			ret = -EFAULT;
+			ret = LB_STATUS_ERROR_FAULT;
 			goto out;
 		}
 
 		slave = package_slave(pkg);
 		if (!slave) {
 			ErrPrint("Package[%s] has no slave\n", pkgname);
-			ret = -EINVAL;
+			ret = LB_STATUS_ERROR_INVALID;
 			goto out;
 		}
 
@@ -965,7 +966,7 @@ static struct packet *client_pd_mouse_leave(pid_t pid, int handle, const struct 
 		packet = packet_create_noack("pd_mouse_leave", "ssiiddd", pkgname, id, w, h, timestamp, x, y);
 		if (!packet) {
 			ErrPrint("Failed to create a packet[%s]\n", pkgname);
-			ret = -EFAULT;
+			ret = LB_STATUS_ERROR_FAULT;
 			goto out;
 		}
 		*/
@@ -978,13 +979,13 @@ static struct packet *client_pd_mouse_leave(pid_t pid, int handle, const struct 
 
 		script = instance_pd_script(inst);
 		if (!script) {
-			ret = -EFAULT;
+			ret = LB_STATUS_ERROR_FAULT;
 			goto out;
 		}
 
 		e = script_handler_evas(script);
 		if (!e) {
-			ret = -EFAULT;
+			ret = LB_STATUS_ERROR_FAULT;
 			goto out;
 		}
 
@@ -993,7 +994,7 @@ static struct packet *client_pd_mouse_leave(pid_t pid, int handle, const struct 
 		ret = 0;
 	} else {
 		ErrPrint("Unsupported package\n");
-		ret = -EINVAL;
+		ret = LB_STATUS_ERROR_INVALID;
 	}
 
 out:
@@ -1016,14 +1017,14 @@ static struct packet *client_pd_mouse_down(pid_t pid, int handle, const struct p
 	client = client_find_by_pid(pid);
 	if (!client) {
 		ErrPrint("Client %d is not exists\n", pid);
-		ret = -ENOENT;
+		ret = LB_STATUS_ERROR_NOT_EXIST;
 		goto out;
 	}
 
 	ret = packet_get(packet, "ssdii", &pkgname, &id, &timestamp, &x, &y);
 	if (ret != 5) {
 		ErrPrint("Parameter is not matched\n");
-		ret = -EINVAL;
+		ret = LB_STATUS_ERROR_INVALID;
 		goto out;
 	}
 
@@ -1037,14 +1038,14 @@ static struct packet *client_pd_mouse_down(pid_t pid, int handle, const struct p
 	inst = package_find_instance_by_id(pkgname, id);
 	if (!inst) {
 		ErrPrint("Instance[%s] is not exists\n", id);
-		ret = -ENOENT;
+		ret = LB_STATUS_ERROR_NOT_EXIST;
 		goto out;
 	}
 
 	pkg = instance_package(inst);
 	if (!pkg) {
 		ErrPrint("Package[%s] info is not found\n", pkgname);
-		ret = -EFAULT;
+		ret = LB_STATUS_ERROR_FAULT;
 		goto out;
 	}
 
@@ -1055,7 +1056,7 @@ static struct packet *client_pd_mouse_down(pid_t pid, int handle, const struct p
 		 * slave has not load it, so we don't need to do anything at here!
 		 */
 		DbgPrint("Package[%s] is faulted\n", pkgname);
-		ret = -EFAULT;
+		ret = LB_STATUS_ERROR_FAULT;
 	} else if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
 		struct buffer_info *buffer;
 		struct slave_node *slave;
@@ -1064,14 +1065,14 @@ static struct packet *client_pd_mouse_down(pid_t pid, int handle, const struct p
 		buffer = instance_pd_buffer(inst);
 		if (!buffer) {
 			ErrPrint("Instance[%s] has no buffer\n", id);
-			ret = -EFAULT;
+			ret = LB_STATUS_ERROR_FAULT;
 			goto out;
 		}
 
 		slave = package_slave(pkg);
 		if (!slave) {
 			ErrPrint("Package[%s] has no slave\n", pkgname);
-			ret = -EINVAL;
+			ret = LB_STATUS_ERROR_INVALID;
 			goto out;
 		}
 
@@ -1079,7 +1080,7 @@ static struct packet *client_pd_mouse_down(pid_t pid, int handle, const struct p
 		packet = packet_create_noack("pd_mouse_down", "ssiiddd", pkgname, id, w, h, timestamp, x, y);
 		if (!packet) {
 			ErrPrint("Failed to create a packet[%s]\n", pkgname);
-			ret = -EFAULT;
+			ret = LB_STATUS_ERROR_FAULT;
 			goto out;
 		}
 		*/
@@ -1092,13 +1093,13 @@ static struct packet *client_pd_mouse_down(pid_t pid, int handle, const struct p
 
 		script = instance_pd_script(inst);
 		if (!script) {
-			ret = -EFAULT;
+			ret = LB_STATUS_ERROR_FAULT;
 			goto out;
 		}
 
 		e = script_handler_evas(script);
 		if (!e) {
-			ret = -EFAULT;
+			ret = LB_STATUS_ERROR_FAULT;
 			goto out;
 		}
 
@@ -1108,7 +1109,7 @@ static struct packet *client_pd_mouse_down(pid_t pid, int handle, const struct p
 		ret = 0;
 	} else {
 		ErrPrint("Unsupported package\n");
-		ret = -EINVAL;
+		ret = LB_STATUS_ERROR_INVALID;
 	}
 
 out:
@@ -1131,14 +1132,14 @@ static struct packet *client_pd_mouse_up(pid_t pid, int handle, const struct pac
 	client = client_find_by_pid(pid);
 	if (!client) {
 		ErrPrint("Client %d is not exists\n", pid);
-		ret = -ENOENT;
+		ret = LB_STATUS_ERROR_NOT_EXIST;
 		goto out;
 	}
 
 	ret = packet_get(packet, "ssdii", &pkgname, &id, &timestamp, &x, &y);
 	if (ret != 5) {
 		ErrPrint("Parameter is not matched\n");
-		ret = -EINVAL;
+		ret = LB_STATUS_ERROR_INVALID;
 		goto out;
 	}
 
@@ -1151,14 +1152,14 @@ static struct packet *client_pd_mouse_up(pid_t pid, int handle, const struct pac
 	inst = package_find_instance_by_id(pkgname, id);
 	if (!inst) {
 		ErrPrint("Instance[%s] is not exists\n", id);
-		ret = -ENOENT;
+		ret = LB_STATUS_ERROR_NOT_EXIST;
 		goto out;
 	}
 
 	pkg = instance_package(inst);
 	if (!pkg) {
 		ErrPrint("Package[%s] info is not exists\n", pkgname);
-		ret = -EFAULT;
+		ret = LB_STATUS_ERROR_FAULT;
 		goto out;
 	}
 
@@ -1169,7 +1170,7 @@ static struct packet *client_pd_mouse_up(pid_t pid, int handle, const struct pac
 		 * slave has not load it, so we don't need to do anything at here!
 		 */
 		DbgPrint("Package[%s] is faulted\n", pkgname);
-		ret = -EFAULT;
+		ret = LB_STATUS_ERROR_FAULT;
 	} else if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
 		struct buffer_info *buffer;
 		struct slave_node *slave;
@@ -1178,14 +1179,14 @@ static struct packet *client_pd_mouse_up(pid_t pid, int handle, const struct pac
 		buffer = instance_pd_buffer(inst);
 		if (!buffer) {
 			ErrPrint("Instance[%s] has no buffer\n", id);
-			ret = -EFAULT;
+			ret = LB_STATUS_ERROR_FAULT;
 			goto out;
 		}
 
 		slave = package_slave(pkg);
 		if (!slave) {
 			ErrPrint("Package[%s] has no slave\n", pkgname);
-			ret = -EINVAL;
+			ret = LB_STATUS_ERROR_INVALID;
 			goto out;
 		}
 
@@ -1193,7 +1194,7 @@ static struct packet *client_pd_mouse_up(pid_t pid, int handle, const struct pac
 		packet = packet_create_noack("pd_mouse_up", "ssiiddd", pkgname, id, w, h, timestamp, x, y);
 		if (!packet) {
 			ErrPrint("Failed to create a packet[%s]\n", pkgname);
-			ret = -EFAULT;
+			ret = LB_STATUS_ERROR_FAULT;
 			goto out;
 		}
 		*/
@@ -1206,13 +1207,13 @@ static struct packet *client_pd_mouse_up(pid_t pid, int handle, const struct pac
 
 		script = instance_pd_script(inst);
 		if (!script) {
-			ret = -EFAULT;
+			ret = LB_STATUS_ERROR_FAULT;
 			goto out;
 		}
 
 		e = script_handler_evas(script);
 		if (!e) {
-			ret = -EFAULT;
+			ret = LB_STATUS_ERROR_FAULT;
 			goto out;
 		}
 
@@ -1222,7 +1223,7 @@ static struct packet *client_pd_mouse_up(pid_t pid, int handle, const struct pac
 		ret = 0;
 	} else {
 		ErrPrint("Unsupported package\n");
-		ret = -EINVAL;
+		ret = LB_STATUS_ERROR_INVALID;
 	}
 
 out:
@@ -1245,14 +1246,14 @@ static struct packet *client_pd_mouse_move(pid_t pid, int handle, const struct p
 	client = client_find_by_pid(pid);
 	if (!client) {
 		ErrPrint("Client %d is not exists\n", pid);
-		ret = -ENOENT;
+		ret = LB_STATUS_ERROR_NOT_EXIST;
 		goto out;
 	}
 
 	ret = packet_get(packet, "ssdii", &pkgname, &id, &timestamp, &x, &y);
 	if (ret != 5) {
 		ErrPrint("Parameter is not matched\n");
-		ret = -EINVAL;
+		ret = LB_STATUS_ERROR_INVALID;
 		goto out;
 	}
 
@@ -1265,14 +1266,14 @@ static struct packet *client_pd_mouse_move(pid_t pid, int handle, const struct p
 	inst = package_find_instance_by_id(pkgname, id);
 	if (!inst) {
 		ErrPrint("Instance[%s] is not exists\n", id);
-		ret = -ENOENT;
+		ret = LB_STATUS_ERROR_NOT_EXIST;
 		goto out;
 	}
 
 	pkg = instance_package(inst);
 	if (!pkg) {
 		ErrPrint("Package[%s] info is not exists\n", pkgname);
-		ret = -EFAULT;
+		ret = LB_STATUS_ERROR_FAULT;
 		goto out;
 	}
 
@@ -1283,7 +1284,7 @@ static struct packet *client_pd_mouse_move(pid_t pid, int handle, const struct p
 		 * slave has not load it, so we don't need to do anything at here!
 		 */
 		DbgPrint("Package[%s] is faulted\n", pkgname);
-		ret = -EFAULT;
+		ret = LB_STATUS_ERROR_FAULT;
 	} else if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
 		struct buffer_info *buffer;
 		struct slave_node *slave;
@@ -1292,14 +1293,14 @@ static struct packet *client_pd_mouse_move(pid_t pid, int handle, const struct p
 		buffer = instance_pd_buffer(inst);
 		if (!buffer) {
 			ErrPrint("Instance[%s] has no buffer\n", id);
-			ret = -EFAULT;
+			ret = LB_STATUS_ERROR_FAULT;
 			goto out;
 		}
 
 		slave = package_slave(pkg);
 		if (!slave) {
 			ErrPrint("Package[%s] has no slave\n", pkgname);
-			ret = -EINVAL;
+			ret = LB_STATUS_ERROR_INVALID;
 			goto out;
 		}
 
@@ -1308,7 +1309,7 @@ static struct packet *client_pd_mouse_move(pid_t pid, int handle, const struct p
 		packet = packet_create_noack("pd_mouse_move", "ssiiddd", pkgname, id, w, h, timestamp, x, y);
 		if (!packet) {
 			ErrPrint("Failed to create a packet[%s]\n", pkgname);
-			ret = -EFAULT;
+			ret = LB_STATUS_ERROR_FAULT;
 			goto out;
 		}
 		 */
@@ -1320,13 +1321,13 @@ static struct packet *client_pd_mouse_move(pid_t pid, int handle, const struct p
 
 		script = instance_pd_script(inst);
 		if (!script) {
-			ret = -EFAULT;
+			ret = LB_STATUS_ERROR_FAULT;
 			goto out;
 		}
 
 		e = script_handler_evas(script);
 		if (!e) {
-			ret = -EFAULT;
+			ret = LB_STATUS_ERROR_FAULT;
 			goto out;
 		}
 
@@ -1335,7 +1336,7 @@ static struct packet *client_pd_mouse_move(pid_t pid, int handle, const struct p
 		ret = 0;
 	} else {
 		ErrPrint("Unsupported package\n");
-		ret = -EINVAL;
+		ret = LB_STATUS_ERROR_INVALID;
 	}
 
 out:
@@ -1358,14 +1359,14 @@ static struct packet *client_lb_mouse_move(pid_t pid, int handle, const struct p
 	client = client_find_by_pid(pid);
 	if (!client) {
 		ErrPrint("Client %d is not exists\n", pid);
-		ret = -ENOENT;
+		ret = LB_STATUS_ERROR_NOT_EXIST;
 		goto out;
 	}
 
 	ret = packet_get(packet, "ssdii", &pkgname, &id, &timestamp, &x, &y);
 	if (ret != 5) {
 		ErrPrint("Parameter is not matched\n");
-		ret = -EINVAL;
+		ret = LB_STATUS_ERROR_INVALID;
 		goto out;
 	}
 
@@ -1377,14 +1378,14 @@ static struct packet *client_lb_mouse_move(pid_t pid, int handle, const struct p
 	inst = package_find_instance_by_id(pkgname, id);
 	if (!inst) {
 		ErrPrint("Instance[%s] is not exists\n", id);
-		ret = -ENOENT;
+		ret = LB_STATUS_ERROR_NOT_EXIST;
 		goto out;
 	}
 
 	pkg = instance_package(inst);
 	if (!pkg) {
 		ErrPrint("Package[%s] info is not exists\n", pkgname);
-		ret = -EFAULT;
+		ret = LB_STATUS_ERROR_FAULT;
 		goto out;
 	}
 
@@ -1395,7 +1396,7 @@ static struct packet *client_lb_mouse_move(pid_t pid, int handle, const struct p
 		 * slave has not load it, so we don't need to do anything at here!
 		 */
 		DbgPrint("Package[%s] is faulted\n", pkgname);
-		ret = -EFAULT;
+		ret = LB_STATUS_ERROR_FAULT;
 	} else if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
 		struct buffer_info *buffer;
 		struct slave_node *slave;
@@ -1404,14 +1405,14 @@ static struct packet *client_lb_mouse_move(pid_t pid, int handle, const struct p
 		buffer = instance_lb_buffer(inst);
 		if (!buffer) {
 			ErrPrint("Instance[%s] has no buffer\n", id);
-			ret = -EFAULT;
+			ret = LB_STATUS_ERROR_FAULT;
 			goto out;
 		}
 
 		slave = package_slave(pkg);
 		if (!slave) {
 			ErrPrint("Package[%s] has no slave\n", pkgname);
-			ret = -EINVAL;
+			ret = LB_STATUS_ERROR_INVALID;
 			goto out;
 		}
 
@@ -1419,7 +1420,7 @@ static struct packet *client_lb_mouse_move(pid_t pid, int handle, const struct p
 		packet = packet_create_noack("lb_mouse_move", "ssiiddd", pkgname, id, w, h, timestamp, x, y);
 		if (!packet) {
 			ErrPrint("Failed to create a packet[%s]\n", pkgname);
-			ret = -EFAULT;
+			ret = LB_STATUS_ERROR_FAULT;
 			goto out;
 		}
 		*/
@@ -1431,13 +1432,13 @@ static struct packet *client_lb_mouse_move(pid_t pid, int handle, const struct p
 
 		script = instance_lb_script(inst);
 		if (!script) {
-			ret = -EFAULT;
+			ret = LB_STATUS_ERROR_FAULT;
 			goto out;
 		}
 
 		e = script_handler_evas(script);
 		if (!e) {
-			ret = -EFAULT;
+			ret = LB_STATUS_ERROR_FAULT;
 			goto out;
 		}
 
@@ -1446,7 +1447,7 @@ static struct packet *client_lb_mouse_move(pid_t pid, int handle, const struct p
 		ret = 0;
 	} else {
 		ErrPrint("Unsupported package\n");
-		ret = -EINVAL;
+		ret = LB_STATUS_ERROR_INVALID;
 	}
 
 out:
@@ -1475,28 +1476,28 @@ static struct packet *client_lb_mouse_set(pid_t pid, int handle, const struct pa
 	client = client_find_by_pid(pid);
 	if (!client) {
 		ErrPrint("Client %d is not exists\n", pid);
-		ret = -ENOENT;
+		ret = LB_STATUS_ERROR_NOT_EXIST;
 		goto out;
 	}
 
 	ret = packet_get(packet, "ssdii", &pkgname, &id, &timestamp, &x, &y);
 	if (ret != 5) {
 		ErrPrint("Parameter is not matched\n");
-		ret = -EINVAL;
+		ret = LB_STATUS_ERROR_INVALID;
 		goto out;
 	}
 
 	inst = package_find_instance_by_id(pkgname, id);
 	if (!inst) {
 		ErrPrint("Instance[%s] is not exists\n", id);
-		ret = -ENOENT;
+		ret = LB_STATUS_ERROR_NOT_EXIST;
 		goto out;
 	}
 
 	pkg = instance_package(inst);
 	if (!pkg) {
 		ErrPrint("Package[%s] info is not exists\n", pkgname);
-		ret = -EFAULT;
+		ret = LB_STATUS_ERROR_FAULT;
 		goto out;
 	}
 
@@ -1507,7 +1508,7 @@ static struct packet *client_lb_mouse_set(pid_t pid, int handle, const struct pa
 		 * slave has not load it, so we don't need to do anything at here!
 		 */
 		DbgPrint("Package[%s] is faulted\n", pkgname);
-		ret = -EFAULT;
+		ret = LB_STATUS_ERROR_FAULT;
 	} else if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
 		if (event_is_activated()) {
 			if (event_deactivate() == 0)
@@ -1528,7 +1529,7 @@ static struct packet *client_lb_mouse_set(pid_t pid, int handle, const struct pa
 			instance_event_callback_add(inst, INSTANCE_EVENT_DESTROY, inst_del_cb, NULL);
 	} else {
 		ErrPrint("Unsupported package\n");
-		ret = -EINVAL;
+		ret = LB_STATUS_ERROR_INVALID;
 	}
 out:
 	return NULL;
@@ -1548,27 +1549,27 @@ static struct packet *client_lb_mouse_unset(pid_t pid, int handle, const struct 
 	client = client_find_by_pid(pid);
 	if (!client) {
 		ErrPrint("Client %d is not exists\n", pid);
-		ret = -ENOENT;
+		ret = LB_STATUS_ERROR_NOT_EXIST;
 		goto out;
 	}
 	ret = packet_get(packet, "ssdii", &pkgname, &id, &timestamp, &x, &y);
 	if (ret != 5) {
 		ErrPrint("Parameter is not matched\n");
-		ret = -EINVAL;
+		ret = LB_STATUS_ERROR_INVALID;
 		goto out;
 	}
 
 	inst = package_find_instance_by_id(pkgname, id);
 	if (!inst) {
 		ErrPrint("Instance[%s] is not exists\n", id);
-		ret = -ENOENT;
+		ret = LB_STATUS_ERROR_NOT_EXIST;
 		goto out;
 	}
 
 	pkg = instance_package(inst);
 	if (!pkg) {
 		ErrPrint("Package[%s] info is not exists\n", pkgname);
-		ret = -EFAULT;
+		ret = LB_STATUS_ERROR_FAULT;
 		goto out;
 	}
 
@@ -1579,7 +1580,7 @@ static struct packet *client_lb_mouse_unset(pid_t pid, int handle, const struct 
 		 * slave has not load it, so we don't need to do anything at here!
 		 */
 		DbgPrint("Package[%s] is faulted\n", pkgname);
-		ret = -EFAULT;
+		ret = LB_STATUS_ERROR_FAULT;
 	} else if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
 		ret = event_deactivate();
 		if (ret == 0)
@@ -1590,7 +1591,7 @@ static struct packet *client_lb_mouse_unset(pid_t pid, int handle, const struct 
 			instance_event_callback_del(inst, INSTANCE_EVENT_DESTROY, inst_del_cb);
 	} else {
 		ErrPrint("Unsupported package\n");
-		ret = -EINVAL;
+		ret = LB_STATUS_ERROR_INVALID;
 	}
 out:
 	return NULL;
@@ -1611,28 +1612,28 @@ static struct packet *client_pd_mouse_set(pid_t pid, int handle, const struct pa
 	client = client_find_by_pid(pid);
 	if (!client) {
 		ErrPrint("Client %d is not exists\n", pid);
-		ret = -ENOENT;
+		ret = LB_STATUS_ERROR_NOT_EXIST;
 		goto out;
 	}
 
 	ret = packet_get(packet, "ssdii", &pkgname, &id, &timestamp, &x, &y);
 	if (ret != 5) {
 		ErrPrint("Parameter is not matched\n");
-		ret = -EINVAL;
+		ret = LB_STATUS_ERROR_INVALID;
 		goto out;
 	}
 
 	inst = package_find_instance_by_id(pkgname, id);
 	if (!inst) {
 		ErrPrint("Instance[%s] is not exists\n", id);
-		ret = -ENOENT;
+		ret = LB_STATUS_ERROR_NOT_EXIST;
 		goto out;
 	}
 
 	pkg = instance_package(inst);
 	if (!pkg) {
 		ErrPrint("Package[%s] info is not exists\n", pkgname);
-		ret = -EFAULT;
+		ret = LB_STATUS_ERROR_FAULT;
 		goto out;
 	}
 
@@ -1643,7 +1644,7 @@ static struct packet *client_pd_mouse_set(pid_t pid, int handle, const struct pa
 		 * slave has not load it, so we don't need to do anything at here!
 		 */
 		DbgPrint("Package[%s] is faulted\n", pkgname);
-		ret = -EFAULT;
+		ret = LB_STATUS_ERROR_FAULT;
 	} else if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
 		if (event_is_activated()) {
 			if (event_deactivate() == 0)
@@ -1664,7 +1665,7 @@ static struct packet *client_pd_mouse_set(pid_t pid, int handle, const struct pa
 			instance_event_callback_add(inst, INSTANCE_EVENT_DESTROY, inst_del_cb, NULL);
 	} else {
 		ErrPrint("Unsupported package\n");
-		ret = -EINVAL;
+		ret = LB_STATUS_ERROR_INVALID;
 	}
 
 out:
@@ -1686,28 +1687,28 @@ static struct packet *client_pd_mouse_unset(pid_t pid, int handle, const struct 
 	client = client_find_by_pid(pid);
 	if (!client) {
 		ErrPrint("Client %d is not exists\n", pid);
-		ret = -ENOENT;
+		ret = LB_STATUS_ERROR_NOT_EXIST;
 		goto out;
 	}
 
 	ret = packet_get(packet, "ssdii", &pkgname, &id, &timestamp, &x, &y);
 	if (ret != 5) {
 		ErrPrint("Parameter is not matched\n");
-		ret = -EINVAL;
+		ret = LB_STATUS_ERROR_INVALID;
 		goto out;
 	}
 
 	inst = package_find_instance_by_id(pkgname, id);
 	if (!inst) {
 		ErrPrint("Instance[%s] is not exists\n", id);
-		ret = -ENOENT;
+		ret = LB_STATUS_ERROR_NOT_EXIST;
 		goto out;
 	}
 
 	pkg = instance_package(inst);
 	if (!pkg) {
 		ErrPrint("Package[%s] info is not exists\n", pkgname);
-		ret = -EFAULT;
+		ret = LB_STATUS_ERROR_FAULT;
 		goto out;
 	}
 
@@ -1718,7 +1719,7 @@ static struct packet *client_pd_mouse_unset(pid_t pid, int handle, const struct 
 		 * slave has not load it, so we don't need to do anything at here!
 		 */
 		DbgPrint("Package[%s] is faulted\n", pkgname);
-		ret = -EFAULT;
+		ret = LB_STATUS_ERROR_FAULT;
 	} else if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
 		ret = event_deactivate();
 		if (ret == 0)
@@ -1729,7 +1730,7 @@ static struct packet *client_pd_mouse_unset(pid_t pid, int handle, const struct 
 			instance_event_callback_del(inst, INSTANCE_EVENT_DESTROY, inst_del_cb);
 	} else {
 		ErrPrint("Unsupported package\n");
-		ret = -EINVAL;
+		ret = LB_STATUS_ERROR_INVALID;
 	}
 out:
 	return NULL;
@@ -1750,14 +1751,14 @@ static struct packet *client_lb_mouse_enter(pid_t pid, int handle, const struct 
 	client = client_find_by_pid(pid);
 	if (!client) {
 		ErrPrint("Client %d is not exists\n", pid);
-		ret = -ENOENT;
+		ret = LB_STATUS_ERROR_NOT_EXIST;
 		goto out;
 	}
 
 	ret = packet_get(packet, "ssdii", &pkgname, &id, &timestamp, &x, &y);
 	if (ret != 5) {
 		ErrPrint("Parameter is not matched\n");
-		ret = -EINVAL;
+		ret = LB_STATUS_ERROR_INVALID;
 		goto out;
 	}
 
@@ -1769,14 +1770,14 @@ static struct packet *client_lb_mouse_enter(pid_t pid, int handle, const struct 
 	inst = package_find_instance_by_id(pkgname, id);
 	if (!inst) {
 		ErrPrint("Instance[%s] is not exists\n", id);
-		ret = -ENOENT;
+		ret = LB_STATUS_ERROR_NOT_EXIST;
 		goto out;
 	}
 
 	pkg = instance_package(inst);
 	if (!pkg) {
 		ErrPrint("Package[%s] info is not exists\n", pkgname);
-		ret = -EFAULT;
+		ret = LB_STATUS_ERROR_FAULT;
 		goto out;
 	}
 
@@ -1787,7 +1788,7 @@ static struct packet *client_lb_mouse_enter(pid_t pid, int handle, const struct 
 		 * slave has not load it, so we don't need to do anything at here!
 		 */
 		DbgPrint("Package[%s] is faulted\n", pkgname);
-		ret = -EFAULT;
+		ret = LB_STATUS_ERROR_FAULT;
 	} else if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
 		struct buffer_info *buffer;
 		struct slave_node *slave;
@@ -1796,14 +1797,14 @@ static struct packet *client_lb_mouse_enter(pid_t pid, int handle, const struct 
 		buffer = instance_lb_buffer(inst);
 		if (!buffer) {
 			ErrPrint("Instance[%s] has no buffer\n", id);
-			ret = -EFAULT;
+			ret = LB_STATUS_ERROR_FAULT;
 			goto out;
 		}
 
 		slave = package_slave(pkg);
 		if (!slave) {
 			ErrPrint("Package[%s] has no slave\n", pkgname);
-			ret = -EINVAL;
+			ret = LB_STATUS_ERROR_INVALID;
 			goto out;
 		}
 
@@ -1811,7 +1812,7 @@ static struct packet *client_lb_mouse_enter(pid_t pid, int handle, const struct 
 		packet = packet_create_noack("lb_mouse_enter", "ssiiddd", pkgname, id, w, h, timestamp, x, y);
 		if (!packet) {
 			ErrPrint("Failed to create a packet[%s]\n", pkgname);
-			ret = -EFAULT;
+			ret = LB_STATUS_ERROR_FAULT;
 			goto out;
 		}
 		*/
@@ -1823,13 +1824,13 @@ static struct packet *client_lb_mouse_enter(pid_t pid, int handle, const struct 
 
 		script = instance_lb_script(inst);
 		if (!script) {
-			ret = -EFAULT;
+			ret = LB_STATUS_ERROR_FAULT;
 			goto out;
 		}
 
 		e = script_handler_evas(script);
 		if (!e) {
-			ret = -EFAULT;
+			ret = LB_STATUS_ERROR_FAULT;
 			goto out;
 		}
 
@@ -1838,7 +1839,7 @@ static struct packet *client_lb_mouse_enter(pid_t pid, int handle, const struct 
 		ret = 0;
 	} else {
 		ErrPrint("Unsupported package\n");
-		ret = -EINVAL;
+		ret = LB_STATUS_ERROR_INVALID;
 	}
 
 out:
@@ -1861,14 +1862,14 @@ static struct packet *client_lb_mouse_leave(pid_t pid, int handle, const struct 
 	client = client_find_by_pid(pid);
 	if (!client) {
 		ErrPrint("Client %d is not exists\n", pid);
-		ret = -ENOENT;
+		ret = LB_STATUS_ERROR_NOT_EXIST;
 		goto out;
 	}
 
 	ret = packet_get(packet, "ssdii", &pkgname, &id, &timestamp, &x, &y);
 	if (ret != 5) {
 		ErrPrint("Parameter is not matched\n");
-		ret = -EINVAL;
+		ret = LB_STATUS_ERROR_INVALID;
 		goto out;
 	}
 
@@ -1880,14 +1881,14 @@ static struct packet *client_lb_mouse_leave(pid_t pid, int handle, const struct 
 	inst = package_find_instance_by_id(pkgname, id);
 	if (!inst) {
 		ErrPrint("Instance[%s] is not exists\n", id);
-		ret = -ENOENT;
+		ret = LB_STATUS_ERROR_NOT_EXIST;
 		goto out;
 	}
 
 	pkg = instance_package(inst);
 	if (!pkg) {
 		ErrPrint("Package[%s] info is not exists\n", pkgname);
-		ret = -EFAULT;
+		ret = LB_STATUS_ERROR_FAULT;
 		goto out;
 	}
 
@@ -1898,7 +1899,7 @@ static struct packet *client_lb_mouse_leave(pid_t pid, int handle, const struct 
 		 * slave has not load it, so we don't need to do anything at here!
 		 */
 		DbgPrint("Package[%s] is faulted\n", pkgname);
-		ret = -EFAULT;
+		ret = LB_STATUS_ERROR_FAULT;
 	} else if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
 		struct buffer_info *buffer;
 		struct slave_node *slave;
@@ -1907,14 +1908,14 @@ static struct packet *client_lb_mouse_leave(pid_t pid, int handle, const struct 
 		buffer = instance_lb_buffer(inst);
 		if (!buffer) {
 			ErrPrint("Instance[%s] has no buffer\n", id);
-			ret = -EFAULT;
+			ret = LB_STATUS_ERROR_FAULT;
 			goto out;
 		}
 
 		slave = package_slave(pkg);
 		if (!slave) {
 			ErrPrint("Package[%s] has no slave\n", pkgname);
-			ret = -EINVAL;
+			ret = LB_STATUS_ERROR_INVALID;
 			goto out;
 		}
 
@@ -1922,7 +1923,7 @@ static struct packet *client_lb_mouse_leave(pid_t pid, int handle, const struct 
 		packet = packet_create_noack("lb_mouse_leave", "ssiiddd", pkgname, id, w, h, timestamp, x, y);
 		if (!packet) {
 			ErrPrint("Failed to create a packet[%s]\n", pkgname);
-			ret = -EFAULT;
+			ret = LB_STATUS_ERROR_FAULT;
 			goto out;
 		}
 		*/
@@ -1935,13 +1936,13 @@ static struct packet *client_lb_mouse_leave(pid_t pid, int handle, const struct 
 
 		script = instance_lb_script(inst);
 		if (!script) {
-			ret = -EFAULT;
+			ret = LB_STATUS_ERROR_FAULT;
 			goto out;
 		}
 
 		e = script_handler_evas(script);
 		if (!e) {
-			ret = -EFAULT;
+			ret = LB_STATUS_ERROR_FAULT;
 			goto out;
 		}
 
@@ -1950,7 +1951,7 @@ static struct packet *client_lb_mouse_leave(pid_t pid, int handle, const struct 
 		ret = 0;
 	} else {
 		ErrPrint("Unsupported package\n");
-		ret = -EINVAL;
+		ret = LB_STATUS_ERROR_INVALID;
 	}
 
 out:
@@ -1973,14 +1974,14 @@ static struct packet *client_lb_mouse_down(pid_t pid, int handle, const struct p
 	client = client_find_by_pid(pid);
 	if (!client) {
 		ErrPrint("Client %d is not exists\n", pid);
-		ret = -ENOENT;
+		ret = LB_STATUS_ERROR_NOT_EXIST;
 		goto out;
 	}
 
 	ret = packet_get(packet, "ssdii", &pkgname, &id, &timestamp, &x, &y);
 	if (ret != 5) {
 		ErrPrint("Parameter is not matched\n");
-		ret = -EINVAL;
+		ret = LB_STATUS_ERROR_INVALID;
 		goto out;
 	}
 
@@ -1992,14 +1993,14 @@ static struct packet *client_lb_mouse_down(pid_t pid, int handle, const struct p
 	inst = package_find_instance_by_id(pkgname, id);
 	if (!inst) {
 		ErrPrint("Instance[%s] is not exists\n", id);
-		ret = -ENOENT;
+		ret = LB_STATUS_ERROR_NOT_EXIST;
 		goto out;
 	}
 
 	pkg = instance_package(inst);
 	if (!pkg) {
 		ErrPrint("Package[%s] info is not exists\n", pkgname);
-		ret = -EFAULT;
+		ret = LB_STATUS_ERROR_FAULT;
 		goto out;
 	}
 
@@ -2010,7 +2011,7 @@ static struct packet *client_lb_mouse_down(pid_t pid, int handle, const struct p
 		 * slave has not load it, so we don't need to do anything at here!
 		 */
 		DbgPrint("Package[%s] is faulted\n", pkgname);
-		ret = -EFAULT;
+		ret = LB_STATUS_ERROR_FAULT;
 	} else if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
 		struct buffer_info *buffer;
 		struct slave_node *slave;
@@ -2019,14 +2020,14 @@ static struct packet *client_lb_mouse_down(pid_t pid, int handle, const struct p
 		buffer = instance_lb_buffer(inst);
 		if (!buffer) {
 			ErrPrint("Instance[%s] has no buffer\n", id);
-			ret = -EFAULT;
+			ret = LB_STATUS_ERROR_FAULT;
 			goto out;
 		}
 
 		slave = package_slave(pkg);
 		if (!slave) {
 			ErrPrint("Package[%s] has no slave\n", pkgname);
-			ret = -EINVAL;
+			ret = LB_STATUS_ERROR_INVALID;
 			goto out;
 		}
 
@@ -2034,7 +2035,7 @@ static struct packet *client_lb_mouse_down(pid_t pid, int handle, const struct p
 		packet = packet_create_noack("lb_mouse_down", "ssiiddd", pkgname, id, w, h, timestamp, x, y);
 		if (!packet) {
 			ErrPrint("Failed to create a packet[%s]\n", pkgname);
-			ret = -EFAULT;
+			ret = LB_STATUS_ERROR_FAULT;
 			goto out;
 		}
 		*/
@@ -2047,13 +2048,13 @@ static struct packet *client_lb_mouse_down(pid_t pid, int handle, const struct p
 
 		script = instance_lb_script(inst);
 		if (!script) {
-			ret = -EFAULT;
+			ret = LB_STATUS_ERROR_FAULT;
 			goto out;
 		}
 
 		e = script_handler_evas(script);
 		if (!e) {
-			ret = -EFAULT;
+			ret = LB_STATUS_ERROR_FAULT;
 			goto out;
 		}
 
@@ -2063,7 +2064,7 @@ static struct packet *client_lb_mouse_down(pid_t pid, int handle, const struct p
 		ret = 0;
 	} else {
 		ErrPrint("Unsupported package\n");
-		ret = -EINVAL;
+		ret = LB_STATUS_ERROR_INVALID;
 	}
 
 out:
@@ -2086,14 +2087,14 @@ static struct packet *client_lb_mouse_up(pid_t pid, int handle, const struct pac
 	client = client_find_by_pid(pid);
 	if (!client) {
 		ErrPrint("Client %d is not exists\n", pid);
-		ret = -ENOENT;
+		ret = LB_STATUS_ERROR_NOT_EXIST;
 		goto out;
 	}
 
 	ret = packet_get(packet, "ssdii", &pkgname, &id, &timestamp, &x, &y);
 	if (ret != 5) {
 		ErrPrint("Parameter is not matched\n");
-		ret = -EINVAL;
+		ret = LB_STATUS_ERROR_INVALID;
 		goto out;
 	}
 
@@ -2105,14 +2106,14 @@ static struct packet *client_lb_mouse_up(pid_t pid, int handle, const struct pac
 	inst = package_find_instance_by_id(pkgname, id);
 	if (!inst) {
 		ErrPrint("Instance[%s] is not exists\n", id);
-		ret = -ENOENT;
+		ret = LB_STATUS_ERROR_NOT_EXIST;
 		goto out;
 	}
 
 	pkg = instance_package(inst);
 	if (!pkg) {
 		ErrPrint("Package[%s] info is not exists\n", pkgname);
-		ret = -EFAULT;
+		ret = LB_STATUS_ERROR_FAULT;
 		goto out;
 	}
 
@@ -2123,7 +2124,7 @@ static struct packet *client_lb_mouse_up(pid_t pid, int handle, const struct pac
 		 * slave has not load it, so we don't need to do anything at here!
 		 */
 		DbgPrint("Package[%s] is faulted\n", pkgname);
-		ret = -EFAULT;
+		ret = LB_STATUS_ERROR_FAULT;
 	} else if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
 		struct buffer_info *buffer;
 		struct slave_node *slave;
@@ -2132,14 +2133,14 @@ static struct packet *client_lb_mouse_up(pid_t pid, int handle, const struct pac
 		buffer = instance_lb_buffer(inst);
 		if (!buffer) {
 			ErrPrint("Instance[%s] has no buffer\n", id);
-			ret = -EFAULT;
+			ret = LB_STATUS_ERROR_FAULT;
 			goto out;
 		}
 
 		slave = package_slave(pkg);
 		if (!slave) {
 			ErrPrint("Package[%s] has no slave\n", pkgname);
-			ret = -EINVAL;
+			ret = LB_STATUS_ERROR_INVALID;
 			goto out;
 		}
 
@@ -2147,7 +2148,7 @@ static struct packet *client_lb_mouse_up(pid_t pid, int handle, const struct pac
 		packet = packet_create_noack("lb_mouse_up", "ssiiddd", pkgname, id, w, h, timestamp, x, y);
 		if (!packet) {
 			ErrPrint("Failed to create a packet[%s]\n", pkgname);
-			ret = -EFAULT;
+			ret = LB_STATUS_ERROR_FAULT;
 			goto out;
 		}
 		*/
@@ -2160,13 +2161,13 @@ static struct packet *client_lb_mouse_up(pid_t pid, int handle, const struct pac
 
 		script = instance_lb_script(inst);
 		if (!script) {
-			ret = -EFAULT;
+			ret = LB_STATUS_ERROR_FAULT;
 			goto out;
 		}
 
 		e = script_handler_evas(script);
 		if (!e) {
-			ret = -EFAULT;
+			ret = LB_STATUS_ERROR_FAULT;
 			goto out;
 		}
 
@@ -2176,7 +2177,7 @@ static struct packet *client_lb_mouse_up(pid_t pid, int handle, const struct pac
 		ret = 0;
 	} else {
 		ErrPrint("Unsupported package\n");
-		ret = -EINVAL;
+		ret = LB_STATUS_ERROR_INVALID;
 	}
 
 out:
@@ -2199,14 +2200,14 @@ static struct packet *client_pd_access_read(pid_t pid, int handle, const struct 
 	client = client_find_by_pid(pid);
 	if (!client) {
 		ErrPrint("Client %d is not exists\n", pid);
-		ret = -ENOENT;
+		ret = LB_STATUS_ERROR_NOT_EXIST;
 		goto out;
 	}
 
 	ret = packet_get(packet, "ssdii", &pkgname, &id, &timestamp, &x, &y);
 	if (ret != 5) {
 		ErrPrint("Invalid parameter\n");
-		ret = -EINVAL;
+		ret = LB_STATUS_ERROR_INVALID;
 		goto out;
 	}
 
@@ -2218,14 +2219,14 @@ static struct packet *client_pd_access_read(pid_t pid, int handle, const struct 
 	inst = package_find_instance_by_id(pkgname, id);
 	if (!inst) {
 		ErrPrint("Instance[%s] is not exists\n", id);
-		ret = -ENOENT;
+		ret = LB_STATUS_ERROR_NOT_EXIST;
 		goto out;
 	}
 
 	pkg = instance_package(inst);
 	if (!pkg) {
 		ErrPrint("Package[%s] info is not found\n", pkgname);
-		ret = -EFAULT;
+		ret = LB_STATUS_ERROR_FAULT;
 		goto out;
 	}
 
@@ -2236,7 +2237,7 @@ static struct packet *client_pd_access_read(pid_t pid, int handle, const struct 
 		 * slave has not load it, so we don't need to do anything at here!
 		 */
 		DbgPrint("Package[%s] is faulted\n", pkgname);
-		ret = -EFAULT;
+		ret = LB_STATUS_ERROR_FAULT;
 	} else if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
 		struct buffer_info *buffer;
 		struct slave_node *slave;
@@ -2245,14 +2246,14 @@ static struct packet *client_pd_access_read(pid_t pid, int handle, const struct 
 		buffer = instance_pd_buffer(inst);
 		if (!buffer) {
 			ErrPrint("Instance[%s] has no buffer\n", id);
-			ret = -EFAULT;
+			ret = LB_STATUS_ERROR_FAULT;
 			goto out;
 		}
 
 		slave = package_slave(pkg);
 		if (!slave) {
 			ErrPrint("Package[%s] has no slave\n", pkgname);
-			ret = -EINVAL;
+			ret = LB_STATUS_ERROR_INVALID;
 			goto out;
 		}
 
@@ -2260,7 +2261,7 @@ static struct packet *client_pd_access_read(pid_t pid, int handle, const struct 
 		packet = packet_create_noack("pd_mouse_enter", "ssiiddd", pkgname, id, w, h, timestamp, x, y);
 		if (!packet) {
 			ErrPrint("Failed to create a packet[%s]\n", pkgname);
-			ret = -EFAULT;
+			ret = LB_STATUS_ERROR_FAULT;
 			goto out;
 		}
 		*/
@@ -2273,13 +2274,13 @@ static struct packet *client_pd_access_read(pid_t pid, int handle, const struct 
 
 		script = instance_pd_script(inst);
 		if (!script) {
-			ret = -EFAULT;
+			ret = LB_STATUS_ERROR_FAULT;
 			goto out;
 		}
 
 		e = script_handler_evas(script);
 		if (!e) {
-			ret = -EFAULT;
+			ret = LB_STATUS_ERROR_FAULT;
 			goto out;
 		}
 
@@ -2290,7 +2291,7 @@ static struct packet *client_pd_access_read(pid_t pid, int handle, const struct 
 		ret = 0;
 	} else {
 		ErrPrint("Unsupported package\n");
-		ret = -EINVAL;
+		ret = LB_STATUS_ERROR_INVALID;
 	}
 
 out:
@@ -2313,14 +2314,14 @@ static struct packet *client_pd_access_read_prev(pid_t pid, int handle, const st
 	client = client_find_by_pid(pid);
 	if (!client) {
 		ErrPrint("Client %d is not exists\n", pid);
-		ret = -ENOENT;
+		ret = LB_STATUS_ERROR_NOT_EXIST;
 		goto out;
 	}
 
 	ret = packet_get(packet, "ssdii", &pkgname, &id, &timestamp, &x, &y);
 	if (ret != 5) {
 		ErrPrint("Invalid parameter\n");
-		ret = -EINVAL;
+		ret = LB_STATUS_ERROR_INVALID;
 		goto out;
 	}
 
@@ -2332,14 +2333,14 @@ static struct packet *client_pd_access_read_prev(pid_t pid, int handle, const st
 	inst = package_find_instance_by_id(pkgname, id);
 	if (!inst) {
 		ErrPrint("Instance[%s] is not exists\n", id);
-		ret = -ENOENT;
+		ret = LB_STATUS_ERROR_NOT_EXIST;
 		goto out;
 	}
 
 	pkg = instance_package(inst);
 	if (!pkg) {
 		ErrPrint("Package[%s] info is not found\n", pkgname);
-		ret = -EFAULT;
+		ret = LB_STATUS_ERROR_FAULT;
 		goto out;
 	}
 
@@ -2350,7 +2351,7 @@ static struct packet *client_pd_access_read_prev(pid_t pid, int handle, const st
 		 * slave has not load it, so we don't need to do anything at here!
 		 */
 		DbgPrint("Package[%s] is faulted\n", pkgname);
-		ret = -EFAULT;
+		ret = LB_STATUS_ERROR_FAULT;
 	} else if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
 		struct buffer_info *buffer;
 		struct slave_node *slave;
@@ -2359,14 +2360,14 @@ static struct packet *client_pd_access_read_prev(pid_t pid, int handle, const st
 		buffer = instance_pd_buffer(inst);
 		if (!buffer) {
 			ErrPrint("Instance[%s] has no buffer\n", id);
-			ret = -EFAULT;
+			ret = LB_STATUS_ERROR_FAULT;
 			goto out;
 		}
 
 		slave = package_slave(pkg);
 		if (!slave) {
 			ErrPrint("Package[%s] has no slave\n", pkgname);
-			ret = -EINVAL;
+			ret = LB_STATUS_ERROR_INVALID;
 			goto out;
 		}
 
@@ -2374,7 +2375,7 @@ static struct packet *client_pd_access_read_prev(pid_t pid, int handle, const st
 		packet = packet_create_noack("pd_mouse_enter", "ssiiddd", pkgname, id, w, h, timestamp, x, y);
 		if (!packet) {
 			ErrPrint("Failed to create a packet[%s]\n", pkgname);
-			ret = -EFAULT;
+			ret = LB_STATUS_ERROR_FAULT;
 			goto out;
 		}
 		*/
@@ -2387,13 +2388,13 @@ static struct packet *client_pd_access_read_prev(pid_t pid, int handle, const st
 
 		script = instance_pd_script(inst);
 		if (!script) {
-			ret = -EFAULT;
+			ret = LB_STATUS_ERROR_FAULT;
 			goto out;
 		}
 
 		e = script_handler_evas(script);
 		if (!e) {
-			ret = -EFAULT;
+			ret = LB_STATUS_ERROR_FAULT;
 			goto out;
 		}
 
@@ -2404,7 +2405,7 @@ static struct packet *client_pd_access_read_prev(pid_t pid, int handle, const st
 		ret = 0;
 	} else {
 		ErrPrint("Unsupported package\n");
-		ret = -EINVAL;
+		ret = LB_STATUS_ERROR_INVALID;
 	}
 
 out:
@@ -2427,14 +2428,14 @@ static struct packet *client_pd_access_read_next(pid_t pid, int handle, const st
 	client = client_find_by_pid(pid);
 	if (!client) {
 		ErrPrint("Client %d is not exists\n", pid);
-		ret = -ENOENT;
+		ret = LB_STATUS_ERROR_NOT_EXIST;
 		goto out;
 	}
 
 	ret = packet_get(packet, "ssdii", &pkgname, &id, &timestamp, &x, &y);
 	if (ret != 5) {
 		ErrPrint("Invalid parameter\n");
-		ret = -EINVAL;
+		ret = LB_STATUS_ERROR_INVALID;
 		goto out;
 	}
 
@@ -2446,14 +2447,14 @@ static struct packet *client_pd_access_read_next(pid_t pid, int handle, const st
 	inst = package_find_instance_by_id(pkgname, id);
 	if (!inst) {
 		ErrPrint("Instance[%s] is not exists\n", id);
-		ret = -ENOENT;
+		ret = LB_STATUS_ERROR_NOT_EXIST;
 		goto out;
 	}
 
 	pkg = instance_package(inst);
 	if (!pkg) {
 		ErrPrint("Package[%s] info is not found\n", pkgname);
-		ret = -EFAULT;
+		ret = LB_STATUS_ERROR_FAULT;
 		goto out;
 	}
 
@@ -2464,7 +2465,7 @@ static struct packet *client_pd_access_read_next(pid_t pid, int handle, const st
 		 * slave has not load it, so we don't need to do anything at here!
 		 */
 		DbgPrint("Package[%s] is faulted\n", pkgname);
-		ret = -EFAULT;
+		ret = LB_STATUS_ERROR_FAULT;
 	} else if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
 		struct buffer_info *buffer;
 		struct slave_node *slave;
@@ -2473,14 +2474,14 @@ static struct packet *client_pd_access_read_next(pid_t pid, int handle, const st
 		buffer = instance_pd_buffer(inst);
 		if (!buffer) {
 			ErrPrint("Instance[%s] has no buffer\n", id);
-			ret = -EFAULT;
+			ret = LB_STATUS_ERROR_FAULT;
 			goto out;
 		}
 
 		slave = package_slave(pkg);
 		if (!slave) {
 			ErrPrint("Package[%s] has no slave\n", pkgname);
-			ret = -EINVAL;
+			ret = LB_STATUS_ERROR_INVALID;
 			goto out;
 		}
 
@@ -2488,7 +2489,7 @@ static struct packet *client_pd_access_read_next(pid_t pid, int handle, const st
 		packet = packet_create_noack("pd_mouse_enter", "ssiiddd", pkgname, id, w, h, timestamp, x, y);
 		if (!packet) {
 			ErrPrint("Failed to create a packet[%s]\n", pkgname);
-			ret = -EFAULT;
+			ret = LB_STATUS_ERROR_FAULT;
 			goto out;
 		}
 		*/
@@ -2501,13 +2502,13 @@ static struct packet *client_pd_access_read_next(pid_t pid, int handle, const st
 
 		script = instance_pd_script(inst);
 		if (!script) {
-			ret = -EFAULT;
+			ret = LB_STATUS_ERROR_FAULT;
 			goto out;
 		}
 
 		e = script_handler_evas(script);
 		if (!e) {
-			ret = -EFAULT;
+			ret = LB_STATUS_ERROR_FAULT;
 			goto out;
 		}
 
@@ -2518,7 +2519,7 @@ static struct packet *client_pd_access_read_next(pid_t pid, int handle, const st
 		ret = 0;
 	} else {
 		ErrPrint("Unsupported package\n");
-		ret = -EINVAL;
+		ret = LB_STATUS_ERROR_INVALID;
 	}
 
 out:
@@ -2541,14 +2542,14 @@ static struct packet *client_pd_access_activate(pid_t pid, int handle, const str
 	client = client_find_by_pid(pid);
 	if (!client) {
 		ErrPrint("Client %d is not exists\n", pid);
-		ret = -ENOENT;
+		ret = LB_STATUS_ERROR_NOT_EXIST;
 		goto out;
 	}
 
 	ret = packet_get(packet, "ssdii", &pkgname, &id, &timestamp, &x, &y);
 	if (ret != 5) {
 		ErrPrint("Invalid parameter\n");
-		ret = -EINVAL;
+		ret = LB_STATUS_ERROR_INVALID;
 		goto out;
 	}
 
@@ -2560,14 +2561,14 @@ static struct packet *client_pd_access_activate(pid_t pid, int handle, const str
 	inst = package_find_instance_by_id(pkgname, id);
 	if (!inst) {
 		ErrPrint("Instance[%s] is not exists\n", id);
-		ret = -ENOENT;
+		ret = LB_STATUS_ERROR_NOT_EXIST;
 		goto out;
 	}
 
 	pkg = instance_package(inst);
 	if (!pkg) {
 		ErrPrint("Package[%s] info is not found\n", pkgname);
-		ret = -EFAULT;
+		ret = LB_STATUS_ERROR_FAULT;
 		goto out;
 	}
 
@@ -2578,7 +2579,7 @@ static struct packet *client_pd_access_activate(pid_t pid, int handle, const str
 		 * slave has not load it, so we don't need to do anything at here!
 		 */
 		DbgPrint("Package[%s] is faulted\n", pkgname);
-		ret = -EFAULT;
+		ret = LB_STATUS_ERROR_FAULT;
 	} else if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
 		struct buffer_info *buffer;
 		struct slave_node *slave;
@@ -2587,14 +2588,14 @@ static struct packet *client_pd_access_activate(pid_t pid, int handle, const str
 		buffer = instance_pd_buffer(inst);
 		if (!buffer) {
 			ErrPrint("Instance[%s] has no buffer\n", id);
-			ret = -EFAULT;
+			ret = LB_STATUS_ERROR_FAULT;
 			goto out;
 		}
 
 		slave = package_slave(pkg);
 		if (!slave) {
 			ErrPrint("Package[%s] has no slave\n", pkgname);
-			ret = -EINVAL;
+			ret = LB_STATUS_ERROR_INVALID;
 			goto out;
 		}
 
@@ -2602,7 +2603,7 @@ static struct packet *client_pd_access_activate(pid_t pid, int handle, const str
 		packet = packet_create_noack("pd_mouse_enter", "ssiiddd", pkgname, id, w, h, timestamp, x, y);
 		if (!packet) {
 			ErrPrint("Failed to create a packet[%s]\n", pkgname);
-			ret = -EFAULT;
+			ret = LB_STATUS_ERROR_FAULT;
 			goto out;
 		}
 		*/
@@ -2615,13 +2616,13 @@ static struct packet *client_pd_access_activate(pid_t pid, int handle, const str
 
 		script = instance_pd_script(inst);
 		if (!script) {
-			ret = -EFAULT;
+			ret = LB_STATUS_ERROR_FAULT;
 			goto out;
 		}
 
 		e = script_handler_evas(script);
 		if (!e) {
-			ret = -EFAULT;
+			ret = LB_STATUS_ERROR_FAULT;
 			goto out;
 		}
 
@@ -2632,7 +2633,7 @@ static struct packet *client_pd_access_activate(pid_t pid, int handle, const str
 		ret = 0;
 	} else {
 		ErrPrint("Unsupported package\n");
-		ret = -EINVAL;
+		ret = LB_STATUS_ERROR_INVALID;
 	}
 
 out:
@@ -2655,14 +2656,14 @@ static struct packet *client_pd_key_down(pid_t pid, int handle, const struct pac
 	client = client_find_by_pid(pid);
 	if (!client) {
 		ErrPrint("Client %d is not exists\n", pid);
-		ret = -ENOENT;
+		ret = LB_STATUS_ERROR_NOT_EXIST;
 		goto out;
 	}
 
 	ret = packet_get(packet, "ssdii", &pkgname, &id, &timestamp, &x, &y);
 	if (ret != 5) {
 		ErrPrint("Invalid parameter\n");
-		ret = -EINVAL;
+		ret = LB_STATUS_ERROR_INVALID;
 		goto out;
 	}
 
@@ -2674,14 +2675,14 @@ static struct packet *client_pd_key_down(pid_t pid, int handle, const struct pac
 	inst = package_find_instance_by_id(pkgname, id);
 	if (!inst) {
 		ErrPrint("Instance[%s] is not exists\n", id);
-		ret = -ENOENT;
+		ret = LB_STATUS_ERROR_NOT_EXIST;
 		goto out;
 	}
 
 	pkg = instance_package(inst);
 	if (!pkg) {
 		ErrPrint("Package[%s] info is not found\n", pkgname);
-		ret = -EFAULT;
+		ret = LB_STATUS_ERROR_FAULT;
 		goto out;
 	}
 
@@ -2692,7 +2693,7 @@ static struct packet *client_pd_key_down(pid_t pid, int handle, const struct pac
 		 * slave has not load it, so we don't need to do anything at here!
 		 */
 		DbgPrint("Package[%s] is faulted\n", pkgname);
-		ret = -EFAULT;
+		ret = LB_STATUS_ERROR_FAULT;
 	} else if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
 		struct buffer_info *buffer;
 		struct slave_node *slave;
@@ -2701,14 +2702,14 @@ static struct packet *client_pd_key_down(pid_t pid, int handle, const struct pac
 		buffer = instance_pd_buffer(inst);
 		if (!buffer) {
 			ErrPrint("Instance[%s] has no buffer\n", id);
-			ret = -EFAULT;
+			ret = LB_STATUS_ERROR_FAULT;
 			goto out;
 		}
 
 		slave = package_slave(pkg);
 		if (!slave) {
 			ErrPrint("Package[%s] has no slave\n", pkgname);
-			ret = -EINVAL;
+			ret = LB_STATUS_ERROR_INVALID;
 			goto out;
 		}
 
@@ -2716,7 +2717,7 @@ static struct packet *client_pd_key_down(pid_t pid, int handle, const struct pac
 		packet = packet_create_noack("pd_mouse_enter", "ssiiddd", pkgname, id, w, h, timestamp, x, y);
 		if (!packet) {
 			ErrPrint("Failed to create a packet[%s]\n", pkgname);
-			ret = -EFAULT;
+			ret = LB_STATUS_ERROR_FAULT;
 			goto out;
 		}
 		*/
@@ -2729,13 +2730,13 @@ static struct packet *client_pd_key_down(pid_t pid, int handle, const struct pac
 
 		script = instance_pd_script(inst);
 		if (!script) {
-			ret = -EFAULT;
+			ret = LB_STATUS_ERROR_FAULT;
 			goto out;
 		}
 
 		e = script_handler_evas(script);
 		if (!e) {
-			ret = -EFAULT;
+			ret = LB_STATUS_ERROR_FAULT;
 			goto out;
 		}
 
@@ -2746,7 +2747,7 @@ static struct packet *client_pd_key_down(pid_t pid, int handle, const struct pac
 		ret = 0;
 	} else {
 		ErrPrint("Unsupported package\n");
-		ret = -EINVAL;
+		ret = LB_STATUS_ERROR_INVALID;
 	}
 
 out:
@@ -2763,14 +2764,14 @@ static struct packet *client_pause_request(pid_t pid, int handle, const struct p
 	client = client_find_by_pid(pid);
 	if (!client) {
 		ErrPrint("Client %d is paused - manually reported\n", pid);
-		ret = -ENOENT;
+		ret = LB_STATUS_ERROR_NOT_EXIST;
 		goto out;
 	}
 
 	ret = packet_get(packet, "d", &timestamp);
 	if (ret != 1) {
 		ErrPrint("Invalid parameter\n");
-		ret = -EINVAL;
+		ret = LB_STATUS_ERROR_INVALID;
 		goto out;
 	}
 
@@ -2792,14 +2793,14 @@ static struct packet *client_resume_request(pid_t pid, int handle, const struct 
 	client = client_find_by_pid(pid);
 	if (!client) {
 		ErrPrint("Client %d is paused - manually reported\n", pid);
-		ret = -ENOENT;
+		ret = LB_STATUS_ERROR_NOT_EXIST;
 		goto out;
 	}
 
 	ret = packet_get(packet, "d", &timestamp);
 	if (ret != 1) {
 		ErrPrint("Invalid parameter\n");
-		ret = -EINVAL;
+		ret = LB_STATUS_ERROR_INVALID;
 		goto out;
 	}
 
@@ -2827,14 +2828,14 @@ static struct packet *client_pd_key_up(pid_t pid, int handle, const struct packe
 	client = client_find_by_pid(pid);
 	if (!client) {
 		ErrPrint("Client %d is not exists\n", pid);
-		ret = -ENOENT;
+		ret = LB_STATUS_ERROR_NOT_EXIST;
 		goto out;
 	}
 
 	ret = packet_get(packet, "ssdii", &pkgname, &id, &timestamp, &x, &y);
 	if (ret != 7) {
 		ErrPrint("Invalid parameter\n");
-		ret = -EINVAL;
+		ret = LB_STATUS_ERROR_INVALID;
 		goto out;
 	}
 
@@ -2846,14 +2847,14 @@ static struct packet *client_pd_key_up(pid_t pid, int handle, const struct packe
 	inst = package_find_instance_by_id(pkgname, id);
 	if (!inst) {
 		ErrPrint("Instance[%s] is not exists\n", id);
-		ret = -ENOENT;
+		ret = LB_STATUS_ERROR_NOT_EXIST;
 		goto out;
 	}
 
 	pkg = instance_package(inst);
 	if (!pkg) {
 		ErrPrint("Package[%s] info is not found\n", pkgname);
-		ret = -EFAULT;
+		ret = LB_STATUS_ERROR_FAULT;
 		goto out;
 	}
 
@@ -2864,7 +2865,7 @@ static struct packet *client_pd_key_up(pid_t pid, int handle, const struct packe
 		 * slave has not load it, so we don't need to do anything at here!
 		 */
 		DbgPrint("Package[%s] is faulted\n", pkgname);
-		ret = -EFAULT;
+		ret = LB_STATUS_ERROR_FAULT;
 	} else if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
 		struct buffer_info *buffer;
 		struct slave_node *slave;
@@ -2873,14 +2874,14 @@ static struct packet *client_pd_key_up(pid_t pid, int handle, const struct packe
 		buffer = instance_pd_buffer(inst);
 		if (!buffer) {
 			ErrPrint("Instance[%s] has no buffer\n", id);
-			ret = -EFAULT;
+			ret = LB_STATUS_ERROR_FAULT;
 			goto out;
 		}
 
 		slave = package_slave(pkg);
 		if (!slave) {
 			ErrPrint("Package[%s] has no slave\n", pkgname);
-			ret = -EINVAL;
+			ret = LB_STATUS_ERROR_INVALID;
 			goto out;
 		}
 
@@ -2888,7 +2889,7 @@ static struct packet *client_pd_key_up(pid_t pid, int handle, const struct packe
 		packet = packet_create_noack("pd_mouse_enter", "ssiiddd", pkgname, id, w, h, timestamp, x, y);
 		if (!packet) {
 			ErrPrint("Failed to create a packet[%s]\n", pkgname);
-			ret = -EFAULT;
+			ret = LB_STATUS_ERROR_FAULT;
 			goto out;
 		}
 		*/
@@ -2901,13 +2902,13 @@ static struct packet *client_pd_key_up(pid_t pid, int handle, const struct packe
 
 		script = instance_pd_script(inst);
 		if (!script) {
-			ret = -EFAULT;
+			ret = LB_STATUS_ERROR_FAULT;
 			goto out;
 		}
 
 		e = script_handler_evas(script);
 		if (!e) {
-			ret = -EFAULT;
+			ret = LB_STATUS_ERROR_FAULT;
 			goto out;
 		}
 
@@ -2918,7 +2919,7 @@ static struct packet *client_pd_key_up(pid_t pid, int handle, const struct packe
 		ret = 0;
 	} else {
 		ErrPrint("Unsupported package\n");
-		ret = -EINVAL;
+		ret = LB_STATUS_ERROR_INVALID;
 	}
 
 out:
@@ -2941,14 +2942,14 @@ static struct packet *client_lb_access_read(pid_t pid, int handle, const struct 
 	client = client_find_by_pid(pid);
 	if (!client) {
 		ErrPrint("Client %d is not exists\n", pid);
-		ret = -ENOENT;
+		ret = LB_STATUS_ERROR_NOT_EXIST;
 		goto out;
 	}
 
 	ret = packet_get(packet, "ssdii", &pkgname, &id, &timestamp, &x, &y);
 	if (ret != 7) {
 		ErrPrint("Parameter is not matched\n");
-		ret = -EINVAL;
+		ret = LB_STATUS_ERROR_INVALID;
 		goto out;
 	}
 
@@ -2960,14 +2961,14 @@ static struct packet *client_lb_access_read(pid_t pid, int handle, const struct 
 	inst = package_find_instance_by_id(pkgname, id);
 	if (!inst) {
 		ErrPrint("Instance[%s] is not exists\n", id);
-		ret = -ENOENT;
+		ret = LB_STATUS_ERROR_NOT_EXIST;
 		goto out;
 	}
 
 	pkg = instance_package(inst);
 	if (!pkg) {
 		ErrPrint("Package[%s] info is not exists\n", pkgname);
-		ret = -EFAULT;
+		ret = LB_STATUS_ERROR_FAULT;
 		goto out;
 	}
 
@@ -2978,7 +2979,7 @@ static struct packet *client_lb_access_read(pid_t pid, int handle, const struct 
 		 * slave has not load it, so we don't need to do anything at here!
 		 */
 		DbgPrint("Package[%s] is faulted\n", pkgname);
-		ret = -EFAULT;
+		ret = LB_STATUS_ERROR_FAULT;
 	} else if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
 		struct buffer_info *buffer;
 		struct slave_node *slave;
@@ -2987,14 +2988,14 @@ static struct packet *client_lb_access_read(pid_t pid, int handle, const struct 
 		buffer = instance_lb_buffer(inst);
 		if (!buffer) {
 			ErrPrint("Instance[%s] has no buffer\n", id);
-			ret = -EFAULT;
+			ret = LB_STATUS_ERROR_FAULT;
 			goto out;
 		}
 
 		slave = package_slave(pkg);
 		if (!slave) {
 			ErrPrint("Package[%s] has no slave\n", pkgname);
-			ret = -EINVAL;
+			ret = LB_STATUS_ERROR_INVALID;
 			goto out;
 		}
 
@@ -3002,7 +3003,7 @@ static struct packet *client_lb_access_read(pid_t pid, int handle, const struct 
 		packet = packet_create_noack("lb_mouse_leave", "ssiiddd", pkgname, id, w, h, timestamp, x, y);
 		if (!packet) {
 			ErrPrint("Failed to create a packet[%s]\n", pkgname);
-			ret = -EFAULT;
+			ret = LB_STATUS_ERROR_FAULT;
 			goto out;
 		}
 		*/
@@ -3015,13 +3016,13 @@ static struct packet *client_lb_access_read(pid_t pid, int handle, const struct 
 
 		script = instance_lb_script(inst);
 		if (!script) {
-			ret = -EFAULT;
+			ret = LB_STATUS_ERROR_FAULT;
 			goto out;
 		}
 
 		e = script_handler_evas(script);
 		if (!e) {
-			ret = -EFAULT;
+			ret = LB_STATUS_ERROR_FAULT;
 			goto out;
 		}
 
@@ -3033,7 +3034,7 @@ static struct packet *client_lb_access_read(pid_t pid, int handle, const struct 
 		ret = 0;
 	} else {
 		ErrPrint("Unsupported package\n");
-		ret = -EINVAL;
+		ret = LB_STATUS_ERROR_INVALID;
 	}
 
 out:
@@ -3056,14 +3057,14 @@ static struct packet *client_lb_access_read_prev(pid_t pid, int handle, const st
 	client = client_find_by_pid(pid);
 	if (!client) {
 		ErrPrint("Client %d is not exists\n", pid);
-		ret = -ENOENT;
+		ret = LB_STATUS_ERROR_NOT_EXIST;
 		goto out;
 	}
 
 	ret = packet_get(packet, "ssdii", &pkgname, &id, &timestamp, &x, &y);
 	if (ret != 7) {
 		ErrPrint("Parameter is not matched\n");
-		ret = -EINVAL;
+		ret = LB_STATUS_ERROR_INVALID;
 		goto out;
 	}
 
@@ -3075,14 +3076,14 @@ static struct packet *client_lb_access_read_prev(pid_t pid, int handle, const st
 	inst = package_find_instance_by_id(pkgname, id);
 	if (!inst) {
 		ErrPrint("Instance[%s] is not exists\n", id);
-		ret = -ENOENT;
+		ret = LB_STATUS_ERROR_NOT_EXIST;
 		goto out;
 	}
 
 	pkg = instance_package(inst);
 	if (!pkg) {
 		ErrPrint("Package[%s] info is not exists\n", pkgname);
-		ret = -EFAULT;
+		ret = LB_STATUS_ERROR_FAULT;
 		goto out;
 	}
 
@@ -3093,7 +3094,7 @@ static struct packet *client_lb_access_read_prev(pid_t pid, int handle, const st
 		 * slave has not load it, so we don't need to do anything at here!
 		 */
 		DbgPrint("Package[%s] is faulted\n", pkgname);
-		ret = -EFAULT;
+		ret = LB_STATUS_ERROR_FAULT;
 	} else if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
 		struct buffer_info *buffer;
 		struct slave_node *slave;
@@ -3102,14 +3103,14 @@ static struct packet *client_lb_access_read_prev(pid_t pid, int handle, const st
 		buffer = instance_lb_buffer(inst);
 		if (!buffer) {
 			ErrPrint("Instance[%s] has no buffer\n", id);
-			ret = -EFAULT;
+			ret = LB_STATUS_ERROR_FAULT;
 			goto out;
 		}
 
 		slave = package_slave(pkg);
 		if (!slave) {
 			ErrPrint("Package[%s] has no slave\n", pkgname);
-			ret = -EINVAL;
+			ret = LB_STATUS_ERROR_INVALID;
 			goto out;
 		}
 
@@ -3117,7 +3118,7 @@ static struct packet *client_lb_access_read_prev(pid_t pid, int handle, const st
 		packet = packet_create_noack("lb_mouse_leave", "ssiiddd", pkgname, id, w, h, timestamp, x, y);
 		if (!packet) {
 			ErrPrint("Failed to create a packet[%s]\n", pkgname);
-			ret = -EFAULT;
+			ret = LB_STATUS_ERROR_FAULT;
 			goto out;
 		}
 		*/
@@ -3130,13 +3131,13 @@ static struct packet *client_lb_access_read_prev(pid_t pid, int handle, const st
 
 		script = instance_lb_script(inst);
 		if (!script) {
-			ret = -EFAULT;
+			ret = LB_STATUS_ERROR_FAULT;
 			goto out;
 		}
 
 		e = script_handler_evas(script);
 		if (!e) {
-			ret = -EFAULT;
+			ret = LB_STATUS_ERROR_FAULT;
 			goto out;
 		}
 
@@ -3148,7 +3149,7 @@ static struct packet *client_lb_access_read_prev(pid_t pid, int handle, const st
 		ret = 0;
 	} else {
 		ErrPrint("Unsupported package\n");
-		ret = -EINVAL;
+		ret = LB_STATUS_ERROR_INVALID;
 	}
 
 out:
@@ -3171,14 +3172,14 @@ static struct packet *client_lb_access_read_next(pid_t pid, int handle, const st
 	client = client_find_by_pid(pid);
 	if (!client) {
 		ErrPrint("Client %d is not exists\n", pid);
-		ret = -ENOENT;
+		ret = LB_STATUS_ERROR_NOT_EXIST;
 		goto out;
 	}
 
 	ret = packet_get(packet, "ssdii", &pkgname, &id, &timestamp, &x, &y);
 	if (ret != 7) {
 		ErrPrint("Parameter is not matched\n");
-		ret = -EINVAL;
+		ret = LB_STATUS_ERROR_INVALID;
 		goto out;
 	}
 
@@ -3190,14 +3191,14 @@ static struct packet *client_lb_access_read_next(pid_t pid, int handle, const st
 	inst = package_find_instance_by_id(pkgname, id);
 	if (!inst) {
 		ErrPrint("Instance[%s] is not exists\n", id);
-		ret = -ENOENT;
+		ret = LB_STATUS_ERROR_NOT_EXIST;
 		goto out;
 	}
 
 	pkg = instance_package(inst);
 	if (!pkg) {
 		ErrPrint("Package[%s] info is not exists\n", pkgname);
-		ret = -EFAULT;
+		ret = LB_STATUS_ERROR_FAULT;
 		goto out;
 	}
 
@@ -3208,7 +3209,7 @@ static struct packet *client_lb_access_read_next(pid_t pid, int handle, const st
 		 * slave has not load it, so we don't need to do anything at here!
 		 */
 		DbgPrint("Package[%s] is faulted\n", pkgname);
-		ret = -EFAULT;
+		ret = LB_STATUS_ERROR_FAULT;
 	} else if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
 		struct buffer_info *buffer;
 		struct slave_node *slave;
@@ -3217,14 +3218,14 @@ static struct packet *client_lb_access_read_next(pid_t pid, int handle, const st
 		buffer = instance_lb_buffer(inst);
 		if (!buffer) {
 			ErrPrint("Instance[%s] has no buffer\n", id);
-			ret = -EFAULT;
+			ret = LB_STATUS_ERROR_FAULT;
 			goto out;
 		}
 
 		slave = package_slave(pkg);
 		if (!slave) {
 			ErrPrint("Package[%s] has no slave\n", pkgname);
-			ret = -EINVAL;
+			ret = LB_STATUS_ERROR_INVALID;
 			goto out;
 		}
 
@@ -3232,7 +3233,7 @@ static struct packet *client_lb_access_read_next(pid_t pid, int handle, const st
 		packet = packet_create_noack("lb_mouse_leave", "ssiiddd", pkgname, id, w, h, timestamp, x, y);
 		if (!packet) {
 			ErrPrint("Failed to create a packet[%s]\n", pkgname);
-			ret = -EFAULT;
+			ret = LB_STATUS_ERROR_FAULT;
 			goto out;
 		}
 		*/
@@ -3245,13 +3246,13 @@ static struct packet *client_lb_access_read_next(pid_t pid, int handle, const st
 
 		script = instance_lb_script(inst);
 		if (!script) {
-			ret = -EFAULT;
+			ret = LB_STATUS_ERROR_FAULT;
 			goto out;
 		}
 
 		e = script_handler_evas(script);
 		if (!e) {
-			ret = -EFAULT;
+			ret = LB_STATUS_ERROR_FAULT;
 			goto out;
 		}
 
@@ -3263,7 +3264,7 @@ static struct packet *client_lb_access_read_next(pid_t pid, int handle, const st
 		ret = 0;
 	} else {
 		ErrPrint("Unsupported package\n");
-		ret = -EINVAL;
+		ret = LB_STATUS_ERROR_INVALID;
 	}
 
 out:
@@ -3286,14 +3287,14 @@ static struct packet *client_lb_access_activate(pid_t pid, int handle, const str
 	client = client_find_by_pid(pid);
 	if (!client) {
 		ErrPrint("Client %d is not exists\n", pid);
-		ret = -ENOENT;
+		ret = LB_STATUS_ERROR_NOT_EXIST;
 		goto out;
 	}
 
 	ret = packet_get(packet, "ssdii", &pkgname, &id, &timestamp, &x, &y);
 	if (ret != 7) {
 		ErrPrint("Parameter is not matched\n");
-		ret = -EINVAL;
+		ret = LB_STATUS_ERROR_INVALID;
 		goto out;
 	}
 
@@ -3305,14 +3306,14 @@ static struct packet *client_lb_access_activate(pid_t pid, int handle, const str
 	inst = package_find_instance_by_id(pkgname, id);
 	if (!inst) {
 		ErrPrint("Instance[%s] is not exists\n", id);
-		ret = -ENOENT;
+		ret = LB_STATUS_ERROR_NOT_EXIST;
 		goto out;
 	}
 
 	pkg = instance_package(inst);
 	if (!pkg) {
 		ErrPrint("Package[%s] info is not exists\n", pkgname);
-		ret = -EFAULT;
+		ret = LB_STATUS_ERROR_FAULT;
 		goto out;
 	}
 
@@ -3323,7 +3324,7 @@ static struct packet *client_lb_access_activate(pid_t pid, int handle, const str
 		 * slave has not load it, so we don't need to do anything at here!
 		 */
 		DbgPrint("Package[%s] is faulted\n", pkgname);
-		ret = -EFAULT;
+		ret = LB_STATUS_ERROR_FAULT;
 	} else if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
 		struct buffer_info *buffer;
 		struct slave_node *slave;
@@ -3332,14 +3333,14 @@ static struct packet *client_lb_access_activate(pid_t pid, int handle, const str
 		buffer = instance_lb_buffer(inst);
 		if (!buffer) {
 			ErrPrint("Instance[%s] has no buffer\n", id);
-			ret = -EFAULT;
+			ret = LB_STATUS_ERROR_FAULT;
 			goto out;
 		}
 
 		slave = package_slave(pkg);
 		if (!slave) {
 			ErrPrint("Package[%s] has no slave\n", pkgname);
-			ret = -EINVAL;
+			ret = LB_STATUS_ERROR_INVALID;
 			goto out;
 		}
 
@@ -3347,7 +3348,7 @@ static struct packet *client_lb_access_activate(pid_t pid, int handle, const str
 		packet = packet_create_noack("lb_mouse_leave", "ssiiddd", pkgname, id, w, h, timestamp, x, y);
 		if (!packet) {
 			ErrPrint("Failed to create a packet[%s]\n", pkgname);
-			ret = -EFAULT;
+			ret = LB_STATUS_ERROR_FAULT;
 			goto out;
 		}
 		*/
@@ -3360,13 +3361,13 @@ static struct packet *client_lb_access_activate(pid_t pid, int handle, const str
 
 		script = instance_lb_script(inst);
 		if (!script) {
-			ret = -EFAULT;
+			ret = LB_STATUS_ERROR_FAULT;
 			goto out;
 		}
 
 		e = script_handler_evas(script);
 		if (!e) {
-			ret = -EFAULT;
+			ret = LB_STATUS_ERROR_FAULT;
 			goto out;
 		}
 
@@ -3378,7 +3379,7 @@ static struct packet *client_lb_access_activate(pid_t pid, int handle, const str
 		ret = 0;
 	} else {
 		ErrPrint("Unsupported package\n");
-		ret = -EINVAL;
+		ret = LB_STATUS_ERROR_INVALID;
 	}
 
 out:
@@ -3401,14 +3402,14 @@ static struct packet *client_lb_key_down(pid_t pid, int handle, const struct pac
 	client = client_find_by_pid(pid);
 	if (!client) {
 		ErrPrint("Client %d is not exists\n", pid);
-		ret = -ENOENT;
+		ret = LB_STATUS_ERROR_NOT_EXIST;
 		goto out;
 	}
 
 	ret = packet_get(packet, "ssdii", &pkgname, &id, &timestamp, &x, &y);
 	if (ret != 7) {
 		ErrPrint("Parameter is not matched\n");
-		ret = -EINVAL;
+		ret = LB_STATUS_ERROR_INVALID;
 		goto out;
 	}
 
@@ -3420,14 +3421,14 @@ static struct packet *client_lb_key_down(pid_t pid, int handle, const struct pac
 	inst = package_find_instance_by_id(pkgname, id);
 	if (!inst) {
 		ErrPrint("Instance[%s] is not exists\n", id);
-		ret = -ENOENT;
+		ret = LB_STATUS_ERROR_NOT_EXIST;
 		goto out;
 	}
 
 	pkg = instance_package(inst);
 	if (!pkg) {
 		ErrPrint("Package[%s] info is not exists\n", pkgname);
-		ret = -EFAULT;
+		ret = LB_STATUS_ERROR_FAULT;
 		goto out;
 	}
 
@@ -3438,7 +3439,7 @@ static struct packet *client_lb_key_down(pid_t pid, int handle, const struct pac
 		 * slave has not load it, so we don't need to do anything at here!
 		 */
 		DbgPrint("Package[%s] is faulted\n", pkgname);
-		ret = -EFAULT;
+		ret = LB_STATUS_ERROR_FAULT;
 	} else if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
 		struct buffer_info *buffer;
 		struct slave_node *slave;
@@ -3447,14 +3448,14 @@ static struct packet *client_lb_key_down(pid_t pid, int handle, const struct pac
 		buffer = instance_lb_buffer(inst);
 		if (!buffer) {
 			ErrPrint("Instance[%s] has no buffer\n", id);
-			ret = -EFAULT;
+			ret = LB_STATUS_ERROR_FAULT;
 			goto out;
 		}
 
 		slave = package_slave(pkg);
 		if (!slave) {
 			ErrPrint("Package[%s] has no slave\n", pkgname);
-			ret = -EINVAL;
+			ret = LB_STATUS_ERROR_INVALID;
 			goto out;
 		}
 
@@ -3462,7 +3463,7 @@ static struct packet *client_lb_key_down(pid_t pid, int handle, const struct pac
 		packet = packet_create_noack("lb_mouse_leave", "ssiiddd", pkgname, id, w, h, timestamp, x, y);
 		if (!packet) {
 			ErrPrint("Failed to create a packet[%s]\n", pkgname);
-			ret = -EFAULT;
+			ret = LB_STATUS_ERROR_FAULT;
 			goto out;
 		}
 		*/
@@ -3475,13 +3476,13 @@ static struct packet *client_lb_key_down(pid_t pid, int handle, const struct pac
 
 		script = instance_lb_script(inst);
 		if (!script) {
-			ret = -EFAULT;
+			ret = LB_STATUS_ERROR_FAULT;
 			goto out;
 		}
 
 		e = script_handler_evas(script);
 		if (!e) {
-			ret = -EFAULT;
+			ret = LB_STATUS_ERROR_FAULT;
 			goto out;
 		}
 
@@ -3493,7 +3494,7 @@ static struct packet *client_lb_key_down(pid_t pid, int handle, const struct pac
 		ret = 0;
 	} else {
 		ErrPrint("Unsupported package\n");
-		ret = -EINVAL;
+		ret = LB_STATUS_ERROR_INVALID;
 	}
 
 out:
@@ -3516,14 +3517,14 @@ static struct packet *client_lb_key_up(pid_t pid, int handle, const struct packe
 	client = client_find_by_pid(pid);
 	if (!client) {
 		ErrPrint("Client %d is not exists\n", pid);
-		ret = -ENOENT;
+		ret = LB_STATUS_ERROR_NOT_EXIST;
 		goto out;
 	}
 
 	ret = packet_get(packet, "ssdii", &pkgname, &id, &timestamp, &x, &y);
 	if (ret != 7) {
 		ErrPrint("Parameter is not matched\n");
-		ret = -EINVAL;
+		ret = LB_STATUS_ERROR_INVALID;
 		goto out;
 	}
 
@@ -3535,14 +3536,14 @@ static struct packet *client_lb_key_up(pid_t pid, int handle, const struct packe
 	inst = package_find_instance_by_id(pkgname, id);
 	if (!inst) {
 		ErrPrint("Instance[%s] is not exists\n", id);
-		ret = -ENOENT;
+		ret = LB_STATUS_ERROR_NOT_EXIST;
 		goto out;
 	}
 
 	pkg = instance_package(inst);
 	if (!pkg) {
 		ErrPrint("Package[%s] info is not exists\n", pkgname);
-		ret = -EFAULT;
+		ret = LB_STATUS_ERROR_FAULT;
 		goto out;
 	}
 
@@ -3553,7 +3554,7 @@ static struct packet *client_lb_key_up(pid_t pid, int handle, const struct packe
 		 * slave has not load it, so we don't need to do anything at here!
 		 */
 		DbgPrint("Package[%s] is faulted\n", pkgname);
-		ret = -EFAULT;
+		ret = LB_STATUS_ERROR_FAULT;
 	} else if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
 		struct buffer_info *buffer;
 		struct slave_node *slave;
@@ -3562,14 +3563,14 @@ static struct packet *client_lb_key_up(pid_t pid, int handle, const struct packe
 		buffer = instance_lb_buffer(inst);
 		if (!buffer) {
 			ErrPrint("Instance[%s] has no buffer\n", id);
-			ret = -EFAULT;
+			ret = LB_STATUS_ERROR_FAULT;
 			goto out;
 		}
 
 		slave = package_slave(pkg);
 		if (!slave) {
 			ErrPrint("Package[%s] has no slave\n", pkgname);
-			ret = -EINVAL;
+			ret = LB_STATUS_ERROR_INVALID;
 			goto out;
 		}
 
@@ -3577,7 +3578,7 @@ static struct packet *client_lb_key_up(pid_t pid, int handle, const struct packe
 		packet = packet_create_noack("lb_mouse_leave", "ssiiddd", pkgname, id, w, h, timestamp, x, y);
 		if (!packet) {
 			ErrPrint("Failed to create a packet[%s]\n", pkgname);
-			ret = -EFAULT;
+			ret = LB_STATUS_ERROR_FAULT;
 			goto out;
 		}
 		*/
@@ -3590,13 +3591,13 @@ static struct packet *client_lb_key_up(pid_t pid, int handle, const struct packe
 
 		script = instance_lb_script(inst);
 		if (!script) {
-			ret = -EFAULT;
+			ret = LB_STATUS_ERROR_FAULT;
 			goto out;
 		}
 
 		e = script_handler_evas(script);
 		if (!e) {
-			ret = -EFAULT;
+			ret = LB_STATUS_ERROR_FAULT;
 			goto out;
 		}
 
@@ -3608,7 +3609,7 @@ static struct packet *client_lb_key_up(pid_t pid, int handle, const struct packe
 		ret = 0;
 	} else {
 		ErrPrint("Unsupported package\n");
-		ret = -EINVAL;
+		ret = LB_STATUS_ERROR_INVALID;
 	}
 
 out:
@@ -3846,7 +3847,7 @@ static struct packet *client_pinup_changed(pid_t pid, int handle, const struct p
 	client = client_find_by_pid(pid);
 	if (!client) {
 		ErrPrint("Client %d is not exists\n", pid);
-		ret = -ENOENT;
+		ret = LB_STATUS_ERROR_NOT_EXIST;
 		pinup = 0;
 		goto out;
 	}
@@ -3854,7 +3855,7 @@ static struct packet *client_pinup_changed(pid_t pid, int handle, const struct p
 	ret = packet_get(packet, "ssi", &pkgname, &id, &pinup);
 	if (ret != 3) {
 		ErrPrint("Parameter is not matched\n");
-		ret = -EINVAL;
+		ret = LB_STATUS_ERROR_INVALID;
 		pinup = 0;
 		goto out;
 	}
@@ -3868,9 +3869,9 @@ static struct packet *client_pinup_changed(pid_t pid, int handle, const struct p
 	 */
 	inst = package_find_instance_by_id(pkgname, id);
 	if (!inst)
-		ret = -ENOENT;
+		ret = LB_STATUS_ERROR_NOT_EXIST;
 	else if (package_is_fault(instance_package(inst)))
-		ret = -EFAULT;
+		ret = LB_STATUS_ERROR_FAULT;
 	else
 		ret = instance_set_pinup(inst, pinup);
 
@@ -3913,14 +3914,14 @@ static struct packet *client_pd_move(pid_t pid, int handle, const struct packet 
 	client = client_find_by_pid(pid);
 	if (!client) {
 		ErrPrint("Client %d is not exists\n", pid);
-		ret = -ENOENT;
+		ret = LB_STATUS_ERROR_NOT_EXIST;
 		goto out;
 	}
 
 	ret = packet_get(packet, "ssdd", &pkgname, &id, &x, &y);
 	if (ret != 4) {
 		ErrPrint("Parameter is not correct\n");
-		ret = -EINVAL;
+		ret = LB_STATUS_ERROR_INVALID;
 		goto out;
 	}
 
@@ -3928,9 +3929,9 @@ static struct packet *client_pd_move(pid_t pid, int handle, const struct packet 
 
 	inst = package_find_instance_by_id(pkgname, id);
 	if (!inst)
-		ret = -ENOENT;
+		ret = LB_STATUS_ERROR_NOT_EXIST;
 	else if (package_is_fault(instance_package(inst)))
-		ret = -EFAULT;
+		ret = LB_STATUS_ERROR_FAULT;
 	else if (package_pd_type(instance_package(inst)) == PD_TYPE_BUFFER) {
 		instance_slave_set_pd_pos(inst, x, y);
 		ret = instance_signal_emit(inst,
@@ -3949,7 +3950,7 @@ static struct packet *client_pd_move(pid_t pid, int handle, const struct packet 
 				0.0, 0.0, 0.0, 0.0, x, y, 0);
 	} else {
 		ErrPrint("Invalid PD type\n");
-		ret = -EINVAL;
+		ret = LB_STATUS_ERROR_INVALID;
 	}
 out:
 	DbgPrint("Update PD position: %lfx%lf (%d)\n", x, y, ret);
@@ -3970,14 +3971,14 @@ static struct packet *client_create_pd(pid_t pid, int handle, const struct packe
 	client = client_find_by_pid(pid);
 	if (!client) {
 		ErrPrint("Client %d is not exists\n", pid);
-		ret = -ENOENT;
+		ret = LB_STATUS_ERROR_NOT_EXIST;
 		goto out;
 	}
 
 	ret = packet_get(packet, "ssdd", &pkgname, &id, &x, &y);
 	if (ret != 4) {
 		ErrPrint("Parameter is not matched\n");
-		ret = -EINVAL;
+		ret = LB_STATUS_ERROR_INVALID;
 		goto out;
 	}
 
@@ -3990,11 +3991,11 @@ static struct packet *client_create_pd(pid_t pid, int handle, const struct packe
 	 */
 	inst = package_find_instance_by_id(pkgname, id);
 	if (!inst)
-		ret = -ENOENT;
+		ret = LB_STATUS_ERROR_NOT_EXIST;
 	else if (package_is_fault(instance_package(inst)))
-		ret = -EFAULT;
+		ret = LB_STATUS_ERROR_FAULT;
 	else if (util_free_space(IMAGE_PATH) < MINIMUM_SPACE)
-		ret = -ENOSPC;
+		ret = LB_STATUS_ERROR_NO_SPACE;
 	else if (package_pd_type(instance_package(inst)) == PD_TYPE_BUFFER) {
 		instance_slave_set_pd_pos(inst, x, y);
 		ret = instance_slave_open_pd(inst, client);
@@ -4047,7 +4048,7 @@ static struct packet *client_create_pd(pid_t pid, int handle, const struct packe
 		}
 	} else {
 		ErrPrint("Invalid PD TYPE\n");
-		ret = -EINVAL;
+		ret = LB_STATUS_ERROR_INVALID;
 	}
 
 out:
@@ -4070,14 +4071,14 @@ static struct packet *client_destroy_pd(pid_t pid, int handle, const struct pack
 	client = client_find_by_pid(pid);
 	if (!client) {
 		ErrPrint("Client %d is not exists\n", pid);
-		ret = -ENOENT;
+		ret = LB_STATUS_ERROR_NOT_EXIST;
 		goto out;
 	}
 
 	ret = packet_get(packet, "ss", &pkgname, &id);
 	if (ret != 2) {
 		ErrPrint("Parameter is not matched\n");
-		ret = -EINVAL;
+		ret = LB_STATUS_ERROR_INVALID;
 		goto out;
 	}
 
@@ -4090,9 +4091,9 @@ static struct packet *client_destroy_pd(pid_t pid, int handle, const struct pack
 	 */
 	inst = package_find_instance_by_id(pkgname, id);
 	if (!inst)
-		ret = -ENOENT;
+		ret = LB_STATUS_ERROR_NOT_EXIST;
 	else if (package_is_fault(instance_package(inst)))
-		ret = -EFAULT;
+		ret = LB_STATUS_ERROR_FAULT;
 	else if (package_pd_type(instance_package(inst)) == PD_TYPE_BUFFER) {
 		ret = instance_signal_emit(inst,
 				"pd,hide", util_uri_to_path(instance_id(inst)),
@@ -4122,7 +4123,7 @@ static struct packet *client_destroy_pd(pid_t pid, int handle, const struct pack
 		}
 	} else {
 		ErrPrint("Invalid PD TYPE\n");
-		ret = -EINVAL;
+		ret = LB_STATUS_ERROR_INVALID;
 	}
 
 out:
@@ -4144,7 +4145,7 @@ static struct packet *client_activate_package(pid_t pid, int handle, const struc
 	client = client_find_by_pid(pid);
 	if (!client) {
 		ErrPrint("Client %d is not exists\n", pid);
-		ret = -ENOENT;
+		ret = LB_STATUS_ERROR_NOT_EXIST;
 		pkgname = "";
 		goto out;
 	}
@@ -4152,7 +4153,7 @@ static struct packet *client_activate_package(pid_t pid, int handle, const struc
 	ret = packet_get(packet, "s", &pkgname);
 	if (ret != 1) {
 		ErrPrint("Parameter is not matched\n");
-		ret = -EINVAL;
+		ret = LB_STATUS_ERROR_INVALID;
 		pkgname = "";
 		goto out;
 	}
@@ -4166,13 +4167,13 @@ static struct packet *client_activate_package(pid_t pid, int handle, const struc
 	if (!package_is_lb_pkgname(pkgname)) {
 		ErrPrint("%s is not a valid livebox package\n", pkgname);
 		pkgname = "";
-		ret = -EINVAL;
+		ret = LB_STATUS_ERROR_INVALID;
 		goto out;
 	}
 
 	info = package_find(pkgname);
 	if (!info)
-		ret = -ENOENT;
+		ret = LB_STATUS_ERROR_NOT_EXIST;
 	else
 		ret = package_clear_fault(info);
 
@@ -4194,14 +4195,14 @@ static struct packet *client_subscribed(pid_t pid, int handle, const struct pack
 	client = client_find_by_pid(pid);
 	if (!client) {
 		ErrPrint("Client %d is not exists\n", pid);
-		ret = -ENOENT;
+		ret = LB_STATUS_ERROR_NOT_EXIST;
 		goto out;
 	}
 
 	ret = packet_get(packet, "ss", &cluster, &category);
 	if (ret != 2) {
 		ErrPrint("Invalid argument\n");
-		ret = -EINVAL;
+		ret = LB_STATUS_ERROR_INVALID;
 		goto out;
 	}
 
@@ -4234,14 +4235,14 @@ static struct packet *client_delete_cluster(pid_t pid, int handle, const struct 
 	client = client_find_by_pid(pid);
 	if (!client) {
 		ErrPrint("Client %d is not exists\n", pid);
-		ret = -ENOENT;
+		ret = LB_STATUS_ERROR_NOT_EXIST;
 		goto out;
 	}
 
 	ret = packet_get(packet, "s", &cluster);
 	if (ret != 1) {
 		ErrPrint("Invalid parameters\n");
-		ret = -EINVAL;
+		ret = LB_STATUS_ERROR_INVALID;
 		goto out;
 	}
 
@@ -4249,14 +4250,14 @@ static struct packet *client_delete_cluster(pid_t pid, int handle, const struct 
 
 	if (!strlen(cluster) || !strcasecmp(cluster, DEFAULT_CLUSTER)) {
 		ErrPrint("Invalid cluster: %s\n", cluster);
-		ret = -EINVAL;
+		ret = LB_STATUS_ERROR_INVALID;
 		goto out;
 	}
 
 	/*!
 	 * \todo
 	 */
-	ret = -ENOSYS;
+	ret = LB_STATUS_ERROR_NOT_IMPLEMENTED;
 
 out:
 	result = packet_create_reply(packet, "i", ret);
@@ -4313,24 +4314,19 @@ static struct packet *client_update(pid_t pid, int handle, const struct packet *
 	client = client_find_by_pid(pid);
 	if (!client) {
 		ErrPrint("Cilent %d is not exists\n", pid);
-		ret = -ENOMEM;
 		goto out;
 	}
 
 	ret = packet_get(packet, "ss", &pkgname, &id);
 	if (ret != 2) {
 		ErrPrint("Invalid argument\n");
-		ret = -EINVAL;
 		goto out;
 	}
 
 	inst = package_find_instance_by_id(pkgname, id);
 	if (!inst) {
-		ret = -ENOENT;
 	} else if (package_is_fault(instance_package(inst))) {
-		ret = -EFAULT;
 	} else if (instance_client(inst) != client) {
-		ret = -EPERM;
 	} else {
 		slave_rpc_request_update(pkgname, id, instance_cluster(inst), instance_category(inst));
 	}
@@ -4355,14 +4351,12 @@ static struct packet *client_refresh_group(pid_t pid, int handle, const struct p
 	client = client_find_by_pid(pid);
 	if (!client) {
 		ErrPrint("Cilent %d is not exists\n", pid);
-		ret = -ENOMEM;
 		goto out;
 	}
 
 	ret = packet_get(packet, "ss", &cluster_id, &category_id);
 	if (ret != 2) {
 		ErrPrint("Invalid parameter\n");
-		ret = -EINVAL;
 		goto out;
 	}
 
@@ -4370,21 +4364,18 @@ static struct packet *client_refresh_group(pid_t pid, int handle, const struct p
 
 	if (!strlen(cluster_id) || !strcasecmp(cluster_id, DEFAULT_CLUSTER)) {
 		ErrPrint("Invalid cluster name: %s\n", cluster_id);
-		ret = -EINVAL;
 		goto out;
 	}
 
 	cluster = group_find_cluster(cluster_id);
 	if (!cluster) {
 		ErrPrint("Cluster [%s] is not registered\n", cluster_id);
-		ret = -EINVAL;
 		goto out;
 	}
 
 	category = group_find_category(cluster, category_id);
 	if (!category) {
 		ErrPrint("Category [%s] is not registered\n", category_id);
-		ret = -EINVAL;
 		goto out;
 	}
 
@@ -4409,28 +4400,28 @@ static struct packet *client_delete_category(pid_t pid, int handle, const struct
 	client = client_find_by_pid(pid);
 	if (!client) {
 		ErrPrint("Client %d is not exists\n", pid);
-		ret = -ENOENT;
+		ret = LB_STATUS_ERROR_NOT_EXIST;
 		goto out;
 	}
 
 	ret = packet_get(packet, "ss", &cluster, &category);
 	if (ret != 2) {
 		ErrPrint("Invalid paramenters\n");
-		ret = -EINVAL;
+		ret = LB_STATUS_ERROR_INVALID;
 		goto out;
 	}
 
 	DbgPrint("pid[%d] cluster[%s] category[%s]\n", pid, cluster, category);
 	if (!strlen(cluster) || !strcasecmp(cluster, DEFAULT_CLUSTER)) {
 		ErrPrint("Invalid cluster: %s\n", cluster);
-		ret = -EINVAL;
+		ret = LB_STATUS_ERROR_INVALID;
 		goto out;
 	}
 
 	/*!
 	 * \todo
 	 */
-	ret = -ENOSYS;
+	ret = LB_STATUS_ERROR_NOT_IMPLEMENTED;
 
 out:
 	result = packet_create_reply(packet, "i", ret);
@@ -4449,14 +4440,14 @@ static struct packet *client_unsubscribed(pid_t pid, int handle, const struct pa
 	client = client_find_by_pid(pid);
 	if (!client) {
 		ErrPrint("Client %d is not exists\n", pid);
-		ret = -ENOENT;
+		ret = LB_STATUS_ERROR_NOT_EXIST;
 		goto out;
 	}
 
 	ret = packet_get(packet, "ss", &cluster, &category);
 	if (ret != 2) {
 		ErrPrint("Invalid argument\n");
-		ret = -EINVAL;
+		ret = LB_STATUS_ERROR_INVALID;
 		goto out;
 	}
 
@@ -4489,7 +4480,6 @@ static struct packet *slave_hello(pid_t pid, int handle, const struct packet *pa
 	ret = packet_get(packet, "s", &slavename);
 	if (ret != 1) {
 		ErrPrint("Parameter is not matched\n");
-		ret = -EINVAL;
 		goto out;
 	}
 
@@ -4519,7 +4509,6 @@ static struct packet *slave_hello(pid_t pid, int handle, const struct packet *pa
 				slave = slave_create(slavename, 1, abi, pkgname);
 				if (!slave) {
 					ErrPrint("Failed to create a new slave for %s\n", slavename);
-					ret = -EFAULT;
 					goto out;
 				}
 
@@ -4533,7 +4522,6 @@ static struct packet *slave_hello(pid_t pid, int handle, const struct packet *pa
 			DbgPrint("Provider is forcely activated, pkgname(%s), abi(%s), slavename(%s)\n", pkgname, abi, slavename);
 		} else {
 			ErrPrint("Slave[%d] is not exists\n", pid);
-			ret = -ENOENT;
 			goto out;
 		}
 	}
@@ -4558,18 +4546,14 @@ static struct packet *slave_ping(pid_t pid, int handle, const struct packet *pac
 	slave = slave_find_by_pid(pid);
 	if (!slave) {
 		ErrPrint("Slave %d is not exists\n", pid);
-		ret = -ENOENT;
 		goto out;
 	}
 
 	ret = packet_get(packet, "s", &slavename);
-	if (ret != 1) {
+	if (ret != 1)
 		ErrPrint("Parameter is not matched\n");
-		ret = -EINVAL;
-		goto out;
-	}
-
-	slave_rpc_ping(slave);
+	else
+		slave_rpc_ping(slave);
 
 out:
 	return NULL;
@@ -4588,14 +4572,12 @@ static struct packet *slave_faulted(pid_t pid, int handle, const struct packet *
 	slave = slave_find_by_pid(pid);
 	if (!slave) {
 		ErrPrint("Slave %d is not exists\n", pid);
-		ret = -ENOENT;
 		goto out;
 	}
 
 	ret = packet_get(packet, "ssss", &slavename, &pkgname, &id, &func);
 	if (ret != 4) {
 		ErrPrint("Parameter is not matched\n");
-		ret = -EINVAL;
 		goto out;
 	}
 
@@ -4605,13 +4587,11 @@ static struct packet *slave_faulted(pid_t pid, int handle, const struct packet *
 	inst = package_find_instance_by_id(pkgname, id);
 	if (!inst) {
 		DbgPrint("There is a no such instance(%s)\n", id);
-		ret = -ENOENT;
 	} else if (instance_state(inst) == INST_DESTROYED) {
 		ErrPrint("Instance(%s) is already destroyed\n", id);
-		ret = -EINVAL;
 	} else {
-		DbgPrint("Destroy instance(%s)\n", id);
 		ret = instance_destroy(inst);
+		DbgPrint("Destroy instance(%s) %d\n", id, ret);
 	}
 
 out:
@@ -4630,14 +4610,12 @@ static struct packet *slave_call(pid_t pid, int handle, const struct packet *pac
 	slave = slave_find_by_pid(pid);
 	if (!slave) {
 		ErrPrint("Slave %d is not exists\n", pid);
-		ret = -ENOENT;
 		goto out;
 	}
 
 	ret = packet_get(packet, "ssss", &slavename, &pkgname, &id, &func);
 	if (ret != 4) {
 		ErrPrint("Parameter is not matched\n");
-		ret = -EINVAL;
 		goto out;
 	}
 
@@ -4660,14 +4638,12 @@ static struct packet *slave_ret(pid_t pid, int handle, const struct packet *pack
 	slave = slave_find_by_pid(pid);
 	if (!slave) {
 		ErrPrint("Slave %d is not exists\n", pid);
-		ret = -ENOENT;
 		goto out;
 	}
 
 	ret = packet_get(packet, "ssss", &slavename, &pkgname, &id, &func);
 	if (ret != 4) {
 		ErrPrint("Parameter is not matched\n");
-		ret = -EINVAL;
 		goto out;
 	}
 
@@ -4695,7 +4671,6 @@ static struct packet *slave_updated(pid_t pid, int handle, const struct packet *
 	slave = slave_find_by_pid(pid);
 	if (!slave) {
 		ErrPrint("Slave %d is not exists\n", pid);
-		ret = -ENOENT;
 		goto out;
 	}
 
@@ -4704,37 +4679,28 @@ static struct packet *slave_updated(pid_t pid, int handle, const struct packet *
 						&content_info, &title);
 	if (ret != 8) {
 		ErrPrint("Parameter is not matched\n");
-		ret = -EINVAL;
 		goto out;
 	}
 
 	inst = package_find_instance_by_id(pkgname, id);
 	if (!inst) {
-		ret = -ENOENT;
 	} else if (package_is_fault(instance_package(inst))) {
 		ErrPrint("Faulted instance cannot make any event.\n");
-		ret = -EFAULT;
 	} else if (instance_state(inst) == INST_DESTROYED) {
 		ErrPrint("Instance is already destroyed\n");
-		ret = -EINVAL;
 	} else {
 		char *filename;
-		int resized;
-
-		resized = (instance_lb_width(inst) != w) || (instance_lb_height(inst) != h);
-		instance_set_lb_info(inst, w, h, priority, content_info, title);
 
 		switch (package_lb_type(instance_package(inst))) {
 		case LB_TYPE_SCRIPT:
 			script_handler_resize(instance_lb_script(inst), w, h);
-
 			filename = util_get_file_kept_in_safe(id);
 			if (filename) {
-				ret = script_handler_parse_desc(pkgname, id,
+				(void)script_handler_parse_desc(pkgname, id,
 								filename, 0);
 				DbgFree(filename);
 			} else {
-				ret = script_handler_parse_desc(pkgname, id,
+				(void)script_handler_parse_desc(pkgname, id,
 							util_uri_to_path(id), 0);
 			}
 			break;
@@ -4744,10 +4710,8 @@ static struct packet *slave_updated(pid_t pid, int handle, const struct packet *
 			 * \check
 			 * text format (inst)
 			 */
-			if (resized)
-				instance_send_resized_event(inst, IS_LB, w, h, 0);
+			instance_set_lb_info(inst, w, h, priority, content_info, title);
 			instance_lb_updated_by_instance(inst);
-			ret = 0;
 			break;
 		}
 
@@ -4771,32 +4735,27 @@ static struct packet *slave_desc_updated(pid_t pid, int handle, const struct pac
 	slave = slave_find_by_pid(pid);
 	if (!slave) {
 		ErrPrint("Slave %d is not exists\n", pid);
-		ret = -ENOENT;
 		goto out;
 	}
 
 	ret = packet_get(packet, "ssss", &slavename, &pkgname, &id, &descfile);
 	if (ret != 4) {
 		ErrPrint("Parameter is not matched\n");
-		ret = -EINVAL;
 		goto out;
 	}
 
 	inst = package_find_instance_by_id(pkgname, id);
 	if (!inst) {
-		ret = -ENOENT;
 	} else if (package_is_fault(instance_package(inst))) {
 		ErrPrint("Faulted package cannot make event\n");
-		ret = -EFAULT;
 	} else if (instance_state(inst) == INST_DESTROYED) {
 		ErrPrint("Instance is already destroyed\n");
-		ret = -EINVAL;
 	} else {
 		switch (package_pd_type(instance_package(inst))) {
 		case PD_TYPE_SCRIPT:
 			DbgPrint("Script (%s)\n", id);
 			if (script_handler_is_loaded(instance_pd_script(inst))) {
-				ret = script_handler_parse_desc(pkgname, id,
+				(void)script_handler_parse_desc(pkgname, id,
 								descfile, 1);
 			}
 			break;
@@ -4804,12 +4763,10 @@ static struct packet *slave_desc_updated(pid_t pid, int handle, const struct pac
 			instance_set_pd_info(inst, 0, 0);
 		case PD_TYPE_BUFFER:
 			instance_pd_updated(pkgname, id, descfile);
-			ret = 0;
 			break;
 		default:
 			DbgPrint("Ignore updated DESC(%s - %s - %s)\n",
 							pkgname, id, descfile);
-			ret = 0;
 			break;
 		}
 	}
@@ -4830,24 +4787,22 @@ static struct packet *slave_deleted(pid_t pid, int handle, const struct packet *
 	slave = slave_find_by_pid(pid);
 	if (!slave) {
 		ErrPrint("Slave %d is not exists\n", pid);
-		ret = -ENOENT;
 		goto out;
 	}
 
 	ret = packet_get(packet, "sss", &slavename, &pkgname, &id);
 	if (ret != 3) {
 		ErrPrint("Parameter is not matched\n");
-		ret = -EINVAL;
 		goto out;
 	}
 
 	inst = package_find_instance_by_id(pkgname, id);
-	if (!inst)
-		ret = -ENOENT;
-	else if (package_is_fault(instance_package(inst)))
-		ret = -EFAULT;
-	else
+	if (!inst) {
+	} else if (package_is_fault(instance_package(inst))) {
+	} else {
 		ret = instance_destroyed(inst);
+		DbgPrint("Destroy instance %d\n", ret);
+	}
 
 out:
 	return NULL;
@@ -4875,7 +4830,7 @@ static struct packet *slave_acquire_buffer(pid_t pid, int handle, const struct p
 	if (!slave) {
 		ErrPrint("Failed to find a slave\n");
 		id = "";
-		ret = -ENOENT;
+		ret = LB_STATUS_ERROR_NOT_EXIST;
 		goto out;
 	}
 
@@ -4883,13 +4838,13 @@ static struct packet *slave_acquire_buffer(pid_t pid, int handle, const struct p
 	if (ret != 7) {
 		ErrPrint("Invalid argument\n");
 		id = "";
-		ret = -EINVAL;
+		ret = LB_STATUS_ERROR_INVALID;
 		goto out;
 	}
 
 	if (util_free_space(IMAGE_PATH) < MINIMUM_SPACE) {
 		DbgPrint("No space\n");
-		ret = -ENOSPC;
+		ret = LB_STATUS_ERROR_NO_SPACE;
 		id = "";
 		goto out;
 	}
@@ -4898,14 +4853,14 @@ static struct packet *slave_acquire_buffer(pid_t pid, int handle, const struct p
 	inst = package_find_instance_by_id(pkgname, id);
 	if (!inst) {
 		DbgPrint("Package[%s] Id[%s] is not found\n", pkgname, id);
-		ret = -EINVAL;
+		ret = LB_STATUS_ERROR_INVALID;
 		id = "";
 		goto out;
 	}
 
 	pkg = instance_package(inst);
 	id = "";
-	ret = -EINVAL;
+	ret = LB_STATUS_ERROR_INVALID;
 	if (target == TYPE_LB) {
 		if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
 			struct buffer_info *info;
@@ -4918,7 +4873,7 @@ static struct packet *slave_acquire_buffer(pid_t pid, int handle, const struct p
 					info = instance_lb_buffer(inst);
 					if (!info) {
 						ErrPrint("LB buffer is not valid\n");
-						ret = -EINVAL;
+						ret = LB_STATUS_ERROR_INVALID;
 						id = "";
 						goto out;
 					}
@@ -4930,12 +4885,8 @@ static struct packet *slave_acquire_buffer(pid_t pid, int handle, const struct p
 
 			ret = buffer_handler_load(info);
 			if (ret == 0) {
-				int resized;
-				resized = (instance_lb_width(inst) != w) || (instance_lb_height(inst) != h);
 				instance_set_lb_info(inst, w, h, PRIORITY_NO_CHANGE, CONTENT_NO_CHANGE, TITLE_NO_CHANGE);
 				id = buffer_handler_id(info);
-				if (resized)
-					instance_send_resized_event(inst, IS_LB, w, h, 0);
 				DbgPrint("Buffer handler ID: %s\n", id);
 			} else {
 				DbgPrint("Failed to load a buffer(%d)\n", ret);
@@ -4955,7 +4906,7 @@ static struct packet *slave_acquire_buffer(pid_t pid, int handle, const struct p
 					info = instance_pd_buffer(inst);
 					if (!info) {
 						ErrPrint("PD buffer is not valid\n");
-						ret = -EINVAL;
+						ret = LB_STATUS_ERROR_INVALID;
 						id = "";
 						instance_client_pd_created(inst, ret);
 						goto out;
@@ -4968,12 +4919,8 @@ static struct packet *slave_acquire_buffer(pid_t pid, int handle, const struct p
 
 			ret = buffer_handler_load(info);
 			if (ret == 0) {
-				int resized;
-				resized = (instance_pd_width(inst) != w) || (instance_pd_height(inst) != h);
 				instance_set_pd_info(inst, w, h);
 				id = buffer_handler_id(info);
-				if (resized)
-					instance_send_resized_event(inst, IS_PD, w, h, 0);
 				DbgPrint("Buffer handler ID: %s\n", id);
 			} else {
 				DbgPrint("Failed to load a buffer (%d)\n", ret);
@@ -5011,14 +4958,14 @@ static struct packet *slave_resize_buffer(pid_t pid, int handle, const struct pa
 	slave = slave_find_by_pid(pid);
 	if (!slave) {
 		ErrPrint("Failed to find a slave\n");
-		ret = -ENOENT;
+		ret = LB_STATUS_ERROR_NOT_EXIST;
 		id = "";
 		goto out;
 	}
 
 	if (util_free_space(IMAGE_PATH) < MINIMUM_SPACE) {
 		ErrPrint("Not enough space\n");
-		ret = -ENOSPC;
+		ret = LB_STATUS_ERROR_NO_SPACE;
 		id = "";
 		goto out;
 	}
@@ -5026,7 +4973,7 @@ static struct packet *slave_resize_buffer(pid_t pid, int handle, const struct pa
 	ret = packet_get(packet, "isssii", &type, &slavename, &pkgname, &id, &w, &h);
 	if (ret != 6) {
 		ErrPrint("Invalid argument\n");
-		ret = -EINVAL;
+		ret = LB_STATUS_ERROR_INVALID;
 		id = "";
 		goto out;
 	}
@@ -5034,7 +4981,7 @@ static struct packet *slave_resize_buffer(pid_t pid, int handle, const struct pa
 	inst = package_find_instance_by_id(pkgname, id);
 	if (!inst) {
 		DbgPrint("Instance is not found[%s] [%s]\n", pkgname, id);
-		ret = -ENOENT;
+		ret = LB_STATUS_ERROR_NOT_EXIST;
 		id = "";
 		goto out;
 	}
@@ -5046,12 +4993,12 @@ static struct packet *slave_resize_buffer(pid_t pid, int handle, const struct pa
 		 * THIS statement should not be entered.
 		 */
 		ErrPrint("PACKAGE INFORMATION IS NOT VALID\n");
-		ret = -EFAULT;
+		ret = LB_STATUS_ERROR_FAULT;
 		id = "";
 		goto out;
 	}
 
-	ret = -EINVAL;
+	ret = LB_STATUS_ERROR_INVALID;
 	/*!
 	 * \note
 	 * Reset "id", It will be re-used from here
@@ -5069,13 +5016,8 @@ static struct packet *slave_resize_buffer(pid_t pid, int handle, const struct pa
 				 * id is resued for newly assigned ID
 				 */
 				if (!ret) {
-					int resized;
-
 					id = buffer_handler_id(info);
-					resized = (instance_lb_width(inst) != w) || (instance_lb_height(inst) != h);
 					instance_set_lb_info(inst, w, h, PRIORITY_NO_CHANGE, CONTENT_NO_CHANGE, TITLE_NO_CHANGE);
-					if (resized)
-						instance_send_resized_event(inst, IS_LB, w, h, 0);
 				}
 			}
 		}
@@ -5091,12 +5033,8 @@ static struct packet *slave_resize_buffer(pid_t pid, int handle, const struct pa
 				 * id is resued for newly assigned ID
 				 */
 				if (!ret) {
-					int resized;
 					id = buffer_handler_id(info);
-					resized = (instance_pd_width(inst) != w) || (instance_pd_height(inst) != h);
 					instance_set_pd_info(inst, w, h);
-					if (resized)
-						instance_send_resized_event(inst, IS_PD, w, h, 0);
 				}
 			}
 		}
@@ -5124,24 +5062,24 @@ static struct packet *slave_release_buffer(pid_t pid, int handle, const struct p
 	slave = slave_find_by_pid(pid);
 	if (!slave) {
 		ErrPrint("Failed to find a slave\n");
-		ret = -ENOENT;
+		ret = LB_STATUS_ERROR_NOT_EXIST;
 		goto out;
 	}
 
 	if (packet_get(packet, "isss", &type, &slavename, &pkgname, &id) != 4) {
 		ErrPrint("Inavlid argument\n");
-		ret = -EINVAL;
+		ret = LB_STATUS_ERROR_INVALID;
 		goto out;
 	}
 
 	inst = package_find_instance_by_id(pkgname, id);
 	if (!inst) {
 		ErrPrint("Instance is not found [%s - %s]\n", pkgname, id);
-		ret = -ENOENT;
+		ret = LB_STATUS_ERROR_NOT_EXIST;
 		goto out;
 	}
 
-	ret = -EINVAL;
+	ret = LB_STATUS_ERROR_INVALID;
 	if (type == TYPE_LB) {
 		struct buffer_info *info;
 
@@ -5182,7 +5120,7 @@ static struct packet *service_change_period(pid_t pid, int handle, const struct 
 	ret = packet_get(packet, "ssd", &pkgname, &id, &period);
 	if (ret != 3) {
 		ErrPrint("Invalid packet\n");
-		ret = -EINVAL;
+		ret = LB_STATUS_ERROR_INVALID;
 		goto out;
 	}
 
@@ -5191,9 +5129,9 @@ static struct packet *service_change_period(pid_t pid, int handle, const struct 
 
 		pkg = package_find(pkgname);
 		if (!pkg) {
-			ret = -ENOENT;
+			ret = LB_STATUS_ERROR_NOT_EXIST;
 		} else if (package_is_fault(pkg)) {
-			ret = -EFAULT;
+			ret = LB_STATUS_ERROR_FAULT;
 		} else {
 			Eina_List *inst_list;
 			Eina_List *l;
@@ -5208,9 +5146,9 @@ static struct packet *service_change_period(pid_t pid, int handle, const struct 
 	} else {
 		inst = package_find_instance_by_id(pkgname, id);
 		if (!inst)
-			ret = -ENOENT;
+			ret = LB_STATUS_ERROR_NOT_EXIST;
 		else if (package_is_fault(instance_package(inst)))
-			ret = -EFAULT;
+			ret = LB_STATUS_ERROR_FAULT;
 		else
 			ret = instance_set_period(inst, period);
 	}
@@ -5238,25 +5176,25 @@ static struct packet *service_update(pid_t pid, int handle, const struct packet 
 	ret = packet_get(packet, "ssss", &pkgname, &id, &cluster, &category);
 	if (ret != 4) {
 		ErrPrint("Invalid Packet\n");
-		ret = -EINVAL;
+		ret = LB_STATUS_ERROR_INVALID;
 		goto out;
 	}
 
 	lb_pkgname = package_lb_pkgname(pkgname);
 	if (!lb_pkgname) {
 		ErrPrint("Invalid package %s\n", pkgname);
-		ret = -EINVAL;
+		ret = LB_STATUS_ERROR_INVALID;
 		goto out;
 	}
 
 	pkg = package_find(lb_pkgname);
 	if (!pkg) {
-		ret = -ENOENT;
+		ret = LB_STATUS_ERROR_NOT_EXIST;
 		goto out;
 	}
 
 	if (package_is_fault(pkg)) {
-		ret = -EFAULT;
+		ret = LB_STATUS_ERROR_FAULT;
 		goto out;
 	}
 
@@ -5289,7 +5227,7 @@ static struct packet *liveinfo_hello(pid_t pid, int handle, const struct packet 
 	if (packet_get(packet, "d", &timestamp) != 1) {
 		ErrPrint("Invalid packet\n");
 		fifo_name = "";
-		ret = -EINVAL;
+		ret = LB_STATUS_ERROR_INVALID;
 		goto out;
 	}
 
@@ -5297,7 +5235,7 @@ static struct packet *liveinfo_hello(pid_t pid, int handle, const struct packet 
 	if (!info) {
 		ErrPrint("Failed to create a liveinfo object\n");
 		fifo_name = "";
-		ret = -EINVAL;
+		ret = LB_STATUS_ERROR_INVALID;
 		goto out;
 	}
 
@@ -5557,7 +5495,7 @@ static struct packet *liveinfo_master_ctrl(pid_t pid, int handle, const struct p
 	char *var;
 	char *val;
 	FILE *fp;
-	int ret = -EINVAL;
+	int ret = LB_STATUS_ERROR_INVALID;
 
 	if (packet_get(packet, "sss", &cmd, &var, &val) != 3) {
 		ErrPrint("Invalid argument\n");

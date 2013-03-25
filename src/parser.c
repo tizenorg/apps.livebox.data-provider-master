@@ -1,5 +1,5 @@
 /*
- * Copyright 2012  Samsung Electronics Co., Ltd
+ * Copyright 2013  Samsung Electronics Co., Ltd
  *
  * Licensed under the Flora License, Version 1.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,6 +23,7 @@
 #include <dlog.h>
 
 #include <livebox-service.h>
+#include <livebox-errno.h>
 
 #include "util.h"
 #include "debug.h"
@@ -168,12 +169,12 @@ HAPI int parser_find(const char *pkgname)
 
 	filename = malloc(len);
 	if (!filename)
-		return 0;
+		return LB_STATUS_SUCCESS;
 
 	ret = snprintf(filename, len, CONF_PATH, pkgname, pkgname);
 	if (ret < 0) {
 		DbgFree(filename);
-		return -EFAULT;
+		return LB_STATUS_ERROR_FAULT;
 	}
 
 	DbgPrint("Conf file is %s for package %s\n", filename, pkgname);
@@ -186,7 +187,7 @@ HAPI int parser_find(const char *pkgname)
 	}
 
 	DbgFree(filename);
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 static inline int parse_size(const char *buffer, unsigned int *size)
@@ -839,7 +840,7 @@ HAPI int parser_unload(struct parser *item)
 	DbgFree(item->lb_path);
 	DbgFree(item->filename);
 	DbgFree(item);
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 /* End of a file */

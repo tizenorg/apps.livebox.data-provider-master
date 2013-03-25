@@ -1,5 +1,5 @@
 /*
- * Copyright 2012  Samsung Electronics Co., Ltd
+ * Copyright 2013  Samsung Electronics Co., Ltd
  *
  * Licensed under the Flora License, Version 1.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,6 +21,7 @@
 #include <dlog.h>
 #include <Ecore_Evas.h>
 #include <Evas.h>
+#include <livebox-errno.h>
 
 #include "util.h"
 #include "conf.h"
@@ -38,12 +39,12 @@ struct fb_info {
 
 HAPI int fb_init(void)
 {
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 HAPI int fb_fini(void)
 {
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 static void *alloc_fb(void *data, int size)
@@ -151,7 +152,7 @@ HAPI int fb_create_buffer(struct fb_info *info)
 	DbgPrint("Buffer handler size: %dx%d\n", ow, oh);
 	if (ow == 0 && oh == 0) {
 		DbgPrint("ZERO Size FB accessed\n");
-		return 0;
+		return LB_STATUS_SUCCESS;
 	}
 
 	if (info->ee) {
@@ -164,13 +165,13 @@ HAPI int fb_create_buffer(struct fb_info *info)
 			ecore_evas_resize(info->ee, ow, oh);
 		}
 
-		return 0;
+		return LB_STATUS_SUCCESS;
 	}
 
 	info->ee = ecore_evas_buffer_allocfunc_new(ow, oh, alloc_fb, free_fb, info);
 	if (!info->ee) {
 		ErrPrint("Failed to create a buffer\n");
-		return -EFAULT;
+		return LB_STATUS_ERROR_FAULT;
 	}
 
 	e = ecore_evas_get(info->ee);
@@ -192,14 +193,14 @@ HAPI int fb_create_buffer(struct fb_info *info)
 		ecore_evas_alpha_set(info->ee, EINA_TRUE);
 	}
 
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 HAPI int fb_destroy_buffer(struct fb_info *info)
 {
 	if (!info->ee) {
 		ErrPrint("EE is not exists (Maybe ZERO byte ee?)\n");
-		return -EINVAL;
+		return LB_STATUS_ERROR_INVALID;
 	}
 
 	if (buffer_handler_type(info->buffer) == BUFFER_TYPE_PIXMAP) {
@@ -213,14 +214,14 @@ HAPI int fb_destroy_buffer(struct fb_info *info)
 
 	ecore_evas_free(info->ee);
 	info->ee = NULL;
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 HAPI int fb_destroy(struct fb_info *info)
 {
 	fb_destroy_buffer(info);
 	DbgFree(info);
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 HAPI Ecore_Evas * const fb_canvas(struct fb_info *info)
@@ -246,7 +247,7 @@ HAPI int fb_resize(struct fb_info *info, int w, int h)
 		 */
 	}
 
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 HAPI int fb_get_size(struct fb_info *info, int *w, int *h)

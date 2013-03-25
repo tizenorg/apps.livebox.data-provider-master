@@ -1,5 +1,5 @@
 /*
- * Copyright 2012  Samsung Electronics Co., Ltd
+ * Copyright 2013  Samsung Electronics Co., Ltd
  *
  * Licensed under the Flora License, Version 1.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,7 +16,7 @@
 
 extern int critical_log(const char *func, int line, const char *fmt, ...);
 extern int critical_log_init(const char *tag);
-extern int critical_log_fini(void);
+extern void critical_log_fini(void);
 
 #define CRITICAL_LOG(args...) critical_log(__func__, __LINE__, args)
 

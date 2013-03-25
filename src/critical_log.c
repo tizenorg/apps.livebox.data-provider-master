@@ -1,5 +1,5 @@
 /*
- * Copyright 2012  Samsung Electronics Co., Ltd
+ * Copyright 2013  Samsung Electronics Co., Ltd
  *
  * Licensed under the Flora License, Version 1.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -26,6 +26,7 @@
 
 #include <dlog.h>
 #include <Eina.h>
+#include <livebox-errno.h>
 
 #include "conf.h"
 #include "debug.h"
@@ -83,7 +84,7 @@ HAPI int critical_log(const char *func, int line, const char *fmt, ...)
 	struct timeval tv;
 
 	if (!s_info.fp)
-		return -EIO;
+		return LB_STATUS_ERROR_IO;
 
 	if (gettimeofday(&tv, NULL) < 0) {
 		tv.tv_sec = 0;
@@ -109,12 +110,12 @@ HAPI int critical_log_init(const char *name)
 	char *filename;
 
 	if (s_info.fp)
-		return 0;
+		return LB_STATUS_SUCCESS;
 
 	s_info.filename = strdup(name);
 	if (!s_info.filename) {
 		ErrPrint("Failed to create a log file\n");
-		return -ENOMEM;
+		return LB_STATUS_ERROR_MEMORY;
 	}
 
 	namelen = strlen(name) + strlen(SLAVE_LOG_PATH) + 20;
@@ -124,7 +125,7 @@ HAPI int critical_log_init(const char *name)
 		ErrPrint("Failed to create a log file\n");
 		DbgFree(s_info.filename);
 		s_info.filename = NULL;
-		return -ENOMEM;
+		return LB_STATUS_ERROR_MEMORY;
 	}
 
 	snprintf(filename, namelen, "%s/%d_%s", SLAVE_LOG_PATH, s_info.file_id, name);
@@ -135,16 +136,16 @@ HAPI int critical_log_init(const char *name)
 		DbgFree(s_info.filename);
 		s_info.filename = NULL;
 		DbgFree(filename);
-		return -EIO;
+		return LB_STATUS_ERROR_IO;
 	}
 
 	DbgFree(filename);
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 
 
-HAPI int critical_log_fini(void)
+HAPI void critical_log_fini(void)
 {
 	if (s_info.filename) {
 		DbgFree(s_info.filename);
@@ -155,8 +156,6 @@ HAPI int critical_log_fini(void)
 		fclose(s_info.fp);
 		s_info.fp = NULL;
 	}
-
-	return 0;
 }
 
 

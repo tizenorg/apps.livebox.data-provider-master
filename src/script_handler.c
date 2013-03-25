@@ -1,5 +1,5 @@
 /*
- * Copyright 2012  Samsung Electronics Co., Ltd
+ * Copyright 2013  Samsung Electronics Co., Ltd
  *
  * Licensed under the Flora License, Version 1.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -29,6 +29,7 @@
 
 #include <dlog.h>
 #include <packet.h>
+#include <livebox-errno.h>
 
 #include "slave_life.h"
 #include "slave_rpc.h"
@@ -206,13 +207,13 @@ int script_signal_emit(Evas *e, const char *part, const char *signal, double sx,
 	ee = ecore_evas_ecore_evas_get(e);
 	if (!ee) {
 		ErrPrint("Evas has no Ecore_Evas\n");
-		return -EINVAL;
+		return LB_STATUS_ERROR_INVALID;
 	}
 
 	info = ecore_evas_data_get(ee, "script,info");
 	if (!info) {
 		ErrPrint("ecore_evas doesn't carry info data\n");
-		return -EINVAL;
+		return LB_STATUS_ERROR_INVALID;
 	}
 
 	if (!signal || strlen(signal) == 0)
@@ -232,12 +233,12 @@ HAPI int script_handler_load(struct script_info *info, int is_pd)
 
 	if (!info || !info->port) {
 		ErrPrint("Script handler is not created\n");
-		return -EINVAL;
+		return LB_STATUS_ERROR_INVALID;
 	}
 
 	if (info->loaded > 0) {
 		info->loaded++;
-		return 0;
+		return LB_STATUS_SUCCESS;
 	}
 
 	ret = fb_create_buffer(info->fb);
@@ -248,7 +249,7 @@ HAPI int script_handler_load(struct script_info *info, int is_pd)
 	if (!info->ee) {
 		ErrPrint("Failed to get canvas\n");
 		fb_destroy_buffer(info->fb);
-		return -EFAULT;
+		return LB_STATUS_ERROR_FAULT;
 	}
 
 	ecore_evas_data_set(info->ee, "script,info", info);
@@ -262,7 +263,7 @@ HAPI int script_handler_load(struct script_info *info, int is_pd)
 			evas_event_callback_del(e, EVAS_CALLBACK_RENDER_POST, render_post_cb);
 			evas_event_callback_del(e, EVAS_CALLBACK_RENDER_PRE, render_pre_cb);
 			fb_destroy_buffer(info->fb);
-			return -EFAULT;
+			return LB_STATUS_ERROR_FAULT;
 		}
 		info->loaded = 1;
 		script_signal_emit(e, util_uri_to_path(instance_id(info->inst)),
@@ -277,7 +278,7 @@ HAPI int script_handler_load(struct script_info *info, int is_pd)
 	ecore_evas_activate(info->ee);
 	fb_sync(info->fb);
 
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 HAPI int script_handler_unload(struct script_info *info, int is_pd)
@@ -286,15 +287,15 @@ HAPI int script_handler_unload(struct script_info *info, int is_pd)
 	Evas *e;
 
 	if (!info || !info->port)
-		return -EINVAL;
+		return LB_STATUS_ERROR_INVALID;
 
 	info->loaded--;
 	if (info->loaded > 0)
-		return 0;
+		return LB_STATUS_SUCCESS;
 
 	if (info->loaded < 0) {
 		info->loaded = 0;
-		return 0;
+		return LB_STATUS_SUCCESS;
 	}
 
 	e = script_handler_evas(info);
@@ -314,7 +315,7 @@ HAPI int script_handler_unload(struct script_info *info, int is_pd)
 		ecore_evas_data_set(ee, "script,info", NULL);
 
 	fb_destroy_buffer(info->fb);
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 HAPI struct script_info *script_handler_create(struct inst_info *inst, const char *file, const char *option, int w, int h)
@@ -368,12 +369,12 @@ HAPI int script_handler_destroy(struct script_info *info)
 {
 	if (!info || !info->port) {
 		ErrPrint("port is not valid\n");
-		return -EINVAL;
+		return LB_STATUS_ERROR_INVALID;
 	}
 
 	if (info->loaded != 0) {
 		ErrPrint("Script handler is not unloaded\n");
-		return -EINVAL;
+		return LB_STATUS_ERROR_INVALID;
 	}
 
 	if (info->port->destroy(info->port_data) < 0)
@@ -381,7 +382,7 @@ HAPI int script_handler_destroy(struct script_info *info)
 
 	fb_destroy(info->fb);
 	DbgFree(info);
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 HAPI int script_handler_is_loaded(struct script_info *info)
@@ -412,18 +413,18 @@ static int update_script_color(struct inst_info *inst, struct block *block, int 
 
 	if (!block || !block->part || !block->data) {
 		ErrPrint("Block or part or data is not valid\n");
-		return -EINVAL;
+		return LB_STATUS_ERROR_INVALID;
 	}
 
 	info = is_pd ? instance_pd_script(inst) : instance_lb_script(inst);
 	if (!info) {
-		ErrPrint("info is NIL\n");
-		return -EFAULT;
+		ErrPrint("info is NIL (%d, %s)\n", is_pd, instance_id(inst));
+		return LB_STATUS_ERROR_FAULT;
 	}
 
 	if (!info->port) {
-		ErrPrint("info->port is NIL\n");
-		return -EINVAL;
+		ErrPrint("info->port is NIL (%d, %s)\n", is_pd, instance_id(inst));
+		return LB_STATUS_ERROR_INVALID;
 	}
 
 	e = script_handler_evas(info);
@@ -432,7 +433,7 @@ static int update_script_color(struct inst_info *inst, struct block *block, int 
 	else
 		ErrPrint("Evas(nil) id[%s] part[%s] data[%s]\n", block->id, block->part, block->data);
 
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 static int update_script_text(struct inst_info *inst, struct block *block, int is_pd)
@@ -442,18 +443,18 @@ static int update_script_text(struct inst_info *inst, struct block *block, int i
 
 	if (!block || !block->part || !block->data) {
 		ErrPrint("Block or part or data is not valid\n");
-		return -EINVAL;
+		return LB_STATUS_ERROR_INVALID;
 	}
 
 	info = is_pd ? instance_pd_script(inst) : instance_lb_script(inst);
 	if (!info) {
-		ErrPrint("info is NIL\n");
-		return -EFAULT;
+		ErrPrint("info is NIL (%d, %s)\n", is_pd, instance_id(inst));
+		return LB_STATUS_ERROR_FAULT;
 	}
 
 	if (!info->port) {
 		ErrPrint("info->port is NIL\n");
-		return -EINVAL;
+		return LB_STATUS_ERROR_INVALID;
 	}
 
 	e = script_handler_evas(info);
@@ -461,7 +462,7 @@ static int update_script_text(struct inst_info *inst, struct block *block, int i
 		info->port->update_text(info->port_data, e, block->id, block->part, block->data);
 	else
 		ErrPrint("Evas(nil) id[%s] part[%s] data[%s]\n", block->id, block->part, block->data);
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 static int update_script_image(struct inst_info *inst, struct block *block, int is_pd)
@@ -471,18 +472,18 @@ static int update_script_image(struct inst_info *inst, struct block *block, int 
 
 	if (!block || !block->part) {
 		ErrPrint("Block or part is not valid\n");
-		return -EINVAL;
+		return LB_STATUS_ERROR_INVALID;
 	}
 
 	info = is_pd ? instance_pd_script(inst) : instance_lb_script(inst);
 	if (!info) {
-		ErrPrint("info is NIL\n");
-		return -EFAULT;
+		ErrPrint("info is NIL (%d, %s)\n", is_pd, instance_id(inst));
+		return LB_STATUS_ERROR_FAULT;
 	}
 
 	if (!info->port) {
 		ErrPrint("info->port is NIL\n");
-		return -EINVAL;
+		return LB_STATUS_ERROR_INVALID;
 	}
 
 	e = script_handler_evas(info);
@@ -490,7 +491,7 @@ static int update_script_image(struct inst_info *inst, struct block *block, int 
 		info->port->update_image(info->port_data, e, block->id, block->part, block->data, block->option);
 	else
 		ErrPrint("Evas: (nil) id[%s] part[%s] data[%s]\n", block->id, block->part, block->data);
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 static int update_script_script(struct inst_info *inst, struct block *block, int is_pd)
@@ -500,18 +501,18 @@ static int update_script_script(struct inst_info *inst, struct block *block, int
 
 	if (!block || !block->part) {
 		ErrPrint("Block or part is NIL\n");
-		return -EINVAL;
+		return LB_STATUS_ERROR_INVALID;
 	}
 
 	info = is_pd ? instance_pd_script(inst) : instance_lb_script(inst);
 	if (!info) {
-		ErrPrint("info is NIL\n");
-		return -EFAULT;
+		ErrPrint("info is NIL (%d, %s)\n", is_pd, instance_id(inst));
+		return LB_STATUS_ERROR_FAULT;
 	}
 
 	if (!info->port) {
 		ErrPrint("info->port is NIL\n");
-		return -EINVAL;
+		return LB_STATUS_ERROR_INVALID;
 	}
 
 	e = script_handler_evas(info);
@@ -520,7 +521,7 @@ static int update_script_script(struct inst_info *inst, struct block *block, int
 	else
 		ErrPrint("Evas: (nil) id[%s] part[%s] data[%s] option[%s]\n",
 						block->id, block->part, block->data, block->option);
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 static int update_script_signal(struct inst_info *inst, struct block *block, int is_pd)
@@ -530,18 +531,18 @@ static int update_script_signal(struct inst_info *inst, struct block *block, int
 
 	if (!block) {
 		ErrPrint("block is NIL\n");
-		return -EINVAL;
+		return LB_STATUS_ERROR_INVALID;
 	}
 
 	info = is_pd ? instance_pd_script(inst) : instance_lb_script(inst);
 	if (!info) {
-		ErrPrint("info is NIL\n");
-		return -EFAULT;
+		ErrPrint("info is NIL (%d, %s)\n", is_pd, instance_id(inst));
+		return LB_STATUS_ERROR_FAULT;
 	}
 
 	if (!info->port) {
 		ErrPrint("info->port is NIL\n");
-		return -EINVAL;
+		return LB_STATUS_ERROR_INVALID;
 	}
 
 	e = script_handler_evas(info);
@@ -549,7 +550,7 @@ static int update_script_signal(struct inst_info *inst, struct block *block, int
 		info->port->update_signal(info->port_data, e, block->id, block->part, block->data);
 	else
 		ErrPrint("Evas(nil) id[%s] part[%s] data[%s]\n", block->id, block->part, block->data);
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 static int update_script_drag(struct inst_info *inst, struct block *block, int is_pd)
@@ -560,23 +561,23 @@ static int update_script_drag(struct inst_info *inst, struct block *block, int i
 
 	if (!block || !block->data || !block->part) {
 		ErrPrint("block or block->data or block->part is NIL\n");
-		return -EINVAL;
+		return LB_STATUS_ERROR_INVALID;
 	}
 
 	info = is_pd ? instance_pd_script(inst) : instance_lb_script(inst);
 	if (!info) {
-		ErrPrint("info is NIL\n");
-		return -EFAULT;
+		ErrPrint("info is NIL (%d, %s)\n", is_pd, instance_id(inst));
+		return LB_STATUS_ERROR_FAULT;
 	}
 
 	if (sscanf(block->data, "%lfx%lf", &dx, &dy) != 2) {
 		ErrPrint("Invalid format of data (DRAG data [%s])\n", block->data);
-		return -EINVAL;
+		return LB_STATUS_ERROR_INVALID;
 	}
 
 	if (!info->port) {
 		ErrPrint("info->port is NIL\n");
-		return -EINVAL;
+		return LB_STATUS_ERROR_INVALID;
 	}
 
 	e = script_handler_evas(info);
@@ -584,15 +585,15 @@ static int update_script_drag(struct inst_info *inst, struct block *block, int i
 		info->port->update_drag(info->port_data, e, block->id, block->part, dx, dy);
 	else
 		ErrPrint("Evas(nil) id[%s] part[%s] %lfx%lf\n", block->id, block->part, dx, dy);
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 HAPI int script_handler_resize(struct script_info *info, int w, int h)
 {
 	if (!info) {
 	//|| (info->w == w && info->h == h)) {
-		ErrPrint("info[%p] resize is not changed\n", info);
-		return 0;
+		ErrPrint("info[%p] resize is ignored\n", info);
+		return LB_STATUS_SUCCESS;
 	}
 
 	fb_resize(script_handler_fb(info), w, h);
@@ -606,10 +607,20 @@ HAPI int script_handler_resize(struct script_info *info, int w, int h)
 			ErrPrint("Evas(nil) resize to %dx%d\n", w, h);
 	}
 
+	if (info->w != w || info->h != h) {
+		if (instance_lb_script(info->inst) == info) {
+			instance_set_lb_info(info->inst, w, h, PRIORITY_NO_CHANGE, CONTENT_NO_CHANGE, TITLE_NO_CHANGE);
+		} else if (instance_pd_script(info->inst) == info) {
+			instance_set_pd_info(info->inst, w, h);
+		} else {
+			ErrPrint("Script is not known\n");
+		}
+	}
+
 	info->w = w;
 	info->h = h;
 
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 static int update_info(struct inst_info *inst, struct block *block, int is_pd)
@@ -618,18 +629,18 @@ static int update_info(struct inst_info *inst, struct block *block, int is_pd)
 
 	if (!block || !block->part || !block->data) {
 		ErrPrint("block or block->part or block->data is NIL\n");
-		return -EINVAL;
+		return LB_STATUS_ERROR_INVALID;
 	}
 
 	info = is_pd ? instance_pd_script(inst) : instance_lb_script(inst);
 	if (!info) {
-		ErrPrint("info is NIL\n");
-		return -EFAULT;
+		ErrPrint("info is NIL (%d, %s)\n", is_pd, instance_id(inst));
+		return LB_STATUS_ERROR_FAULT;
 	}
 
 	if (!info->port) {
 		ErrPrint("info->port is NIL\n");
-		return -EINVAL;
+		return LB_STATUS_ERROR_INVALID;
 	}
 
 	if (!strcasecmp(block->part, INFO_SIZE)) {
@@ -637,28 +648,10 @@ static int update_info(struct inst_info *inst, struct block *block, int is_pd)
 
 		if (sscanf(block->data, "%dx%d", &w, &h) != 2) {
 			ErrPrint("Invalid format for SIZE(%s)\n", block->data);
-			return -EINVAL;
+			return LB_STATUS_ERROR_INVALID;
 		}
 
 		if (!block->id) {
-			int resized;
-
-			if (is_pd) {
-				resized = (instance_pd_width(inst) != w) || (instance_pd_height(inst) != h);
-				instance_set_pd_info(inst, w, h);
-			} else {
-				/*!
-				 * \note
-				 * LB Size is already scaled by livebox-service.
-				 * Each livebox uses the LB_SIZE_TYPE_XXX for its size.
-				 */
-				resized = (instance_lb_width(inst) != w) || (instance_lb_height(inst) != h);
-				instance_set_lb_info(inst, w, h, PRIORITY_NO_CHANGE, CONTENT_NO_CHANGE, TITLE_NO_CHANGE);
-			}
-
-			if (resized)
-				instance_send_resized_event(inst, is_pd, w, h, 0);
-
 			script_handler_resize(info, w, h);
 		} else {
 			Evas *e;
@@ -677,7 +670,7 @@ static int update_info(struct inst_info *inst, struct block *block, int is_pd)
 			ErrPrint("Evas(nil): id[%s] data[%s]\n", block->id, block->data);
 	}
 
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 HAPI int script_handler_parse_desc(const char *pkgname, const char *id, const char *descfile, int is_pd)
@@ -758,13 +751,13 @@ HAPI int script_handler_parse_desc(const char *pkgname, const char *id, const ch
 	inst = package_find_instance_by_id(pkgname, id);
 	if (!inst) {
 		ErrPrint("Instance is not exists\n");
-		return -ENOENT;
+		return LB_STATUS_ERROR_NOT_EXIST;
 	}
 
 	fp = fopen(descfile, "rt");
 	if (!fp) {
 		ErrPrint("Error: %s [%s]\n", descfile, strerror(errno));
-		return -EIO;
+		return LB_STATUS_ERROR_IO;
 	}
 
 	state = UNKNOWN;
@@ -787,7 +780,7 @@ HAPI int script_handler_parse_desc(const char *pkgname, const char *id, const ch
 			if (!isspace(ch) && ch != EOF) {
 				ErrPrint("%d: Syntax error: Desc is not started with '{' or space - (%c = 0x%x)\n", lineno, ch, ch);
 				fclose(fp);
-				return -EINVAL;
+				return LB_STATUS_ERROR_INVALID;
 			}
 			break;
 
@@ -804,7 +797,7 @@ HAPI int script_handler_parse_desc(const char *pkgname, const char *id, const ch
 			if (!block) {
 				ErrPrint("Heap: %s\n", strerror(errno));
 				fclose(fp);
-				return -ENOMEM;
+				return LB_STATUS_ERROR_MEMORY;
 			}
 
 			state = FIELD;
@@ -1133,7 +1126,7 @@ HAPI int script_handler_parse_desc(const char *pkgname, const char *id, const ch
 	}
 
 	fclose(fp);
-	return 0;
+	return LB_STATUS_SUCCESS;
 
 errout:
 	ErrPrint("Parse error at %d file %s\n", lineno, util_basename(descfile));
@@ -1148,7 +1141,7 @@ errout:
 		DbgFree(block);
 	}
 	fclose(fp);
-	return -EINVAL;
+	return LB_STATUS_ERROR_INVALID;
 }
 
 HAPI int script_init(void)
@@ -1167,7 +1160,7 @@ HAPI int script_init(void)
 	dir = opendir(SCRIPT_PORT_PATH);
 	if (!dir) {
 		ErrPrint("Error: %s\n", strerror(errno));
-		return -EIO;
+		return LB_STATUS_ERROR_IO;
 	}
 
 	while ((ent = readdir(dir))) {
@@ -1179,7 +1172,7 @@ HAPI int script_init(void)
 		if (!path) {
 			ErrPrint("Heap: %s %d\n", strerror(errno), pathlen);
 			closedir(dir);
-			return -ENOMEM;
+			return LB_STATUS_ERROR_MEMORY;
 		}
 
 		snprintf(path, pathlen, "%s%s", SCRIPT_PORT_PATH, ent->d_name);
@@ -1189,7 +1182,7 @@ HAPI int script_init(void)
 			ErrPrint("Heap: %s\n", strerror(errno));
 			DbgFree(path);
 			closedir(dir);
-			return -ENOMEM;
+			return LB_STATUS_ERROR_MEMORY;
 		}
 
 		DbgPrint("Open SCRIPT PORT: %s\n", path);
@@ -1199,7 +1192,7 @@ HAPI int script_init(void)
 			ErrPrint("Error: %s\n", dlerror());
 			DbgFree(item);
 			closedir(dir);
-			return -EFAULT;
+			return LB_STATUS_ERROR_FAULT;
 		}
 
 		item->magic_id = dlsym(item->handle, "script_magic_id");
@@ -1273,14 +1266,14 @@ HAPI int script_init(void)
 	}
 
 	closedir(dir);
-	return 0;
+	return LB_STATUS_SUCCESS;
 
 errout:
 	ErrPrint("Error: %s\n", dlerror());
 	dlclose(item->handle);
 	DbgFree(item);
 	closedir(dir);
-	return -EFAULT;
+	return LB_STATUS_ERROR_FAULT;
 }
 
 HAPI int script_fini(void)
@@ -1301,7 +1294,7 @@ HAPI int script_fini(void)
 HAPI int script_handler_update_pointer(struct script_info *info, int x, int y, int down)
 {
 	if (!info)
-		return 0;
+		return LB_STATUS_SUCCESS;
 
 	info->x = x;
 	info->y = y;
@@ -1311,7 +1304,7 @@ HAPI int script_handler_update_pointer(struct script_info *info, int x, int y, i
 	else if (down == 1)
 		info->down = 1;
 
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 /* End of a file */

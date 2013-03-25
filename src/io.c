@@ -1,5 +1,5 @@
 /*
- * Copyright 2012  Samsung Electronics Co., Ltd
+ * Copyright 2013  Samsung Electronics Co., Ltd
  *
  * Licensed under the Flora License, Version 1.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -27,6 +27,7 @@
 #include <Eina.h>
 #include <sqlite3.h>
 #include <db-util.h>
+#include <livebox-errno.h>
 
 #include "debug.h"
 #include "conf.h"
@@ -74,7 +75,7 @@ static inline int load_abi_table(void)
 
 	fp = fopen("/usr/share/"PACKAGE"/abi.ini", "rt");
 	if (!fp)
-		return -EIO;
+		return LB_STATUS_ERROR_IO;
 
 	state = INIT;
 	while ((ch = getc(fp)) != EOF && state != ERROR) {
@@ -208,7 +209,7 @@ static inline int load_abi_table(void)
 	}
 
 	fclose(fp);
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 static inline int build_client_info(struct pkg_info *info)
@@ -223,14 +224,14 @@ static inline int build_client_info(struct pkg_info *info)
 	ret = sqlite3_prepare_v2(s_info.handle, dml, -1, &stmt, NULL);
 	if (ret != SQLITE_OK) {
 		ErrPrint("Error: %s\n", sqlite3_errmsg(s_info.handle));
-		return -EIO;
+		return LB_STATUS_ERROR_IO;
 	}
 
 	ret = sqlite3_bind_text(stmt, 1, package_name(info), -1, SQLITE_TRANSIENT);
 	if (ret != SQLITE_OK) {
 		ErrPrint("Failed to bind a pkgname %s\n", package_name(info));
 		sqlite3_finalize(stmt);
-		return -EIO;
+		return LB_STATUS_ERROR_IO;
 	}
 
 	if (sqlite3_step(stmt) != SQLITE_ROW) {
@@ -238,7 +239,7 @@ static inline int build_client_info(struct pkg_info *info)
 		sqlite3_reset(stmt);
 		sqlite3_clear_bindings(stmt);
 		sqlite3_finalize(stmt);
-		return -EIO;
+		return LB_STATUS_ERROR_IO;
 	}
 
 	package_set_auto_launch(info, (const char *)sqlite3_column_text(stmt, 0));
@@ -256,7 +257,7 @@ static inline int build_client_info(struct pkg_info *info)
 	sqlite3_reset(stmt);
 	sqlite3_clear_bindings(stmt);
 	sqlite3_finalize(stmt);
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 static inline int build_provider_info(struct pkg_info *info)
@@ -270,19 +271,19 @@ static inline int build_provider_info(struct pkg_info *info)
 	ret = sqlite3_prepare_v2(s_info.handle, dml, -1, &stmt, NULL);
 	if (ret != SQLITE_OK) {
 		ErrPrint("Error: %s\n", sqlite3_errmsg(s_info.handle));
-		return -EIO;
+		return LB_STATUS_ERROR_IO;
 	}
 
 	if (sqlite3_bind_text(stmt, 1, package_name(info), -1, SQLITE_TRANSIENT) != SQLITE_OK) {
 		ErrPrint("Failed to bind a pkgname(%s) - %s\n", package_name(info), sqlite3_errmsg(s_info.handle));
 		sqlite3_finalize(stmt);
-		return -EIO;
+		return LB_STATUS_ERROR_IO;
 	}
 
 	if (sqlite3_bind_text(stmt, 2, package_name(info), -1, SQLITE_TRANSIENT) != SQLITE_OK) {
 		ErrPrint("Failed to bind a pkgname(%s) - %s\n", package_name(info), sqlite3_errmsg(s_info.handle));
 		sqlite3_finalize(stmt);
-		return -EIO;
+		return LB_STATUS_ERROR_IO;
 	}
 
 	if (sqlite3_step(stmt) != SQLITE_ROW) {
@@ -290,7 +291,7 @@ static inline int build_provider_info(struct pkg_info *info)
 		sqlite3_reset(stmt);
 		sqlite3_clear_bindings(stmt);
 		sqlite3_finalize(stmt);
-		return -EIO;
+		return LB_STATUS_ERROR_IO;
 	}
 
 	appid = (const char *)sqlite3_column_text(stmt, 14);
@@ -299,7 +300,7 @@ static inline int build_provider_info(struct pkg_info *info)
 		sqlite3_reset(stmt);
 		sqlite3_clear_bindings(stmt);
 		sqlite3_finalize(stmt);
-		return -EIO;
+		return LB_STATUS_ERROR_IO;
 	}
 
 	package_set_network(info, sqlite3_column_int(stmt, 0));
@@ -349,7 +350,7 @@ static inline int build_provider_info(struct pkg_info *info)
 	sqlite3_reset(stmt);
 	sqlite3_clear_bindings(stmt);
 	sqlite3_finalize(stmt);
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 static inline int build_box_size_info(struct pkg_info *info)
@@ -363,13 +364,13 @@ static inline int build_box_size_info(struct pkg_info *info)
 	ret = sqlite3_prepare_v2(s_info.handle, dml, -1, &stmt, NULL);
 	if (ret != SQLITE_OK) {
 		ErrPrint("Error: %s\n", sqlite3_errmsg(s_info.handle));
-		return -EIO;
+		return LB_STATUS_ERROR_IO;
 	}
 
 	if (sqlite3_bind_text(stmt, 1, package_name(info), -1, SQLITE_TRANSIENT) != SQLITE_OK) {
 		ErrPrint("Failed to bind a pkgname(%s) - %s\n", package_name(info), sqlite3_errmsg(s_info.handle));
 		sqlite3_finalize(stmt);
-		return -EIO;
+		return LB_STATUS_ERROR_IO;
 	}
 
 	size_list = 0;
@@ -383,7 +384,7 @@ static inline int build_box_size_info(struct pkg_info *info)
 	sqlite3_reset(stmt);
 	sqlite3_clear_bindings(stmt);
 	sqlite3_finalize(stmt);
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 static inline int load_context_option(struct context_item *item, int id)
@@ -397,17 +398,17 @@ static inline int load_context_option(struct context_item *item, int id)
 	ret = sqlite3_prepare_v2(s_info.handle, dml, -1, &stmt, NULL);
 	if (ret != SQLITE_OK) {
 		ErrPrint("Error: %s\n", sqlite3_errmsg(s_info.handle));
-		return -EIO;
+		return LB_STATUS_ERROR_IO;
 	}
 
 	ret = sqlite3_bind_int(stmt, 1, id);
 	if (ret != SQLITE_OK) {
 		ErrPrint("Error: %s\n", sqlite3_errmsg(s_info.handle));
-		ret = -EIO;
+		ret = LB_STATUS_ERROR_IO;
 		goto out;
 	}
 
-	ret = -ENOENT;
+	ret = LB_STATUS_ERROR_NOT_EXIST;
 	while (sqlite3_step(stmt) == SQLITE_ROW) {
 		key = (const char *)sqlite3_column_text(stmt, 0);
 		if (!key || !strlen(key)) {
@@ -445,17 +446,17 @@ static inline int load_context_item(struct context_info *info, int id)
 	ret = sqlite3_prepare_v2(s_info.handle, dml, -1, &stmt, NULL);
 	if (ret != SQLITE_OK) {
 		ErrPrint("Error: %s\n", sqlite3_errmsg(s_info.handle));
-		return -EIO;
+		return LB_STATUS_ERROR_IO;
 	}
 
 	ret = sqlite3_bind_int(stmt, 1, id);
 	if (ret != SQLITE_OK) {
 		ErrPrint("Error: %s\n", sqlite3_errmsg(s_info.handle));
-		ret = -EIO;
+		ret = LB_STATUS_ERROR_IO;
 		goto out;
 	}
 
-	ret = -ENOENT;
+	ret = LB_STATUS_ERROR_NOT_EXIST;
 	while (sqlite3_step(stmt) == SQLITE_ROW) {
 		ctx_item = (const char *)sqlite3_column_text(stmt, 0);
 		option_id = sqlite3_column_int(stmt, 1);
@@ -463,7 +464,7 @@ static inline int load_context_item(struct context_info *info, int id)
 		item = group_add_context_item(info, ctx_item);
 		if (!item) {
 			ErrPrint("Failed to add a new context item\n");
-			ret = -EFAULT;
+			ret = LB_STATUS_ERROR_FAULT;
 			break;
 		}
 
@@ -494,14 +495,14 @@ static inline int build_group_info(struct pkg_info *info)
 	ret = sqlite3_prepare_v2(s_info.handle, dml, -1, &stmt, NULL);
 	if (ret != SQLITE_OK) {
 		ErrPrint("Error: %s\n", sqlite3_errmsg(s_info.handle));
-		return -EIO;
+		return LB_STATUS_ERROR_IO;
 	}
 
 	ret = sqlite3_bind_text(stmt, 1, package_name(info), -1, SQLITE_TRANSIENT);
 	if (ret != SQLITE_OK) {
 		ErrPrint("Failed to bind a package name(%s)\n", package_name(info));
 		sqlite3_finalize(stmt);
-		return -EIO;
+		return LB_STATUS_ERROR_IO;
 	}
 
 	while (sqlite3_step(stmt) == SQLITE_ROW) {
@@ -547,7 +548,7 @@ static inline int build_group_info(struct pkg_info *info)
 		if (ctx_info) {
 			ret = load_context_item(ctx_info, id);
 			if (ret < 0) {
-				if (ret == -ENOENT) {
+				if (ret == LB_STATUS_ERROR_NOT_EXIST) {
 					DbgPrint("Has no specific context info\n");
 				} else {
 					DbgPrint("Context info is not valid\n");
@@ -564,7 +565,7 @@ static inline int build_group_info(struct pkg_info *info)
 	sqlite3_reset(stmt);
 	sqlite3_clear_bindings(stmt);
 	sqlite3_finalize(stmt);
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 HAPI int io_is_exists(const char *pkgname) /* Manifest Package Name */
@@ -574,25 +575,25 @@ HAPI int io_is_exists(const char *pkgname) /* Manifest Package Name */
 
 	if (!s_info.handle) {
 		ErrPrint("DB is not ready\n");
-		return -EIO;
+		return LB_STATUS_ERROR_IO;
 	}
 
 	ret = sqlite3_prepare_v2(s_info.handle, "SELECT COUNT(pkgid) FROM pkgmap WHERE appid = ?", -1, &stmt, NULL);
 	if (ret != SQLITE_OK) {
 		ErrPrint("Error: %s\n", sqlite3_errmsg(s_info.handle));
-		return -EIO;
+		return LB_STATUS_ERROR_IO;
 	}
 
 	ret = sqlite3_bind_text(stmt, 1, pkgname, -1, SQLITE_TRANSIENT);
 	if (ret != SQLITE_OK) {
 		ErrPrint("Error: %s\n", sqlite3_errmsg(s_info.handle));
-		ret = -EIO;
+		ret = LB_STATUS_ERROR_IO;
 		goto out;
 	}
 
 	if (sqlite3_step(stmt) != SQLITE_ROW) {
 		ErrPrint("%s has no record (%s)\n", pkgname, sqlite3_errmsg(s_info.handle));
-		ret = -EIO;
+		ret = LB_STATUS_ERROR_IO;
 		goto out;
 	}
 
@@ -679,7 +680,7 @@ HAPI int io_crawling_liveboxes(int (*cb)(const char *pkgname, int prime, void *d
 				if (cb(pkgid, prime, data) < 0) {
 					sqlite3_reset(stmt);
 					sqlite3_finalize(stmt);
-					return -ECANCELED;
+					return LB_STATUS_ERROR_CANCEL;
 				}
 			}
 
@@ -700,14 +701,14 @@ HAPI int io_crawling_liveboxes(int (*cb)(const char *pkgname, int prime, void *d
 
 			if (cb(ent->d_name, -1, data) < 0) {
 				closedir(dir);
-				return -ECANCELED;
+				return LB_STATUS_ERROR_CANCEL;
 			}
 		}
 
 		closedir(dir);
 	}
 
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 HAPI int io_update_livebox_package(const char *pkgname, int (*cb)(const char *lb_pkgname, int prime, void *data), void *data)
@@ -718,23 +719,23 @@ HAPI int io_update_livebox_package(const char *pkgname, int (*cb)(const char *lb
 	int ret;
 
 	if (!cb || !pkgname)
-		return -EINVAL;
+		return LB_STATUS_ERROR_INVALID;
 
 	if (!s_info.handle) {
 		ErrPrint("DB is not ready\n");
-		return -EINVAL;
+		return LB_STATUS_ERROR_INVALID;
 	}
 
 	ret = sqlite3_prepare_v2(s_info.handle, "SELECT pkgid, prime FROM pkgmap WHERE appid = ?", -1, &stmt, NULL);
 	if (ret != SQLITE_OK) {
 		ErrPrint("Error: %s\n", sqlite3_errmsg(s_info.handle));
-		return -EFAULT;
+		return LB_STATUS_ERROR_FAULT;
 	}
 
 	ret = sqlite3_bind_text(stmt, 1, pkgname, -1, SQLITE_TRANSIENT);
 	if (ret != SQLITE_OK) {
 		ErrPrint("Error: %s\n", sqlite3_errmsg(s_info.handle));
-		ret = -EFAULT;
+		ret = LB_STATUS_ERROR_FAULT;
 		goto out;
 	}
 
@@ -765,7 +766,7 @@ HAPI int io_load_package_db(struct pkg_info *info)
 
 	if (!s_info.handle) {
 		ErrPrint("DB is not ready\n");
-		return -EIO;
+		return LB_STATUS_ERROR_IO;
 	}
 
 	ret = build_provider_info(info);
@@ -784,7 +785,7 @@ HAPI int io_load_package_db(struct pkg_info *info)
 	if (ret < 0)
 		return ret;
 
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 static inline int db_init(void)
@@ -795,38 +796,38 @@ static inline int db_init(void)
 	ret = db_util_open(DBFILE, &s_info.handle, DB_UTIL_REGISTER_HOOK_METHOD);
 	if (ret != SQLITE_OK) {
 		ErrPrint("Failed to open a DB\n");
-		return -EIO;
+		return LB_STATUS_ERROR_IO;
 	}
 
 	if (lstat(DBFILE, &stat) < 0) {
 		db_util_close(s_info.handle);
 		s_info.handle = NULL;
 		ErrPrint("%s\n", strerror(errno));
-		return -EIO;
+		return LB_STATUS_ERROR_IO;
 	}
 
 	if (!S_ISREG(stat.st_mode)) {
 		ErrPrint("Invalid file\n");
 		db_util_close(s_info.handle);
 		s_info.handle = NULL;
-		return -EINVAL;
+		return LB_STATUS_ERROR_INVALID;
 	}
 
 	if (stat.st_size <= 0)
 		DbgPrint("Size is %d (But use this ;)\n", stat.st_size);
 
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 static inline int db_fini(void)
 {
 	if (!s_info.handle)
-		return 0;
+		return LB_STATUS_SUCCESS;
 
 	db_util_close(s_info.handle);
 	s_info.handle = NULL;
 
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 HAPI int io_init(void)
@@ -839,19 +840,18 @@ HAPI int io_init(void)
 	ret = load_abi_table();
 	DbgPrint("ABI table is loaded: %d\n", ret);
 
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 HAPI int io_fini(void)
 {
 	int ret;
 
-	ret = abi_del_all();
-	DbgPrint("ABI table is finalized: %d\n", ret);
+	abi_del_all();
 
 	ret = db_fini();
 	DbgPrint("DB finalized: %d\n", ret);
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 /* End of a file */

@@ -1,5 +1,5 @@
 /*
- * Copyright 2012  Samsung Electronics Co., Ltd
+ * Copyright 2013  Samsung Electronics Co., Ltd
  *
  * Licensed under the Flora License, Version 1.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -28,6 +28,7 @@
 #include <dlog.h>
 #include <Eina.h>
 #include <Ecore.h>
+#include <livebox-errno.h>
 
 #include "util.h"
 #include "debug.h"
@@ -67,12 +68,12 @@ HAPI int util_check_ext(const char *filename, const char *check_ptr)
 	name_len = strlen(filename);
 	while (--name_len >= 0 && *check_ptr) {
 		if (filename[name_len] != *check_ptr)
-			return -EINVAL;
+			return LB_STATUS_ERROR_INVALID;
 
 		check_ptr ++;
 	}
 
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 static inline int check_native_livebox(const char *pkgname)
@@ -87,18 +88,18 @@ static inline int check_native_livebox(const char *pkgname)
 	path = malloc(len + 1);
 	if (!path) {
 		ErrPrint("Heap: %s\n", strerror(errno));
-		return -ENOMEM;
+		return LB_STATUS_ERROR_MEMORY;
 	}
 
 	snprintf(path, len, "%s%s/libexec/liblive-%s.so", ROOT_PATH, pkgname, pkgname);
 	if (access(path, F_OK | R_OK) != 0) {
 		ErrPrint("%s is not a valid package\n", pkgname);
 		DbgFree(path);
-		return -EINVAL;
+		return LB_STATUS_ERROR_INVALID;
 	}
 
 	DbgFree(path);
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 static inline int check_web_livebox(const char *pkgname)
@@ -112,31 +113,31 @@ static inline int check_web_livebox(const char *pkgname)
 	path = malloc(len + 1);
 	if (!path) {
 		ErrPrint("Heap: %s\n", strerror(errno));
-		return -ENOMEM;
+		return LB_STATUS_ERROR_MEMORY;
 	}
 
 	snprintf(path, len, "/opt/usr/apps/%s/res/wgt/livebox/index.html", pkgname);
 	if (access(path, F_OK | R_OK) != 0) {
 		ErrPrint("%s is not a valid package\n", pkgname);
 		DbgFree(path);
-		return -EINVAL;
+		return LB_STATUS_ERROR_INVALID;
 	}
 
 	DbgFree(path);
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 HAPI int util_validate_livebox_package(const char *pkgname)
 {
 	if (!pkgname) {
 		ErrPrint("Invalid argument\n");
-		return -EINVAL;
+		return LB_STATUS_ERROR_INVALID;
 	}
 
 	if (!check_native_livebox(pkgname) || !check_web_livebox(pkgname))
-		return 0;
+		return LB_STATUS_SUCCESS;
 
-	return -EINVAL;
+	return LB_STATUS_ERROR_INVALID;
 }
 
 HAPI int util_unlink(const char *filename)
@@ -149,21 +150,21 @@ HAPI int util_unlink(const char *filename)
 	descfile = malloc(desclen);
 	if (!descfile) {
 		ErrPrint("Heap: %s\n", strerror(errno));
-		return -ENOMEM;
+		return LB_STATUS_ERROR_MEMORY;
 	}
 
 	ret = snprintf(descfile, desclen, "%s.desc", filename);
 	if (ret < 0) {
 		ErrPrint("Error: %s\n", strerror(errno));
 		DbgFree(descfile);
-		return -EFAULT;
+		return LB_STATUS_ERROR_FAULT;
 	}
 
 	(void)unlink(descfile);
 	DbgFree(descfile);
 	(void)unlink(filename);
 
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 HAPI char *util_slavename(void)
@@ -434,18 +435,18 @@ HAPI int util_unlink_files(const char *folder)
 
 	if (lstat(folder, &info) < 0) {
 		ErrPrint("Error: %s\n", strerror(errno));
-		return -EIO;
+		return LB_STATUS_ERROR_IO;
 	}
 
 	if (!S_ISDIR(info.st_mode)) {
 		ErrPrint("Error: %s is not a folder", folder);
-		return -EINVAL;
+		return LB_STATUS_ERROR_INVALID;
 	}
 
 	handle = opendir(folder);
 	if (!handle) {
 		ErrPrint("Error: %s\n", strerror(errno));
-		return -EIO;
+		return LB_STATUS_ERROR_IO;
 	}
 
 	while ((entry = readdir(handle))) {
@@ -470,7 +471,7 @@ HAPI int util_unlink_files(const char *folder)
 	}
 
 	closedir(handle);
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 /* End of a file */

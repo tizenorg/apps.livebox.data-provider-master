@@ -1,5 +1,5 @@
 /*
- * Copyright 2012  Samsung Electronics Co., Ltd
+ * Copyright 2013  Samsung Electronics Co., Ltd
  *
  * Licensed under the Flora License, Version 1.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,6 +20,7 @@
 
 #include <Eina.h>
 #include <dlog.h>
+#include <livebox-errno.h>
 
 #include "util.h"
 #include "debug.h"
@@ -45,14 +46,14 @@ HAPI int abi_add_entry(const char *abi, const char *pkgname)
 	item = malloc(sizeof(*item));
 	if (!item) {
 		ErrPrint("Failed to add a new entry for abi[%s - %s]\n", abi, pkgname);
-		return -ENOMEM;
+		return LB_STATUS_ERROR_MEMORY;
 	}
 
 	item->abi = strdup(abi);
 	if (!item->abi) {
 		ErrPrint("Heap: %s\n", strerror(errno));
 		DbgFree(item);
-		return -ENOMEM;
+		return LB_STATUS_ERROR_MEMORY;
 	}
 
 	item->pkgname = strdup(pkgname);
@@ -60,11 +61,11 @@ HAPI int abi_add_entry(const char *abi, const char *pkgname)
 		ErrPrint("Heap: %s\n", strerror(errno));
 		DbgFree(item->abi);
 		DbgFree(item);
-		return -ENOMEM;
+		return LB_STATUS_ERROR_MEMORY;
 	}
 
 	s_abi.list = eina_list_append(s_abi.list, item);
-	return 0;
+	return LB_STATUS_SUCCESS;
 }
 
 HAPI int abi_update_entry(const char *abi, const char *pkgname)
@@ -77,7 +78,7 @@ HAPI int abi_update_entry(const char *abi, const char *pkgname)
 	_pkgname = strdup(pkgname);
 	if (!_pkgname) {
 		ErrPrint("Heap: %s\n", strerror(errno));
-		return -ENOMEM;
+		return LB_STATUS_ERROR_MEMORY;
 	}
 
 	EINA_LIST_FOREACH_SAFE(s_abi.list, l, n, item) {
@@ -89,7 +90,7 @@ HAPI int abi_update_entry(const char *abi, const char *pkgname)
 	}
 
 	DbgFree(_pkgname);
-	return -ENOENT;
+	return LB_STATUS_ERROR_NOT_EXIST;
 }
 
 HAPI int abi_del_entry(const char *abi)
@@ -104,14 +105,14 @@ HAPI int abi_del_entry(const char *abi)
 			DbgFree(item->abi);
 			DbgFree(item->pkgname);
 			DbgFree(item);
-			return 0;
+			return LB_STATUS_SUCCESS;
 		}
 	}
 
-	return -ENOENT;
+	return LB_STATUS_ERROR_NOT_EXIST;
 }
 
-HAPI int abi_del_all(void)
+HAPI void abi_del_all(void)
 {
 	struct item *item;
 
@@ -120,8 +121,6 @@ HAPI int abi_del_all(void)
 		DbgFree(item->pkgname);
 		DbgFree(item);
 	}
-
-	return 0;
 }
 
 HAPI const char *abi_find_slave(const char *abi)

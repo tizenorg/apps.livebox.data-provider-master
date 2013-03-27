@@ -1603,7 +1603,7 @@ HAPI void instance_set_lb_info(struct inst_info *inst, int w, int h, double prio
 		inst->lb.priority = priority;
 
 	if (inst->lb.width != w || inst->lb.height != h)
-		instance_send_resized_event(inst, IS_LB, w, h, 0);
+		instance_send_resized_event(inst, IS_LB, w, h, LB_STATUS_SUCCESS);
 
 	inst->lb.width = w;
 	inst->lb.height = h;
@@ -1612,7 +1612,7 @@ HAPI void instance_set_lb_info(struct inst_info *inst, int w, int h, double prio
 HAPI void instance_set_pd_info(struct inst_info *inst, int w, int h)
 {
 	if (inst->pd.width != w || inst->pd.height != h)
-		instance_send_resized_event(inst, IS_PD, w, h, 0);
+		instance_send_resized_event(inst, IS_PD, w, h, LB_STATUS_SUCCESS);
 
 	inst->pd.width = w;
 	inst->pd.height = h;

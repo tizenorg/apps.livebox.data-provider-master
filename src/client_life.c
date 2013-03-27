@@ -161,6 +161,7 @@ static inline void invoke_activated_cb(struct client_node *client)
 			}
 		}
 	}
+	client_unref(client);
 }
 
 static inline void destroy_client_data(struct client_node *client)

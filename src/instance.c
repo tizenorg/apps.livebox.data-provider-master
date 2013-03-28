@@ -1794,7 +1794,7 @@ static void resize_cb(struct slave_node *slave, const struct packet *packet, voi
 	int ret;
 
 	if (!packet) {
-		ErrPrint("Invalid packet\n");
+		ErrPrint("RESIZE: Invalid packet\n");
 		instance_send_resized_event(cbdata->inst, IS_LB, cbdata->inst->lb.width, cbdata->inst->lb.height, LB_STATUS_ERROR_FAULT);
 		instance_unref(cbdata->inst);
 		DbgFree(cbdata);
@@ -1802,7 +1802,7 @@ static void resize_cb(struct slave_node *slave, const struct packet *packet, voi
 	}
 
 	if (packet_get(packet, "i", &ret) != 1) {
-		ErrPrint("Invalid parameter\n");
+		ErrPrint("RESIZE: Invalid parameter\n");
 		instance_send_resized_event(cbdata->inst, IS_LB, cbdata->inst->lb.width, cbdata->inst->lb.height, LB_STATUS_ERROR_INVALID);
 		instance_unref(cbdata->inst);
 		DbgFree(cbdata);
@@ -1843,10 +1843,12 @@ static void resize_cb(struct slave_node *slave, const struct packet *packet, voi
 			 * to get the size changed event callback correctly.
 			 */
 			instance_send_resized_event(cbdata->inst, IS_LB, cbdata->inst->lb.width, cbdata->inst->lb.height, LB_STATUS_ERROR_ALREADY);
-			DbgPrint("Livebox is already resized\n");
+			DbgPrint("RESIZE: Livebox is already resized [%s - %dx%d]\n", instance_id(cbdata->inst), cbdata->w, cbdata->h);
+		} else {
+			DbgPrint("RESIZE: Request is successfully sent [%s - %dx%d]\n", instance_id(cbdata->inst), cbdata->w, cbdata->h);
 		}
 	} else {
-		DbgPrint("Livebox rejects the new size: %dx%d (%d)\n", cbdata->w, cbdata->h, ret);
+		DbgPrint("RESIZE: Livebox rejects the new size: %s - %dx%d (%d)\n", instance_id(cbdata->inst), cbdata->w, cbdata->h, ret);
 		instance_send_resized_event(cbdata->inst, IS_LB, cbdata->inst->lb.width, cbdata->inst->lb.height, ret);
 	}
 
@@ -1889,6 +1891,7 @@ HAPI int instance_resize(struct inst_info *inst, int w, int h)
 		return LB_STATUS_ERROR_FAULT;
 	}
 
+	DbgPrint("RESIZE: INSTANCE[%s] Request resize[%dx%d] box\n", instance_id(inst), w, h);
 	ret = slave_rpc_async_request(package_slave(inst->info), package_name(inst->info), packet, resize_cb, cbdata, 0);
 	return ret;
 }
@@ -2534,9 +2537,24 @@ HAPI int instance_slave_open_pd(struct inst_info *inst, struct client_node *clie
 		return LB_STATUS_ERROR_FAULT;
 	}
 
-	slave_freeze_ttl(slave);
+	/*!
+	 * \note
+	 * Do not return from here even though we failed to freeze the TTL timer.
+	 * Because the TTL timer is not able to be exists.
+	 * So we can ignore this error.
+	 */
+	(void)slave_freeze_ttl(slave);
 
 	ret = slave_rpc_request_only(slave, pkgname, packet, 0);
+	if (ret < 0) {
+		ErrPrint("Unable to send request to slave\n");
+		/*!
+		 * \note
+		 * Also we can ignore the TTL timer at here too ;)
+		 */
+		(void)slave_thaw_ttl(slave);
+		return ret;
+	}
 
 	/*!
 	 * \note

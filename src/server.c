@@ -528,6 +528,7 @@ static struct packet *client_resize(pid_t pid, int handle, const struct packet *
 	}
 
 	DbgPrint("pid[%d] pkgname[%s] id[%s] w[%d] h[%d]\n", pid, pkgname, id, w, h);
+	DbgPrint("RESIZE: INSTANCE[%s] Client request resize to %dx%d\n", id, w, h);
 
 	/*!
 	 * \NOTE:
@@ -3885,8 +3886,10 @@ out:
 
 static Eina_Bool lazy_pd_created_cb(void *data)
 {
-	DbgPrint("Send PD Create event\n");
-	instance_client_pd_created(data, 0);
+	int ret;
+
+	ret = instance_client_pd_created(data, LB_STATUS_SUCCESS);
+	DbgPrint("Send PD Create event (%d)\n", ret);
 
 	instance_unref(data);
 	return ECORE_CALLBACK_CANCEL;
@@ -3895,7 +3898,7 @@ static Eina_Bool lazy_pd_created_cb(void *data)
 static Eina_Bool lazy_pd_destroyed_cb(void *data)
 {
 	DbgPrint("Send PD Destroy event\n");
-	instance_client_pd_destroyed(data, 0);
+	instance_client_pd_destroyed(data, LB_STATUS_SUCCESS);
 
 	instance_unref(data);
 	return ECORE_CALLBACK_CANCEL;
@@ -4025,26 +4028,38 @@ static struct packet *client_create_pd(pid_t pid, int handle, const struct packe
 		instance_slave_set_pd_pos(inst, x, y);
 		ix = x * instance_pd_width(inst);
 		iy = y * instance_pd_height(inst);
-		script_handler_update_pointer(instance_pd_script(inst), ix, iy, 0);
-		ret = instance_slave_open_pd(inst, client);
-		ret = script_handler_load(instance_pd_script(inst), 1);
 
-		/*!
-		 * \note
-		 * Send the PD created event to the clients,
-		 */
-		if (ret == 0) {
+		script_handler_update_pointer(instance_pd_script(inst), ix, iy, 0);
+
+		ret = instance_slave_open_pd(inst, client);
+		if (ret == LB_STATUS_SUCCESS) {
+			ret = script_handler_load(instance_pd_script(inst), 1);
+
 			/*!
 			 * \note
-			 * But the created event has to be send afte return
-			 * from this function or the viewer couldn't care
-			 * the event correctly.
+			 * Send the PD created event to the clients,
 			 */
-			inst = instance_ref(inst); /* To guarantee the inst */
-			if (!ecore_timer_add(DELAY_TIME, lazy_pd_created_cb, inst))
-				instance_unref(inst);
+			if (ret == LB_STATUS_SUCCESS) {
+				/*!
+				 * \note
+				 * But the created event has to be send afte return
+				 * from this function or the viewer couldn't care
+				 * the event correctly.
+				 */
+				inst = instance_ref(inst); /* To guarantee the inst */
+				if (!ecore_timer_add(DELAY_TIME, lazy_pd_created_cb, inst)) {
+					instance_unref(inst);
+					script_handler_unload(instance_pd_script(inst), 1);
+					instance_slave_close_pd(inst, client);
+
+					ErrPrint("Failed to add delayed timer\n");
+					ret = LB_STATUS_ERROR_FAULT;
+				}
+			} else {
+				instance_slave_close_pd(inst, client);
+			}
 		} else {
-			instance_client_pd_created(inst, ret);
+			ErrPrint("Failed to request open PD to the slave\n");
 		}
 	} else {
 		ErrPrint("Invalid PD TYPE\n");

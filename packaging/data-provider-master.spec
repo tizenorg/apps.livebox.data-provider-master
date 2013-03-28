@@ -32,7 +32,6 @@ BuildRequires: pkgconfig(xext)
 BuildRequires: pkgconfig(xdamage)
 BuildRequires: pkgconfig(pkgmgr)
 BuildRequires: pkgconfig(livebox-service)
-BuildRequires: sec-product-features
 
 %description
 Manage the 2nd stage livebox service provider and communicate with the viewer application.
@@ -42,11 +41,7 @@ Keep trace on the life-cycle of the livebox and status of the service providers,
 %setup -q
 
 %build
-%if 0%(test "%{?sec_build_conf_tizen_product_group}" == "baltic" && echo 1)
-cmake . -DCMAKE_INSTALL_PREFIX=%{_prefix} -DPRODUCT=baltic
-%else
 cmake . -DCMAKE_INSTALL_PREFIX=%{_prefix} -DPRODUCT=private
-%endif
 
 CFLAGS="${CFLAGS} -Wall -Winline -Werror" LDFLAGS="${LDFLAGS}" make %{?jobs:-j%jobs}
 

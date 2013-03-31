@@ -177,7 +177,7 @@ struct livebox {
 	xmlChar *lb_group;
 	int size_list; /* 1x1, 2x1, 2x2, 4x1, 4x2, 4x3, 4x4 */
 
-	xmlChar *preview[10];
+	xmlChar *preview[11];
 
 	enum pd_type pd_type;
 	xmlChar *pd_src;
@@ -1494,6 +1494,7 @@ static inline int livebox_destroy(struct livebox *livebox)
 	xmlFree(livebox->preview[7]); /* 21x21 */
 	xmlFree(livebox->preview[8]); /* 23x21 */
 	xmlFree(livebox->preview[9]); /* 23x23 */
+	xmlFree(livebox->preview[10]); /* 0x0 */
 
 	dlist_foreach_safe(livebox->i18n_list, l, n, i18n) {
 		livebox->i18n_list = dlist_remove(livebox->i18n_list, l);
@@ -1824,6 +1825,11 @@ static inline void update_box(struct livebox *livebox, xmlNodePtr node)
 				livebox->size_list |= LB_SIZE_TYPE_EASY_3x3;
 				if (xmlHasProp(node, (const xmlChar *)"preview")) {
 					livebox->preview[9] = xmlGetProp(node, (const xmlChar *)"preview");
+				}
+			} else if (!xmlStrcasecmp(size, (const xmlChar *)"0x0")) {
+				livebox->size_list |= LB_SIZE_TYPE_0x0;
+				if (xmlHasProp(node, (const xmlChar *)"preview")) {
+					livebox->preview[10] = xmlGetProp(node, (const xmlChar *)"preview");
 				}
 			} else {
 				ErrPrint("Invalid size tag (%s)\n", size);
@@ -2161,6 +2167,12 @@ static inline int db_insert_livebox(struct livebox *livebox, const char *appid)
 
 	if (livebox->size_list & LB_SIZE_TYPE_EASY_3x3) {
 		ret = db_insert_box_size((char *)livebox->pkgid, LB_SIZE_TYPE_EASY_3x3, (char *)livebox->preview[9]);
+		if (ret < 0)
+			goto errout;
+	}
+
+	if (livebox->size_list & LB_SIZE_TYPE_0x0) {
+		ret = db_insert_box_size((char *)livebox->pkgid, LB_SIZE_TYPE_0x0, (char *)livebox->preview[10]);
 		if (ret < 0)
 			goto errout;
 	}

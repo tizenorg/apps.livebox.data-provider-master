@@ -1144,7 +1144,7 @@ static inline int sync_for_pixmap(struct buffer *buffer)
 	 * \NOTE
 	 * XCreatePixmap can only uses 24 bits depth only.
 	 */
-	xim = XShmCreateImage(disp, visual, 24 /* (gem->depth << 3) */, ZPixmap, NULL, &si, gem->w, gem->h);
+	xim = XShmCreateImage(disp, visual, (gem->depth << 3), ZPixmap, NULL, &si, gem->w, gem->h);
 	if (xim == NULL) {
 		if (shmdt(si.shmaddr) < 0)
 			ErrPrint("shmdt: %s\n", strerror(errno));

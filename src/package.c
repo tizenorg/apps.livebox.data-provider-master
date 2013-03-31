@@ -1050,7 +1050,7 @@ static inline int assign_new_slave(struct pkg_info *info)
 	}
 
 	DbgPrint("New slave name is %s, it is assigned for livebox %s (using %s)\n", s_name, info->pkgname, s_pkgname);
-	info->slave = slave_create(s_name, info->secured, info->abi, s_pkgname);
+	info->slave = slave_create(s_name, info->secured, info->abi, s_pkgname, info->network);
 
 	DbgFree(s_name);
 	DbgFree(s_pkgname);
@@ -1075,7 +1075,7 @@ static inline int assign_new_slave(struct pkg_info *info)
 HAPI int package_add_instance(struct pkg_info *info, struct inst_info *inst)
 {
 	if (!info->inst_list) {
-		info->slave = slave_find_available(info->abi, info->secured);
+		info->slave = slave_find_available(info->abi, info->secured, info->network);
 
 		if (!info->slave) {
 			int ret;

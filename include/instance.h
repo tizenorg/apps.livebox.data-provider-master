@@ -154,6 +154,7 @@ extern int instance_client_pd_created(struct inst_info *inst, int status);
 
 extern int instance_set_pinup(struct inst_info *inst, int pinup);
 extern int instance_resize(struct inst_info *inst, int w, int h);
+extern int instance_hold_scroll(struct inst_info *inst, int seize);
 extern int instance_set_period(struct inst_info *inst, double period);
 extern int instance_clicked(struct inst_info *inst, const char *event, double timestamp, double x, double y);
 extern int instance_text_signal_emit(struct inst_info *inst, const char *emission, const char *source, double sx, double sy, double ex, double ey);

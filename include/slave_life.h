@@ -82,7 +82,7 @@ extern const int const slave_refcnt(struct slave_node *slave);
  * \param[in] period
  * \return slave_node
  */
-extern struct slave_node *slave_create(const char *name, int is_secured, const char *abi, const char *pkgname);
+extern struct slave_node *slave_create(const char *name, int is_secured, const char *abi, const char *pkgname, int network);
 
 /*!
  * \brief
@@ -156,7 +156,7 @@ extern int slave_set_pid(struct slave_node *slave, pid_t pid);
 extern void slave_load_package(struct slave_node *slave);
 extern void slave_unload_package(struct slave_node *slave);
 extern int const slave_loaded_package(struct slave_node *slave);
-extern struct slave_node *slave_find_available(const char *abi, int secured);
+extern struct slave_node *slave_find_available(const char *abi, int secured, int network);
 
 extern double const slave_ttl(const struct slave_node *slave);
 
@@ -189,5 +189,8 @@ extern void slave_set_reactivate_instances(struct slave_node *slave, int reactiv
 
 extern void slave_set_reactivation(struct slave_node *slave, int flag);
 extern int slave_need_to_reactivate(struct slave_node *slave);
+
+extern int slave_network(const struct slave_node *slave);
+extern void slave_set_network(struct slave_node *slave, int network);
 
 /* End of a file */

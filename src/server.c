@@ -256,8 +256,6 @@ static struct packet *client_acquire(pid_t pid, int handle, const struct packet 
 		goto out;
 	}
 
-	DbgPrint("Acquired %lf\n", timestamp);
-
 	ret = 0;
 	/*!
 	 * \note
@@ -2186,7 +2184,7 @@ out:
 	return NULL;
 }
 
-static struct packet *client_pd_access_read(pid_t pid, int handle, const struct packet *packet)
+static struct packet *client_pd_access_value_change(pid_t pid, int handle, const struct packet *packet)
 {
 	struct client_node *client;
 	const char *pkgname;
@@ -2287,7 +2285,7 @@ static struct packet *client_pd_access_read(pid_t pid, int handle, const struct 
 
 		script_handler_update_pointer(script, x, y, -1);
 		/*!
-		 * \TODO: Push up the ACCESS_READ event
+		 * \TODO: Push up the ACCESS_VALUE_CHANGE event
 		 */
 		ret = 0;
 	} else {
@@ -2300,7 +2298,7 @@ out:
 	return NULL;
 }
 
-static struct packet *client_pd_access_read_prev(pid_t pid, int handle, const struct packet *packet)
+static struct packet *client_pd_access_scroll(pid_t pid, int handle, const struct packet *packet)
 {
 	struct client_node *client;
 	const char *pkgname;
@@ -2401,7 +2399,7 @@ static struct packet *client_pd_access_read_prev(pid_t pid, int handle, const st
 
 		script_handler_update_pointer(script, x, y, -1);
 		/*!
-		 * \TODO: Push up the ACCESS_READ_PREV event
+		 * \TODO: Push up the ACCESS_SCROLL event
 		 */
 		ret = 0;
 	} else {
@@ -2414,7 +2412,7 @@ out:
 	return NULL;
 }
 
-static struct packet *client_pd_access_read_next(pid_t pid, int handle, const struct packet *packet)
+static struct packet *client_pd_access_hl(pid_t pid, int handle, const struct packet *packet)
 {
 	struct client_node *client;
 	const char *pkgname;
@@ -2515,7 +2513,235 @@ static struct packet *client_pd_access_read_next(pid_t pid, int handle, const st
 
 		script_handler_update_pointer(script, x, y, -1);
 		/*!
-		 * \TODO: Push up the ACCESS_READ_NEXT event
+		 * \TODO: Push up the ACCESS_HIGHLIGHT event
+		 */
+		ret = 0;
+	} else {
+		ErrPrint("Unsupported package\n");
+		ret = LB_STATUS_ERROR_INVALID;
+	}
+
+out:
+	/*! \note No reply packet */
+	return NULL;
+}
+
+static struct packet *client_pd_access_hl_prev(pid_t pid, int handle, const struct packet *packet)
+{
+	struct client_node *client;
+	const char *pkgname;
+	const char *id;
+	int ret;
+	double timestamp;
+	int x;
+	int y;
+	struct inst_info *inst;
+	const struct pkg_info *pkg;
+
+	client = client_find_by_pid(pid);
+	if (!client) {
+		ErrPrint("Client %d is not exists\n", pid);
+		ret = LB_STATUS_ERROR_NOT_EXIST;
+		goto out;
+	}
+
+	ret = packet_get(packet, "ssdii", &pkgname, &id, &timestamp, &x, &y);
+	if (ret != 5) {
+		ErrPrint("Invalid parameter\n");
+		ret = LB_STATUS_ERROR_INVALID;
+		goto out;
+	}
+
+	/*!
+	 * \NOTE:
+	 * Trust the package name which are sent by the client.
+	 * The package has to be a livebox package name.
+	 */
+	inst = package_find_instance_by_id(pkgname, id);
+	if (!inst) {
+		ErrPrint("Instance[%s] is not exists\n", id);
+		ret = LB_STATUS_ERROR_NOT_EXIST;
+		goto out;
+	}
+
+	pkg = instance_package(inst);
+	if (!pkg) {
+		ErrPrint("Package[%s] info is not found\n", pkgname);
+		ret = LB_STATUS_ERROR_FAULT;
+		goto out;
+	}
+
+	if (package_is_fault(pkg)) {
+		/*!
+		 * \note
+		 * If the package is registered as fault module,
+		 * slave has not load it, so we don't need to do anything at here!
+		 */
+		DbgPrint("Package[%s] is faulted\n", pkgname);
+		ret = LB_STATUS_ERROR_FAULT;
+	} else if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
+		struct buffer_info *buffer;
+		struct slave_node *slave;
+		// struct packet *packet;
+
+		buffer = instance_pd_buffer(inst);
+		if (!buffer) {
+			ErrPrint("Instance[%s] has no buffer\n", id);
+			ret = LB_STATUS_ERROR_FAULT;
+			goto out;
+		}
+
+		slave = package_slave(pkg);
+		if (!slave) {
+			ErrPrint("Package[%s] has no slave\n", pkgname);
+			ret = LB_STATUS_ERROR_INVALID;
+			goto out;
+		}
+
+		/*
+		packet = packet_create_noack("pd_mouse_enter", "ssiiddd", pkgname, id, w, h, timestamp, x, y);
+		if (!packet) {
+			ErrPrint("Failed to create a packet[%s]\n", pkgname);
+			ret = LB_STATUS_ERROR_FAULT;
+			goto out;
+		}
+		*/
+
+		packet_ref((struct packet *)packet);
+		ret = slave_rpc_request_only(slave, pkgname, (struct packet *)packet, 0);
+	} else if (package_pd_type(pkg) == PD_TYPE_SCRIPT) {
+		struct script_info *script;
+		Evas *e;
+
+		script = instance_pd_script(inst);
+		if (!script) {
+			ret = LB_STATUS_ERROR_FAULT;
+			goto out;
+		}
+
+		e = script_handler_evas(script);
+		if (!e) {
+			ret = LB_STATUS_ERROR_FAULT;
+			goto out;
+		}
+
+		script_handler_update_pointer(script, x, y, -1);
+		/*!
+		 * \TODO: Push up the ACCESS_HIGHLIGHT_PREV event
+		 */
+		ret = 0;
+	} else {
+		ErrPrint("Unsupported package\n");
+		ret = LB_STATUS_ERROR_INVALID;
+	}
+
+out:
+	/*! \note No reply packet */
+	return NULL;
+}
+
+static struct packet *client_pd_access_hl_next(pid_t pid, int handle, const struct packet *packet)
+{
+	struct client_node *client;
+	const char *pkgname;
+	const char *id;
+	int ret;
+	double timestamp;
+	int x;
+	int y;
+	struct inst_info *inst;
+	const struct pkg_info *pkg;
+
+	client = client_find_by_pid(pid);
+	if (!client) {
+		ErrPrint("Client %d is not exists\n", pid);
+		ret = LB_STATUS_ERROR_NOT_EXIST;
+		goto out;
+	}
+
+	ret = packet_get(packet, "ssdii", &pkgname, &id, &timestamp, &x, &y);
+	if (ret != 5) {
+		ErrPrint("Invalid parameter\n");
+		ret = LB_STATUS_ERROR_INVALID;
+		goto out;
+	}
+
+	/*!
+	 * \NOTE:
+	 * Trust the package name which are sent by the client.
+	 * The package has to be a livebox package name.
+	 */
+	inst = package_find_instance_by_id(pkgname, id);
+	if (!inst) {
+		ErrPrint("Instance[%s] is not exists\n", id);
+		ret = LB_STATUS_ERROR_NOT_EXIST;
+		goto out;
+	}
+
+	pkg = instance_package(inst);
+	if (!pkg) {
+		ErrPrint("Package[%s] info is not found\n", pkgname);
+		ret = LB_STATUS_ERROR_FAULT;
+		goto out;
+	}
+
+	if (package_is_fault(pkg)) {
+		/*!
+		 * \note
+		 * If the package is registered as fault module,
+		 * slave has not load it, so we don't need to do anything at here!
+		 */
+		DbgPrint("Package[%s] is faulted\n", pkgname);
+		ret = LB_STATUS_ERROR_FAULT;
+	} else if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
+		struct buffer_info *buffer;
+		struct slave_node *slave;
+		// struct packet *packet;
+
+		buffer = instance_pd_buffer(inst);
+		if (!buffer) {
+			ErrPrint("Instance[%s] has no buffer\n", id);
+			ret = LB_STATUS_ERROR_FAULT;
+			goto out;
+		}
+
+		slave = package_slave(pkg);
+		if (!slave) {
+			ErrPrint("Package[%s] has no slave\n", pkgname);
+			ret = LB_STATUS_ERROR_INVALID;
+			goto out;
+		}
+
+		/*
+		packet = packet_create_noack("pd_mouse_enter", "ssiiddd", pkgname, id, w, h, timestamp, x, y);
+		if (!packet) {
+			ErrPrint("Failed to create a packet[%s]\n", pkgname);
+			ret = LB_STATUS_ERROR_FAULT;
+			goto out;
+		}
+		*/
+
+		packet_ref((struct packet *)packet);
+		ret = slave_rpc_request_only(slave, pkgname, (struct packet *)packet, 0);
+	} else if (package_pd_type(pkg) == PD_TYPE_SCRIPT) {
+		struct script_info *script;
+		Evas *e;
+
+		script = instance_pd_script(inst);
+		if (!script) {
+			ret = LB_STATUS_ERROR_FAULT;
+			goto out;
+		}
+
+		e = script_handler_evas(script);
+		if (!e) {
+			ret = LB_STATUS_ERROR_FAULT;
+			goto out;
+		}
+
+		script_handler_update_pointer(script, x, y, -1);
+		/*!
+		 * \TODO: Push up the ACCESS_HIGHLIGHT_NEXT event
 		 */
 		ret = 0;
 	} else {
@@ -2629,7 +2855,7 @@ static struct packet *client_pd_access_activate(pid_t pid, int handle, const str
 
 		script_handler_update_pointer(script, x, y, -1);
 		/*!
-		 * \TODO: Push up the ACCESS_READ_ACTIVATE event
+		 * \TODO: Push up the ACCESS_ACTIVATE event
 		 */
 		ret = 0;
 	} else {
@@ -2928,7 +3154,7 @@ out:
 	return NULL;
 }
 
-static struct packet *client_lb_access_read(pid_t pid, int handle, const struct packet *packet)
+static struct packet *client_lb_access_hl(pid_t pid, int handle, const struct packet *packet)
 {
 	struct client_node *client;
 	const char *pkgname;
@@ -3030,7 +3256,7 @@ static struct packet *client_lb_access_read(pid_t pid, int handle, const struct 
 		script_handler_update_pointer(script, x, y, -1);
 
 		/*!
-		 * \TODO: Feed up this ACCESS_READ event
+		 * \TODO: Feed up this ACCESS_HIGHLIGHT event
 		 */
 		ret = 0;
 	} else {
@@ -3043,7 +3269,7 @@ out:
 	return NULL;
 }
 
-static struct packet *client_lb_access_read_prev(pid_t pid, int handle, const struct packet *packet)
+static struct packet *client_lb_access_hl_prev(pid_t pid, int handle, const struct packet *packet)
 {
 	struct client_node *client;
 	const char *pkgname;
@@ -3145,7 +3371,7 @@ static struct packet *client_lb_access_read_prev(pid_t pid, int handle, const st
 		script_handler_update_pointer(script, x, y, -1);
 
 		/*!
-		 * \TODO: Feed up this ACCESS_READ_PREV event
+		 * \TODO: Feed up this ACCESS_HIGHLIGHT_PREV event
 		 */
 		ret = 0;
 	} else {
@@ -3158,7 +3384,7 @@ out:
 	return NULL;
 }
 
-static struct packet *client_lb_access_read_next(pid_t pid, int handle, const struct packet *packet)
+static struct packet *client_lb_access_hl_next(pid_t pid, int handle, const struct packet *packet)
 {
 	struct client_node *client;
 	const char *pkgname;
@@ -3260,7 +3486,7 @@ static struct packet *client_lb_access_read_next(pid_t pid, int handle, const st
 		script_handler_update_pointer(script, x, y, -1);
 
 		/*!
-		 * \TODO: Feed up this ACCESS_READ_NEXT event
+		 * \TODO: Feed up this ACCESS_HIGHLIGHT_NEXT event
 		 */
 		ret = 0;
 	} else {
@@ -3270,6 +3496,184 @@ static struct packet *client_lb_access_read_next(pid_t pid, int handle, const st
 
 out:
 	/*! \note No reply packet */
+	return NULL;
+}
+
+static struct packet *client_lb_access_value_change(pid_t pid, int handle, const struct packet *packet)
+{
+	struct client_node *client;
+	const char *pkgname;
+	const char *id;
+	int ret;
+	double timestamp;
+	struct inst_info *inst;
+	const struct pkg_info *pkg;
+	int x;
+	int y;
+
+	client = client_find_by_pid(pid);
+	if (!client) {
+		ErrPrint("Client %d is not exist\n", pid);
+		goto out;
+	}
+
+	ret = packet_get(packet, "ssdii", &pkgname, &id, &timestamp, &x, &y);
+	if (ret != 5) {
+		ErrPrint("Invalid argument\n");
+		goto out;
+	}
+
+	inst = package_find_instance_by_id(pkgname, id);
+	if (!inst) {
+		ErrPrint("Instance[%s] is not exists\n", id);
+		goto out;
+	}
+
+	pkg = instance_package(inst);
+	if (!pkg) {
+		ErrPrint("Package[%s] info is not exists\n", pkgname);
+		goto out;
+	}
+
+	if (package_is_fault(pkg)) {
+	} else if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
+		struct buffer_info *buffer;
+		struct slave_node *slave;
+
+		buffer = instance_lb_buffer(inst);
+		if (!buffer) {
+			ErrPrint("Instance[%s] has no buffer\n", id);
+			goto out;
+		}
+
+		slave = package_slave(pkg);
+		if (!slave) {
+			ErrPrint("Slave is not exists\n");
+			goto out;
+		}
+
+		packet_ref((struct packet *)packet);
+		ret = slave_rpc_request_only(slave, pkgname, (struct packet *)packet, 0);
+		/*!
+		 * Enen if it fails to send packet,
+		 * The packet will be unref'd
+		 * So we don't need to check the ret value.
+		 */
+	} else if (package_lb_type(pkg) == LB_TYPE_SCRIPT) {
+		struct script_info *script;
+		Evas *e;
+
+		script = instance_lb_script(inst);
+		if (!script) {
+			ErrPrint("Instance has no script\n");
+			goto out;
+		}
+
+		e = script_handler_evas(script);
+		if (!e) {
+			ErrPrint("Script has no evas\n");
+			goto out;
+		}
+
+		// script_handler_update_pointer(script, x, y, -1);
+
+		/*!
+		 * \TODO: Feed up this VALUE_CHANGE event
+		 */
+	} else {
+		ErrPrint("Unsupported package\n");
+	}
+
+out:
+	return NULL;
+}
+
+static struct packet *client_lb_access_scroll(pid_t pid, int handle, const struct packet *packet)
+{
+	struct client_node *client;
+	const char *pkgname;
+	const char *id;
+	int ret;
+	double timestamp;
+	struct inst_info *inst;
+	const struct pkg_info *pkg;
+	int x;
+	int y;
+
+	client = client_find_by_pid(pid);
+	if (!client) {
+		ErrPrint("Client %d is not exist\n", pid);
+		goto out;
+	}
+
+	ret = packet_get(packet, "ssdii", &pkgname, &id, &timestamp, &x, &y);
+	if (ret != 5) {
+		ErrPrint("Invalid argument\n");
+		goto out;
+	}
+
+	inst = package_find_instance_by_id(pkgname, id);
+	if (!inst) {
+		ErrPrint("Instance[%s] is not exists\n", id);
+		goto out;
+	}
+
+	pkg = instance_package(inst);
+	if (!pkg) {
+		ErrPrint("Package[%s] info is not exists\n", pkgname);
+		goto out;
+	}
+
+	if (package_is_fault(pkg)) {
+	} else if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
+		struct buffer_info *buffer;
+		struct slave_node *slave;
+
+		buffer = instance_lb_buffer(inst);
+		if (!buffer) {
+			ErrPrint("Instance[%s] has no buffer\n", id);
+			goto out;
+		}
+
+		slave = package_slave(pkg);
+		if (!slave) {
+			ErrPrint("Slave is not exists\n");
+			goto out;
+		}
+
+		packet_ref((struct packet *)packet);
+		ret = slave_rpc_request_only(slave, pkgname, (struct packet *)packet, 0);
+		/*!
+		 * Enen if it fails to send packet,
+		 * The packet will be unref'd
+		 * So we don't need to check the ret value.
+		 */
+	} else if (package_lb_type(pkg) == LB_TYPE_SCRIPT) {
+		struct script_info *script;
+		Evas *e;
+
+		script = instance_lb_script(inst);
+		if (!script) {
+			ErrPrint("Instance has no script\n");
+			goto out;
+		}
+
+		e = script_handler_evas(script);
+		if (!e) {
+			ErrPrint("Instance has no evas\n");
+			goto out;
+		}
+
+		script_handler_update_pointer(script, x, y, -1);
+
+		/*!
+		 * \TODO: Feed up this ACCESS_SCROLL event
+		 */
+	} else {
+		ErrPrint("Unsupported package\n");
+	}
+
+out:
 	return NULL;
 }
 
@@ -3295,7 +3699,6 @@ static struct packet *client_lb_access_activate(pid_t pid, int handle, const str
 	ret = packet_get(packet, "ssdii", &pkgname, &id, &timestamp, &x, &y);
 	if (ret != 7) {
 		ErrPrint("Parameter is not matched\n");
-		ret = LB_STATUS_ERROR_INVALID;
 		goto out;
 	}
 
@@ -3307,14 +3710,12 @@ static struct packet *client_lb_access_activate(pid_t pid, int handle, const str
 	inst = package_find_instance_by_id(pkgname, id);
 	if (!inst) {
 		ErrPrint("Instance[%s] is not exists\n", id);
-		ret = LB_STATUS_ERROR_NOT_EXIST;
 		goto out;
 	}
 
 	pkg = instance_package(inst);
 	if (!pkg) {
 		ErrPrint("Package[%s] info is not exists\n", pkgname);
-		ret = LB_STATUS_ERROR_FAULT;
 		goto out;
 	}
 
@@ -3325,7 +3726,6 @@ static struct packet *client_lb_access_activate(pid_t pid, int handle, const str
 		 * slave has not load it, so we don't need to do anything at here!
 		 */
 		DbgPrint("Package[%s] is faulted\n", pkgname);
-		ret = LB_STATUS_ERROR_FAULT;
 	} else if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
 		struct buffer_info *buffer;
 		struct slave_node *slave;
@@ -3334,14 +3734,12 @@ static struct packet *client_lb_access_activate(pid_t pid, int handle, const str
 		buffer = instance_lb_buffer(inst);
 		if (!buffer) {
 			ErrPrint("Instance[%s] has no buffer\n", id);
-			ret = LB_STATUS_ERROR_FAULT;
 			goto out;
 		}
 
 		slave = package_slave(pkg);
 		if (!slave) {
 			ErrPrint("Package[%s] has no slave\n", pkgname);
-			ret = LB_STATUS_ERROR_INVALID;
 			goto out;
 		}
 
@@ -3362,13 +3760,13 @@ static struct packet *client_lb_access_activate(pid_t pid, int handle, const str
 
 		script = instance_lb_script(inst);
 		if (!script) {
-			ret = LB_STATUS_ERROR_FAULT;
+			ErrPrint("Instance has no script\n");
 			goto out;
 		}
 
 		e = script_handler_evas(script);
 		if (!e) {
-			ret = LB_STATUS_ERROR_FAULT;
+			ErrPrint("Script has no Evas\n");
 			goto out;
 		}
 
@@ -3377,10 +3775,8 @@ static struct packet *client_lb_access_activate(pid_t pid, int handle, const str
 		/*!
 		 * \TODO: Feed up this ACCESS_ACTIVATE event
 		 */
-		ret = 0;
 	} else {
 		ErrPrint("Unsupported package\n");
-		ret = LB_STATUS_ERROR_INVALID;
 	}
 
 out:
@@ -4521,13 +4917,13 @@ static struct packet *slave_hello(pid_t pid, int handle, const struct packet *pa
 					DbgPrint("Slave pkgname is invalid, ABI is replaced with '%s'(default)\n", abi);
 				}
 
-				slave = slave_create(slavename, 1, abi, pkgname);
+				slave = slave_create(slavename, 1, abi, pkgname, 0);
 				if (!slave) {
 					ErrPrint("Failed to create a new slave for %s\n", slavename);
 					goto out;
 				}
 
-				DbgPrint("New slave is created\n");
+				DbgPrint("New slave is created (net: 0)\n");
 			} else {
 				DbgPrint("Registered slave is replaced with this new one\n");
 				abi = slave_abi(slave);
@@ -4578,7 +4974,6 @@ static struct packet *slave_faulted(pid_t pid, int handle, const struct packet *
 {
 	struct slave_node *slave;
 	struct inst_info *inst;
-	const char *slavename;
 	const char *pkgname;
 	const char *id;
 	const char *func;
@@ -4590,14 +4985,14 @@ static struct packet *slave_faulted(pid_t pid, int handle, const struct packet *
 		goto out;
 	}
 
-	ret = packet_get(packet, "ssss", &slavename, &pkgname, &id, &func);
-	if (ret != 4) {
+	ret = packet_get(packet, "sss", &pkgname, &id, &func);
+	if (ret != 3) {
 		ErrPrint("Parameter is not matched\n");
 		goto out;
 	}
 
 	ret = fault_info_set(slave, pkgname, id, func);
-	DbgPrint("Slave Faulted: %s (%d)\n", slavename, ret);
+	DbgPrint("Slave Faulted: %s (%d)\n", slave_name(slave), ret);
 
 	inst = package_find_instance_by_id(pkgname, id);
 	if (!inst) {
@@ -4616,7 +5011,6 @@ out:
 static struct packet *slave_call(pid_t pid, int handle, const struct packet *packet) /* slave_name, pkgname, filename, function, ret */
 {
 	struct slave_node *slave;
-	const char *slavename;
 	const char *pkgname;
 	const char *id;
 	const char *func;
@@ -4628,8 +5022,8 @@ static struct packet *slave_call(pid_t pid, int handle, const struct packet *pac
 		goto out;
 	}
 
-	ret = packet_get(packet, "ssss", &slavename, &pkgname, &id, &func);
-	if (ret != 4) {
+	ret = packet_get(packet, "sss", &pkgname, &id, &func);
+	if (ret != 3) {
 		ErrPrint("Parameter is not matched\n");
 		goto out;
 	}
@@ -4644,7 +5038,6 @@ out:
 static struct packet *slave_ret(pid_t pid, int handle, const struct packet *packet) /* slave_name, pkgname, filename, function, ret */
 {
 	struct slave_node *slave;
-	const char *slavename;
 	const char *pkgname;
 	const char *id;
 	const char *func;
@@ -4656,8 +5049,8 @@ static struct packet *slave_ret(pid_t pid, int handle, const struct packet *pack
 		goto out;
 	}
 
-	ret = packet_get(packet, "ssss", &slavename, &pkgname, &id, &func);
-	if (ret != 4) {
+	ret = packet_get(packet, "sss", &pkgname, &id, &func);
+	if (ret != 3) {
 		ErrPrint("Parameter is not matched\n");
 		goto out;
 	}
@@ -4672,7 +5065,6 @@ out:
 static struct packet *slave_updated(pid_t pid, int handle, const struct packet *packet) /* slave_name, pkgname, filename, width, height, priority, ret */
 {
 	struct slave_node *slave;
-	const char *slavename;
 	const char *pkgname;
 	const char *id;
 	const char *content_info;
@@ -4689,10 +5081,10 @@ static struct packet *slave_updated(pid_t pid, int handle, const struct packet *
 		goto out;
 	}
 
-	ret = packet_get(packet, "sssiidss", &slavename, &pkgname, &id,
+	ret = packet_get(packet, "ssiidss", &pkgname, &id,
 						&w, &h, &priority,
 						&content_info, &title);
-	if (ret != 8) {
+	if (ret != 7) {
 		ErrPrint("Parameter is not matched\n");
 		goto out;
 	}
@@ -4737,10 +5129,45 @@ out:
 	return NULL;
 }
 
+static struct packet *slave_hold_scroll(pid_t pid, int handle, const struct packet *packet)
+{
+	struct slave_node *slave;
+	struct inst_info *inst;
+	const char *pkgname;
+	const char *id;
+	int seize;
+	int ret;
+
+	slave = slave_find_by_pid(pid);
+	if (!slave) {
+		ErrPrint("Slave %d is not exists\n", pid);
+		goto out;
+	}
+
+	ret = packet_get(packet, "ssi", &pkgname, &id, &seize);
+	if (ret != 3) {
+		ErrPrint("Parameter is not matched\n");
+		goto out;
+	}
+
+	inst = package_find_instance_by_id(pkgname, id);
+	if (!inst) {
+		ErrPrint("No such instance(%s)\n", id);
+	} else if (package_is_fault(instance_package(inst))) {
+		ErrPrint("Faulted instance cannot seize the screen\n");
+	} else if (instance_state(inst) == INST_DESTROYED) {
+		ErrPrint("Instance(%s) is already destroyed\n", id);
+	} else {
+		(void)instance_hold_scroll(inst, seize);
+	}
+
+out:
+	return NULL;
+}
+
 static struct packet *slave_desc_updated(pid_t pid, int handle, const struct packet *packet) /* slave_name, pkgname, filename, decsfile, ret */
 {
 	struct slave_node *slave;
-	const char *slavename;
 	const char *pkgname;
 	const char *id;
 	const char *descfile;
@@ -4753,8 +5180,8 @@ static struct packet *slave_desc_updated(pid_t pid, int handle, const struct pac
 		goto out;
 	}
 
-	ret = packet_get(packet, "ssss", &slavename, &pkgname, &id, &descfile);
-	if (ret != 4) {
+	ret = packet_get(packet, "sss", &pkgname, &id, &descfile);
+	if (ret != 3) {
 		ErrPrint("Parameter is not matched\n");
 		goto out;
 	}
@@ -4793,7 +5220,6 @@ out:
 static struct packet *slave_deleted(pid_t pid, int handle, const struct packet *packet) /* slave_name, pkgname, id, ret */
 {
 	struct slave_node *slave;
-	const char *slavename;
 	const char *pkgname;
 	const char *id;
 	int ret;
@@ -4805,8 +5231,8 @@ static struct packet *slave_deleted(pid_t pid, int handle, const struct packet *
 		goto out;
 	}
 
-	ret = packet_get(packet, "sss", &slavename, &pkgname, &id);
-	if (ret != 3) {
+	ret = packet_get(packet, "ss", &pkgname, &id);
+	if (ret != 2) {
 		ErrPrint("Parameter is not matched\n");
 		goto out;
 	}
@@ -4829,7 +5255,6 @@ out:
 static struct packet *slave_acquire_buffer(pid_t pid, int handle, const struct packet *packet) /* type, id, w, h, size */
 {
 	enum target_type target;
-	const char *slavename;
 	const char *pkgname;
 	const char *id;
 	int w;
@@ -4849,8 +5274,8 @@ static struct packet *slave_acquire_buffer(pid_t pid, int handle, const struct p
 		goto out;
 	}
 
-	ret = packet_get(packet, "isssiii", &target, &slavename, &pkgname, &id, &w, &h, &pixel_size);
-	if (ret != 7) {
+	ret = packet_get(packet, "issiii", &target, &pkgname, &id, &w, &h, &pixel_size);
+	if (ret != 6) {
 		ErrPrint("Invalid argument\n");
 		id = "";
 		ret = LB_STATUS_ERROR_INVALID;
@@ -4961,7 +5386,6 @@ static struct packet *slave_resize_buffer(pid_t pid, int handle, const struct pa
 	struct slave_node *slave;
 	struct packet *result;
 	enum target_type type;
-	const char *slavename;
 	const char *pkgname;
 	const char *id;
 	int w;
@@ -4985,8 +5409,8 @@ static struct packet *slave_resize_buffer(pid_t pid, int handle, const struct pa
 		goto out;
 	}
 
-	ret = packet_get(packet, "isssii", &type, &slavename, &pkgname, &id, &w, &h);
-	if (ret != 6) {
+	ret = packet_get(packet, "issii", &type, &pkgname, &id, &w, &h);
+	if (ret != 5) {
 		ErrPrint("Invalid argument\n");
 		ret = LB_STATUS_ERROR_INVALID;
 		id = "";
@@ -5066,7 +5490,6 @@ out:
 static struct packet *slave_release_buffer(pid_t pid, int handle, const struct packet *packet)
 {
 	enum target_type type;
-	const char *slavename;
 	const char *pkgname;
 	const char *id;
 	struct packet *result;
@@ -5081,7 +5504,7 @@ static struct packet *slave_release_buffer(pid_t pid, int handle, const struct p
 		goto out;
 	}
 
-	if (packet_get(packet, "isss", &type, &slavename, &pkgname, &id) != 4) {
+	if (packet_get(packet, "iss", &type, &pkgname, &id) != 3) {
 		ErrPrint("Inavlid argument\n");
 		ret = LB_STATUS_ERROR_INVALID;
 		goto out;
@@ -5744,37 +6167,53 @@ static struct method s_client_table[] = {
 	},
 
 	{
-		.cmd = "pd_access_read",
-		.handler = client_pd_access_read,
+		.cmd = "pd_access_hl",
+		.handler = client_pd_access_hl,
 	},
 	{
-		.cmd = "pd_access_read_prev",
-		.handler = client_pd_access_read_prev,
+		.cmd = "pd_access_hl_prev",
+		.handler = client_pd_access_hl_prev,
 	},
 	{
-		.cmd = "pd_access_read_next",
-		.handler = client_pd_access_read_next,
+		.cmd = "pd_access_hl_next",
+		.handler = client_pd_access_hl_next,
 	},
 	{
 		.cmd = "pd_access_activate",
 		.handler = client_pd_access_activate,
 	},
+	{
+		.cmd = "pd_access_value_change",
+		.handler = client_pd_access_value_change,
+	},
+	{
+		.cmd = "pd_access_scroll",
+		.handler = client_pd_access_scroll,
+	},
 
 	{
-		.cmd = "lb_access_read",
-		.handler = client_lb_access_read,
+		.cmd = "lb_access_hl",
+		.handler = client_lb_access_hl,
 	},
 	{
-		.cmd = "lb_access_read_prev",
-		.handler = client_lb_access_read_prev,
+		.cmd = "lb_access_hl_prev",
+		.handler = client_lb_access_hl_prev,
 	},
 	{
-		.cmd = "lb_access_read_next",
-		.handler = client_lb_access_read_next,
+		.cmd = "lb_access_hl_next",
+		.handler = client_lb_access_hl_next,
 	},
 	{
 		.cmd = "lb_access_activate",
 		.handler = client_lb_access_activate,
+	},
+	{
+		.cmd = "lb_access_value_change",
+		.handler = client_lb_access_value_change,
+	},
+	{
+		.cmd = "lb_access_scroll",
+		.handler = client_lb_access_scroll,
 	},
 
 	{
@@ -5869,6 +6308,10 @@ static struct method s_slave_table[] = {
 	{
 		.cmd = "faulted",
 		.handler = slave_faulted, /* slave_name, pkgname, id, funcname */
+	},
+	{
+		.cmd = "scroll",
+		.handler = slave_hold_scroll, /* slave_name, pkgname, id, seize */
 	},
 	{
 		.cmd = NULL,

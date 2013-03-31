@@ -26,6 +26,8 @@
 		<size preview="ABSPATH">23x21</size>
 		<size>23x23</size>
 
+		<!-- Only supported for special livebox - inhouse / commercialization target only -->
+		<size>0x0</size>
 		<script src="/opt/usr/apps/org.tizen.myapp/res/script/my.edj" group="my_group" />
 	</box>
 

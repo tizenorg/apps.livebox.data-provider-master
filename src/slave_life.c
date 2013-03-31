@@ -55,6 +55,7 @@ struct slave_node {
 	int fault_count;
 	int critical_fault_count;
 	enum slave_state state;
+	int network;
 
 	int loaded_instance;
 	int loaded_package;
@@ -130,7 +131,7 @@ static inline int xmonitor_resume_cb(void *data)
 	return LB_STATUS_SUCCESS;
 }
 
-static inline struct slave_node *create_slave_node(const char *name, int is_secured, const char *abi, const char *pkgname)
+static inline struct slave_node *create_slave_node(const char *name, int is_secured, const char *abi, const char *pkgname, int network)
 {
 	struct slave_node *slave;
 
@@ -167,6 +168,7 @@ static inline struct slave_node *create_slave_node(const char *name, int is_secu
 	slave->secured = is_secured;
 	slave->pid = (pid_t)-1;
 	slave->state = SLAVE_TERMINATED;
+	slave->network = network;
 
 	xmonitor_add_event_callback(XMONITOR_PAUSED, xmonitor_pause_cb, slave);
 	xmonitor_add_event_callback(XMONITOR_RESUMED, xmonitor_resume_cb, slave);
@@ -305,7 +307,7 @@ HAPI const int const slave_refcnt(struct slave_node *slave)
 	return slave->refcnt;
 }
 
-HAPI struct slave_node *slave_create(const char *name, int is_secured, const char *abi, const char *pkgname)
+HAPI struct slave_node *slave_create(const char *name, int is_secured, const char *abi, const char *pkgname, int network)
 {
 	struct slave_node *slave;
 
@@ -316,7 +318,7 @@ HAPI struct slave_node *slave_create(const char *name, int is_secured, const cha
 		return slave;
 	}
 
-	slave = create_slave_node(name, is_secured, abi, pkgname);
+	slave = create_slave_node(name, is_secured, abi, pkgname, network);
 	if (!slave)
 		return NULL;
 
@@ -909,7 +911,7 @@ HAPI struct slave_node *slave_find_by_name(const char *name)
 	return NULL;
 }
 
-HAPI struct slave_node *slave_find_available(const char *abi, int secured)
+HAPI struct slave_node *slave_find_available(const char *abi, int secured, int network)
 {
 	Eina_List *l;
 	struct slave_node *slave;
@@ -938,8 +940,8 @@ HAPI struct slave_node *slave_find_available(const char *abi, int secured)
 			DbgPrint("Found secured slave - has no instances (%s)\n", slave_name(slave));
 			if (slave->loaded_package == 0)
 				return slave;
-		} else {
-			DbgPrint("slave[%s] %d\n", slave_name(slave), slave->loaded_package);
+		} else if (slave->network == network) {
+			DbgPrint("slave[%s] %d (net: %d)\n", slave_name(slave), slave->loaded_package, slave->network);
 			if (!strcasecmp(abi, DEFAULT_ABI)) {
 				if (slave->loaded_package < SLAVE_MAX_LOAD)
 					return slave;
@@ -1288,6 +1290,16 @@ HAPI void slave_set_reactivation(struct slave_node *slave, int flag)
 HAPI int slave_need_to_reactivate(struct slave_node *slave)
 {
 	return slave->reactivate_slave;
+}
+
+HAPI int slave_network(const struct slave_node *slave)
+{
+	return slave->network;
+}
+
+HAPI void slave_set_network(struct slave_node *slave, int network)
+{
+	slave->network = network;
 }
 
 /* End of a file */

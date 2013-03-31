@@ -94,6 +94,7 @@ struct inst_info {
 	char *title;
 	int is_pinned_up;
 	double sleep_at;
+	int scroll_locked;
 
 	enum livebox_visible_state visible;
 
@@ -257,6 +258,7 @@ static inline int instance_recover_visible_state(struct inst_info *inst)
 static inline void instance_send_resized_event(struct inst_info *inst, int is_pd, int w, int h, int status)
 {
 	struct packet *packet;
+	enum lb_type lb_type;
 	const char *pkgname;
 	const char *id;
 
@@ -266,11 +268,18 @@ static inline void instance_send_resized_event(struct inst_info *inst, int is_pd
 	}
 
 	pkgname = package_name(inst->info);
-	id = inst->id;
+
+	lb_type = package_lb_type(inst->info);
+	if (lb_type == LB_TYPE_SCRIPT)
+		id = fb_id(script_handler_fb(inst->lb.canvas.script));
+	else if (lb_type == LB_TYPE_BUFFER)
+		id = buffer_handler_id(inst->lb.canvas.buffer);
+	else
+		id = "";
 
 	DbgPrint("Size is changed to %dx%d (%s) %s\n", w, h, id, is_pd ? "pd" : "lb");
 
-	packet = packet_create_noack("size_changed", "ssiiii", pkgname, id, is_pd, w, h, status);
+	packet = packet_create_noack("size_changed", "sssiiii", pkgname, inst->id, id, is_pd, w, h, status);
 	if (packet)
 		CLIENT_SEND_EVENT(inst, packet);
 	else
@@ -1504,6 +1513,25 @@ HAPI void instance_lb_updated_by_instance(struct inst_info *inst)
 	}
 
 	(void)CLIENT_SEND_EVENT(inst, packet);
+}
+
+HAPI int instance_hold_scroll(struct inst_info *inst, int hold)
+{
+	struct packet *packet;
+
+	if (inst->scroll_locked == hold) {
+		DbgPrint("There is changes for hold state: %d\n", hold);
+		return LB_STATUS_ERROR_ALREADY;
+	}
+
+	packet = packet_create_noack("scroll", "ssi", package_name(inst->info), inst->id, hold);
+	if (!packet) {
+		ErrPrint("Failed to build a packet\n");
+		return LB_STATUS_ERROR_FAULT;
+	}
+
+	inst->scroll_locked = hold;
+	return CLIENT_SEND_EVENT(inst, packet);
 }
 
 HAPI void instance_pd_updated_by_instance(struct inst_info *inst, const char *descfile)

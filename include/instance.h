@@ -144,14 +144,6 @@ extern int instance_need_slave(struct inst_info *inst);
 extern void instance_set_lb_info(struct inst_info *inst, int w, int h, double priority, const char *content, const char *title);
 extern void instance_set_pd_info(struct inst_info *inst, int w, int h);
 
-extern void instance_pd_updated(const char *pkgname, const char *id, const char *descfile);
-extern void instance_lb_updated(const char *pkgname, const char *id);
-extern void instance_lb_updated_by_instance(struct inst_info *inst);
-extern void instance_pd_updated_by_instance(struct inst_info *inst, const char *descfile);
-
-extern int instance_client_pd_destroyed(struct inst_info *inst, int status);
-extern int instance_client_pd_created(struct inst_info *inst, int status);
-
 extern int instance_set_pinup(struct inst_info *inst, int pinup);
 extern int instance_resize(struct inst_info *inst, int w, int h);
 extern int instance_hold_scroll(struct inst_info *inst, int seize);
@@ -162,6 +154,8 @@ extern int instance_signal_emit(struct inst_info *inst, const char *emission, co
 extern int instance_change_group(struct inst_info *inst, const char *cluster, const char *category);
 extern int instance_set_visible_state(struct inst_info *inst, enum livebox_visible_state state);
 extern enum livebox_visible_state instance_visible_state(struct inst_info *inst);
+extern int instance_set_update_mode(struct inst_info *inst, int active_update);
+extern int instance_active_update(struct inst_info *inst);
 
 /*!
  * \note
@@ -206,6 +200,25 @@ extern int instance_slave_close_pd(struct inst_info *inst, struct client_node *c
 
 extern int instance_freeze_updator(struct inst_info *inst);
 extern int instance_thaw_updator(struct inst_info *inst);
+
+extern int instance_send_access_event(struct inst_info *inst, int status);
+
+extern int instance_lb_update_begin(struct inst_info *inst, double priority, const char *content, const char *title);
+extern int instance_lb_update_end(struct inst_info *inst);
+
+extern int instance_pd_update_begin(struct inst_info *inst);
+extern int instance_pd_update_end(struct inst_info *inst);
+
+extern void instance_pd_updated(const char *pkgname, const char *id, const char *descfile);
+extern void instance_lb_updated(const char *pkgname, const char *id);
+extern void instance_lb_updated_by_instance(struct inst_info *inst);
+extern void instance_pd_updated_by_instance(struct inst_info *inst, const char *descfile);
+
+extern int instance_client_pd_destroyed(struct inst_info *inst, int status);
+extern int instance_client_pd_created(struct inst_info *inst, int status);
+
+extern int instance_send_access_status(struct inst_info *inst, int status);
+extern int instance_forward_packet(struct inst_info *inst, struct packet *packet);
 
 /*!
  * Multiple viewer

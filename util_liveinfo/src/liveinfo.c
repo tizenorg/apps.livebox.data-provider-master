@@ -643,8 +643,6 @@ static inline int do_stat(const char *cmd)
 		i = livebox_service_mouse_event(node_name(node));
 		printf("Mouse event: %s\n", i ? "enabled" : "disabled");
 
-		i = livebox_service_touch_effect(node_name(node));
-		printf("Touch effect: %s\n", i ? "enabled" : "disabled");
 		break;
 	case PROVIDER:
 		printf("Not supported yet\n");

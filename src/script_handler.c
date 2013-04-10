@@ -50,6 +50,8 @@
 #define TYPE_SIGNAL "signal"
 #define TYPE_INFO "info"
 #define TYPE_DRAG "drag"
+#define TYPE_ACCESS "access"
+
 #define INFO_SIZE "size"
 #define INFO_CATEGORY "category"
 #define ADDEND 256
@@ -71,11 +73,13 @@ struct script_port {
 	int (*update_color)(void *handle, Evas *e, const char *id, const char *part, const char *rgba);
 	int (*update_text)(void *handle, Evas *e, const char *id, const char *part, const char *text);
 	int (*update_image)(void *handle, Evas *e, const char *id, const char *part, const char *path, const char *option);
+	int (*update_access)(void *handle, Evas *e, const char *id, const char *part, const char *text, const char *option);
 	int (*update_script)(void *handle, Evas *e, const char *src_id, const char *target_id, const char *part, const char *path, const char *option);
 	int (*update_signal)(void *handle, Evas *e, const char *id, const char *part, const char *signal);
 	int (*update_drag)(void *handle, Evas *e, const char *id, const char *part, double x, double y);
 	int (*update_size)(void *handle, Evas *e, const char *id, int w, int h);
 	int (*update_category)(void *handle, Evas *e, const char *id, const char *category);
+	int (*feed_event)(void *handle, Evas *e, int event_type, int x, int y, double timestamp);
 
 	void *(*create)(const char *file, const char *option);
 	int (*destroy)(void *handle);
@@ -494,6 +498,35 @@ static int update_script_image(struct inst_info *inst, struct block *block, int 
 	return LB_STATUS_SUCCESS;
 }
 
+static int update_access(struct inst_info *inst, struct block *block, int is_pd)
+{
+	struct script_info *info;
+	Evas *e;
+
+	if (!block || !block->part || !block->data) {
+		ErrPrint("Block or block->part or block->data is NIL\n");
+		return LB_STATUS_ERROR_INVALID;
+	}
+
+	info = is_pd ? instance_pd_script(inst) : instance_lb_script(inst);
+	if (!info) {
+		ErrPrint("info is NIL (%d, %s)\n", is_pd, instance_id(inst));
+		return LB_STATUS_ERROR_FAULT;
+	}
+
+	if (!info->port) {
+		ErrPrint("info->port is NIL\n");
+		return LB_STATUS_ERROR_INVALID;
+	}
+
+	e = script_handler_evas(info);
+	if (e)
+		info->port->update_access(info->port_data, e, block->id, block->part, block->data, block->option);
+	else
+		ErrPrint("Evas: (nil) id[%s] part[%s] data[%s]\n", block->id, block->part, block->data);
+	return LB_STATUS_SUCCESS;
+}
+
 static int update_script_script(struct inst_info *inst, struct block *block, int is_pd)
 {
 	struct script_info *info;
@@ -740,6 +773,10 @@ HAPI int script_handler_parse_desc(const char *pkgname, const char *id, const ch
 		{
 			.type = TYPE_INFO,
 			.handler = update_info,
+		},
+		{
+			.type = TYPE_ACCESS,
+			.handler = update_access,
 		},
 		{
 			.type = NULL,
@@ -1213,6 +1250,10 @@ HAPI int script_init(void)
 		if (!item->update_image)
 			goto errout;
 
+		item->update_access = dlsym(item->handle, "script_update_access");
+		if (!item->update_access)
+			goto errout;
+
 		item->update_script = dlsym(item->handle, "script_update_script");
 		if (!item->update_script)
 			goto errout;
@@ -1255,6 +1296,10 @@ HAPI int script_init(void)
 
 		item->fini = dlsym(item->handle, "script_fini");
 		if (!item->fini)
+			goto errout;
+
+		item->feed_event = dlsym(item->handle, "script_feed_event");
+		if (!item->feed_event)
 			goto errout;
 
 		if (item->init() < 0) {
@@ -1305,6 +1350,24 @@ HAPI int script_handler_update_pointer(struct script_info *info, int x, int y, i
 		info->down = 1;
 
 	return LB_STATUS_SUCCESS;
+}
+
+HAPI int script_handler_feed_event(struct script_info *info, int event, double timestamp)
+{
+	Evas *e;
+
+	if (!info->port) {
+		ErrPrint("info->port is NIL\n");
+		return LB_STATUS_ERROR_INVALID;
+	}
+
+	e = script_handler_evas(info);
+	if (!e) {
+		ErrPrint("Evas is not exists\n");
+		return LB_STATUS_ERROR_FAULT;
+	}
+
+	return info->port->feed_event(info->port_data, e, event, info->x, info->y, timestamp);
 }
 
 /* End of a file */

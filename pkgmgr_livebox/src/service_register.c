@@ -66,12 +66,12 @@
  *
  *
  * client
- * +-------+------+---------+-------------+---------+---------+-----------+-------+-------------+--------------+
- * | pkgid | Icon |  Name   | auto_launch | pd_size | content | nodisplay | setup | mouse_event | touch_effect |
- * +-------+------+---------+-------------+---------+---------+-----------+-------+-------------+--------------+
- * |   -   |   -  |    -    |      -      |    -    |    -    |     -     |   -   |      -      }       -      |
- * +-------+------+---------+-------------+---------+---------+-----------+-------+-------------+--------------+
- * CREATE TABLE client ( pkgid TEXT PRIMARY KEY NOT NULL, icon TEXT, name TEXT, auto_launch TEXT, pd_size TEXT, content TEXT DEFAULT "default", nodisplay INTEGER, setup TEXT, mouse_event INTEGER, touch_effect INTEGER, FOREIGN KEY(pkgid) REFERENCES pkgmap(pkgid) )
+ * +-------+------+---------+-------------+---------+---------+-----------+-------+-------------+
+ * | pkgid | Icon |  Name   | auto_launch | pd_size | content | nodisplay | setup | mouse_event |
+ * +-------+------+---------+-------------+---------+---------+-----------+-------+-------------+
+ * |   -   |   -  |    -    |      -      |    -    |    -    |     -     |   -   |      -      }
+ * +-------+------+---------+-------------+---------+---------+-----------+-------+-------------+
+ * CREATE TABLE client ( pkgid TEXT PRIMARY KEY NOT NULL, icon TEXT, name TEXT, auto_launch TEXT, pd_size TEXT, content TEXT DEFAULT "default", nodisplay INTEGER, setup TEXT, mouse_event, FOREIGN KEY(pkgid) REFERENCES pkgmap(pkgid) )
  *
  * = auto_launch = UI-APPID
  * = pd_size = WIDTHxHEIGHT
@@ -87,12 +87,12 @@
  *
  *
  * box_size
- * +-------+-----------+---------+
- * | pkgid | size_type | preview |
- * +-------+-----------+---------+
- * |   -   |     -     |    -    |
- * +-------+-----------+---------+
- * CREATE TABLE box_size ( pkgid TEXT NOT NULL, size_type INTEGER, preview TEXT, FOREIGN KEY(pkgid) REFERENCES pkgmap(pkgid) )
+ * +-------+-----------+---------+--------------+------------+
+ * | pkgid | size_type | preview | touch_effect | need_frame |
+ * +-------+-----------+---------+--------------+------------+
+ * |   -   |     -     |    -    |       -      |     -      |
+ * +-------+-----------+---------+--------------+------------+
+ * CREATE TABLE box_size ( pkgid TEXT NOT NULL, size_type INTEGER, preview TEXT, INTEGER, touch_effect INTEGER, need_frame INTEGER, FOREIGN KEY(pkgid) REFERENCES pkgmap(pkgid) )
  *
  * = box_size_list = { WIDTHxHEIGHT; WIDTHxHEIGHT; ... }
  *
@@ -170,7 +170,6 @@ struct livebox {
 	int primary; /* Is this primary livebox? */
 	int nodisplay;
 	int mouse_event; /* Mouse event processing option for livebox */
-	int touch_effect; /* Touch effect of a livebox */
 
 	enum lb_type lb_type;
 	xmlChar *lb_src;
@@ -178,6 +177,8 @@ struct livebox {
 	int size_list; /* 1x1, 2x1, 2x2, 4x1, 4x2, 4x3, 4x4 */
 
 	xmlChar *preview[11];
+	int touch_effect[11]; /* Touch effect of a livebox */
+	int need_frame[11]; /* Box needs frame which should be cared by viewer */
 
 	enum pd_type pd_type;
 	xmlChar *pd_src;
@@ -601,7 +602,7 @@ static inline int db_create_client(void)
 
 	ddl = "CREATE TABLE client (" \
 		"pkgid TEXT PRIMARY KEY NOT NULL, icon TEXT, name TEXT, " \
-		"auto_launch TEXT, pd_size TEXT, content TEXT DEFAULT 'default', nodisplay INTEGER, setup TEXT, mouse_event INTEGER, touch_effect INTEGER, FOREIGN KEY(pkgid) REFERENCES pkgmap(pkgid) ON DELETE CASCADE)";
+		"auto_launch TEXT, pd_size TEXT, content TEXT DEFAULT 'default', nodisplay INTEGER, setup TEXT, mouse_event INTEGER, FOREIGN KEY(pkgid) REFERENCES pkgmap(pkgid) ON DELETE CASCADE)";
 	if (sqlite3_exec(s_info.handle, ddl, NULL, NULL, &err) != SQLITE_OK) {
 		ErrPrint("Failed to execute the DDL (%s)\n", err);
 		return -EIO;
@@ -619,7 +620,7 @@ static inline int db_insert_client(struct livebox *livebox)
 	int ret;
 	sqlite3_stmt *stmt;
 
-	dml = "INSERT INTO client ( pkgid, icon, name, auto_launch, pd_size, content, nodisplay, setup, mouse_event, touch_effect ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+	dml = "INSERT INTO client ( pkgid, icon, name, auto_launch, pd_size, content, nodisplay, setup, mouse_event ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
 	ret = sqlite3_prepare_v2(s_info.handle, dml, -1, &stmt, NULL);
 	if (ret != SQLITE_OK) {
 		DbgPrint("Error: %s\n", sqlite3_errmsg(s_info.handle));
@@ -683,13 +684,6 @@ static inline int db_insert_client(struct livebox *livebox)
 	}
 
 	ret = sqlite3_bind_int(stmt, 9, livebox->mouse_event);
-	if (ret != SQLITE_OK) {
-		DbgPrint("Error: %s\n", sqlite3_errmsg(s_info.handle));
-		ret = -EIO;
-		goto out;
-	}
-
-	ret = sqlite3_bind_int(stmt, 10, livebox->touch_effect);
 	if (ret != SQLITE_OK) {
 		DbgPrint("Error: %s\n", sqlite3_errmsg(s_info.handle));
 		ret = -EIO;
@@ -1258,7 +1252,7 @@ static inline int db_create_box_size(void)
 	char *err;
 	static const char *ddl;
 
-	ddl = "CREATE TABLE box_size ( pkgid TEXT NOT NULL, size_type INTEGER, preview TEXT, " \
+	ddl = "CREATE TABLE box_size ( pkgid TEXT NOT NULL, size_type INTEGER, preview TEXT, touch_effect INTEGER, need_frame INTEGER, " \
 		"FOREIGN KEY(pkgid) REFERENCES pkgmap(pkgid) ON DELETE CASCADE)";
 	if (sqlite3_exec(s_info.handle, ddl, NULL, NULL, &err) != SQLITE_OK) {
 		ErrPrint("Failed to execute the DDL (%s)\n", err);
@@ -1271,14 +1265,14 @@ static inline int db_create_box_size(void)
 	return 0;
 }
 
-static inline int db_insert_box_size(const char *pkgid, int size_type, const char *preview)
+static inline int db_insert_box_size(const char *pkgid, int size_type, const char *preview, int touch_effect, int need_frame)
 {
 	static const char *dml;
 	int ret;
 	sqlite3_stmt *stmt;
 
 	DbgPrint("box size: %s - %d (%s) is added\n", pkgid, size_type, preview);
-	dml = "INSERT INTO box_size ( pkgid, size_type, preview ) VALUES (?, ?, ?)";
+	dml = "INSERT INTO box_size ( pkgid, size_type, preview, touch_effect, need_frame ) VALUES (?, ?, ?, ?, ?)";
 	ret = sqlite3_prepare_v2(s_info.handle, dml, -1, &stmt, NULL);
 	if (ret != SQLITE_OK) {
 		DbgPrint("Error: %s\n", sqlite3_errmsg(s_info.handle));
@@ -1300,6 +1294,20 @@ static inline int db_insert_box_size(const char *pkgid, int size_type, const cha
 	}
 
 	ret = sqlite3_bind_text(stmt, 3, preview ? preview : "", -1, SQLITE_TRANSIENT);
+	if (ret != SQLITE_OK) {
+		DbgPrint("Error: %s\n", sqlite3_errmsg(s_info.handle));
+		ret = -EIO;
+		goto out;
+	}
+
+	ret = sqlite3_bind_int(stmt, 4, touch_effect);
+	if (ret != SQLITE_OK) {
+		DbgPrint("Error: %s\n", sqlite3_errmsg(s_info.handle));
+		ret = -EIO;
+		goto out;
+	}
+
+	ret =  sqlite3_bind_int(stmt, 5, need_frame);
 	if (ret != SQLITE_OK) {
 		DbgPrint("Error: %s\n", sqlite3_errmsg(s_info.handle));
 		ret = -EIO;
@@ -1676,6 +1684,41 @@ static inline void update_content(struct livebox *livebox, xmlNodePtr node)
 	}
 }
 
+static inline void update_size_info(struct livebox *livebox, int idx, xmlNodePtr node)
+{
+	if (xmlHasProp(node, (const xmlChar *)"preview")) {
+		livebox->preview[idx] = xmlGetProp(node, (const xmlChar *)"preview");
+	}
+
+	if (xmlHasProp(node, (const xmlChar *)"need_frame")) {
+		xmlChar *need_frame;
+
+		need_frame = xmlGetProp(node, (const xmlChar *)"need_frame");
+		if (need_frame) {
+			livebox->need_frame[idx] = !xmlStrcasecmp(need_frame, (const xmlChar *)"true");
+			xmlFree(need_frame);
+		} else {
+			livebox->need_frame[idx] = 0;
+		}
+	} else {
+		livebox->need_frame[idx] = 0;
+	}
+
+	if (xmlHasProp(node, (const xmlChar *)"touch_effect")) {
+		xmlChar *touch_effect;
+
+		touch_effect = xmlGetProp(node, (const xmlChar *)"touch_effect");
+		if (touch_effect) {
+			livebox->touch_effect[idx] = !xmlStrcasecmp(touch_effect, (const xmlChar *)"true");
+			xmlFree(touch_effect);
+		} else {
+			livebox->touch_effect[idx] = 1;
+		}
+	} else {
+		livebox->touch_effect[idx] = 1;
+	}
+}
+
 static inline void update_box(struct livebox *livebox, xmlNodePtr node)
 {
 	if (!xmlHasProp(node, (const xmlChar *)"type")) {
@@ -1716,20 +1759,6 @@ static inline void update_box(struct livebox *livebox, xmlNodePtr node)
 		}
 	}
 
-	if (!xmlHasProp(node, (const xmlChar *)"touch_effect")) {
-		livebox->touch_effect = 1;
-	} else {
-		xmlChar *touch_effect;
-		touch_effect = xmlGetProp(node, (const xmlChar *)"touch_effect");
-		if (!touch_effect) {
-			ErrPrint("touch_effect is NIL\n");
-			livebox->touch_effect = 1;
-		} else {
-			livebox->touch_effect = !xmlStrcasecmp(touch_effect, (const xmlChar *)"true");
-			xmlFree(touch_effect);
-		}
-	}
-
 	for (node = node->children; node; node = node->next) {
 		if (!xmlStrcasecmp(node->name, (const xmlChar *)"size")) {
 			xmlChar *size;
@@ -1754,83 +1783,55 @@ static inline void update_box(struct livebox *livebox, xmlNodePtr node)
 			if (!xmlStrcasecmp(size, (const xmlChar *)"1x1")) {
 				if (is_easy) {
 					livebox->size_list |= LB_SIZE_TYPE_EASY_1x1;
-					if (xmlHasProp(node, (const xmlChar *)"preview")) {
-						livebox->preview[7] = xmlGetProp(node, (const xmlChar *)"preview");
-					}
+					update_size_info(livebox, 7, node);
 				} else {
 					livebox->size_list |= LB_SIZE_TYPE_1x1;
-					if (xmlHasProp(node, (const xmlChar *)"preview")) {
-						livebox->preview[0] = xmlGetProp(node, (const xmlChar *)"preview");
-					}
+					update_size_info(livebox, 0, node);
 				}
 			} else if (!xmlStrcasecmp(size, (const xmlChar *)"3x1")) {
 				if (is_easy) {
 					livebox->size_list |= LB_SIZE_TYPE_EASY_3x1;
-					if (xmlHasProp(node, (const xmlChar *)"preview")) {
-						livebox->preview[8] = xmlGetProp(node, (const xmlChar *)"preview");
-					}
+					update_size_info(livebox, 8, node);
 				} else {
 					ErrPrint("Invalid size tag (%s)\n", size);
 				}
 			} else if (!xmlStrcasecmp(size, (const xmlChar *)"3x3")) {
 				if (is_easy) {
 					livebox->size_list |= LB_SIZE_TYPE_EASY_3x3;
-					if (xmlHasProp(node, (const xmlChar *)"preview")) {
-						livebox->preview[9] = xmlGetProp(node, (const xmlChar *)"preview");
-					}
+					update_size_info(livebox, 9, node);
 				} else {
 					ErrPrint("Invalid size tag (%s)\n", size);
 				}
 			} else if (!xmlStrcasecmp(size, (const xmlChar *)"2x1")) {
 				livebox->size_list |= LB_SIZE_TYPE_2x1;
-				if (xmlHasProp(node, (const xmlChar *)"preview")) {
-					livebox->preview[1] = xmlGetProp(node, (const xmlChar *)"preview");
-				}
+				update_size_info(livebox, 1, node);
 			} else if (!xmlStrcasecmp(size, (const xmlChar *)"2x2")) {
 				livebox->size_list |= LB_SIZE_TYPE_2x2;
-				if (xmlHasProp(node, (const xmlChar *)"preview")) {
-					livebox->preview[2] = xmlGetProp(node, (const xmlChar *)"preview");
-				}
+				update_size_info(livebox, 2, node);
 			} else if (!xmlStrcasecmp(size, (const xmlChar *)"4x1")) {
 				livebox->size_list |= LB_SIZE_TYPE_4x1;
-				if (xmlHasProp(node, (const xmlChar *)"preview")) {
-					livebox->preview[3] = xmlGetProp(node, (const xmlChar *)"preview");
-				}
+				update_size_info(livebox, 3, node);
 			} else if (!xmlStrcasecmp(size, (const xmlChar *)"4x2")) {
 				livebox->size_list |= LB_SIZE_TYPE_4x2;
-				if (xmlHasProp(node, (const xmlChar *)"preview")) {
-					livebox->preview[4] = xmlGetProp(node, (const xmlChar *)"preview");
-				}
+				update_size_info(livebox, 4, node);
 			} else if (!xmlStrcasecmp(size, (const xmlChar *)"4x3")) {
 				livebox->size_list |= LB_SIZE_TYPE_4x3;
-				if (xmlHasProp(node, (const xmlChar *)"preview")) {
-					livebox->preview[5] = xmlGetProp(node, (const xmlChar *)"preview");
-				}
+				update_size_info(livebox, 5, node);
 			} else if (!xmlStrcasecmp(size, (const xmlChar *)"4x4")) {
 				livebox->size_list |= LB_SIZE_TYPE_4x4;
-				if (xmlHasProp(node, (const xmlChar *)"preview")) {
-					livebox->preview[6] = xmlGetProp(node, (const xmlChar *)"preview");
-				}
+				update_size_info(livebox, 6, node);
 			} else if (!xmlStrcasecmp(size, (const xmlChar *)"21x21")) {
 				livebox->size_list |= LB_SIZE_TYPE_EASY_1x1;
-				if (xmlHasProp(node, (const xmlChar *)"preview")) {
-					livebox->preview[7] = xmlGetProp(node, (const xmlChar *)"preview");
-				}
+				update_size_info(livebox, 7, node);
 			} else if (!xmlStrcasecmp(size, (const xmlChar *)"23x21")) {
 				livebox->size_list |= LB_SIZE_TYPE_EASY_3x1;
-				if (xmlHasProp(node, (const xmlChar *)"preview")) {
-					livebox->preview[8] = xmlGetProp(node, (const xmlChar *)"preview");
-				}
+				update_size_info(livebox, 8, node);
 			} else if (!xmlStrcasecmp(size, (const xmlChar *)"23x23")) {
 				livebox->size_list |= LB_SIZE_TYPE_EASY_3x3;
-				if (xmlHasProp(node, (const xmlChar *)"preview")) {
-					livebox->preview[9] = xmlGetProp(node, (const xmlChar *)"preview");
-				}
+				update_size_info(livebox, 9, node);
 			} else if (!xmlStrcasecmp(size, (const xmlChar *)"0x0")) {
 				livebox->size_list |= LB_SIZE_TYPE_0x0;
-				if (xmlHasProp(node, (const xmlChar *)"preview")) {
-					livebox->preview[10] = xmlGetProp(node, (const xmlChar *)"preview");
-				}
+				update_size_info(livebox, 10, node);
 			} else {
 				ErrPrint("Invalid size tag (%s)\n", size);
 			}
@@ -2112,67 +2113,67 @@ static inline int db_insert_livebox(struct livebox *livebox, const char *appid)
 	}
 
 	if (livebox->size_list & LB_SIZE_TYPE_1x1) {
-		ret = db_insert_box_size((char *)livebox->pkgid, LB_SIZE_TYPE_1x1, (char *)livebox->preview[0]);
+		ret = db_insert_box_size((char *)livebox->pkgid, LB_SIZE_TYPE_1x1, (char *)livebox->preview[0], livebox->touch_effect[0], livebox->need_frame[0]);
 		if (ret < 0)
 			goto errout;
 	}
 
 	if (livebox->size_list & LB_SIZE_TYPE_2x1) {
-		ret = db_insert_box_size((char *)livebox->pkgid, LB_SIZE_TYPE_2x1, (char *)livebox->preview[1]);
+		ret = db_insert_box_size((char *)livebox->pkgid, LB_SIZE_TYPE_2x1, (char *)livebox->preview[1], livebox->touch_effect[1], livebox->need_frame[1]);
 		if (ret < 0)
 			goto errout;
 	}
 
 	if (livebox->size_list & LB_SIZE_TYPE_2x2) {
-		ret = db_insert_box_size((char *)livebox->pkgid, LB_SIZE_TYPE_2x2, (char *)livebox->preview[2]);
+		ret = db_insert_box_size((char *)livebox->pkgid, LB_SIZE_TYPE_2x2, (char *)livebox->preview[2], livebox->touch_effect[2], livebox->need_frame[2]);
 		if (ret < 0)
 			goto errout;
 	}
 
 	if (livebox->size_list & LB_SIZE_TYPE_4x1) {
-		ret = db_insert_box_size((char *)livebox->pkgid, LB_SIZE_TYPE_4x1, (char *)livebox->preview[3]);
+		ret = db_insert_box_size((char *)livebox->pkgid, LB_SIZE_TYPE_4x1, (char *)livebox->preview[3], livebox->touch_effect[3], livebox->need_frame[3]);
 		if (ret < 0)
 			goto errout;
 	}
 
 	if (livebox->size_list & LB_SIZE_TYPE_4x2) {
-		ret = db_insert_box_size((char *)livebox->pkgid, LB_SIZE_TYPE_4x2, (char *)livebox->preview[4]);
+		ret = db_insert_box_size((char *)livebox->pkgid, LB_SIZE_TYPE_4x2, (char *)livebox->preview[4], livebox->touch_effect[4], livebox->need_frame[4]);
 		if (ret < 0)
 			goto errout;
 	}
 
 	if (livebox->size_list & LB_SIZE_TYPE_4x3) {
-		ret = db_insert_box_size((char *)livebox->pkgid, LB_SIZE_TYPE_4x3, (char *)livebox->preview[5]);
+		ret = db_insert_box_size((char *)livebox->pkgid, LB_SIZE_TYPE_4x3, (char *)livebox->preview[5], livebox->touch_effect[5], livebox->need_frame[5]);
 		if (ret < 0)
 			goto errout;
 	}
 
 	if (livebox->size_list & LB_SIZE_TYPE_4x4) {
-		ret = db_insert_box_size((char *)livebox->pkgid, LB_SIZE_TYPE_4x4, (char *)livebox->preview[6]);
+		ret = db_insert_box_size((char *)livebox->pkgid, LB_SIZE_TYPE_4x4, (char *)livebox->preview[6], livebox->touch_effect[6], livebox->need_frame[6]);
 		if (ret < 0)
 			goto errout;
 	}
 
 	if (livebox->size_list & LB_SIZE_TYPE_EASY_1x1) {
-		ret = db_insert_box_size((char *)livebox->pkgid, LB_SIZE_TYPE_EASY_1x1, (char *)livebox->preview[7]);
+		ret = db_insert_box_size((char *)livebox->pkgid, LB_SIZE_TYPE_EASY_1x1, (char *)livebox->preview[7], livebox->touch_effect[7], livebox->need_frame[7]);
 		if (ret < 0)
 			goto errout;
 	}
 
 	if (livebox->size_list & LB_SIZE_TYPE_EASY_3x1) {
-		ret = db_insert_box_size((char *)livebox->pkgid, LB_SIZE_TYPE_EASY_3x1, (char *)livebox->preview[8]);
+		ret = db_insert_box_size((char *)livebox->pkgid, LB_SIZE_TYPE_EASY_3x1, (char *)livebox->preview[8], livebox->touch_effect[8], livebox->need_frame[8]);
 		if (ret < 0)
 			goto errout;
 	}
 
 	if (livebox->size_list & LB_SIZE_TYPE_EASY_3x3) {
-		ret = db_insert_box_size((char *)livebox->pkgid, LB_SIZE_TYPE_EASY_3x3, (char *)livebox->preview[9]);
+		ret = db_insert_box_size((char *)livebox->pkgid, LB_SIZE_TYPE_EASY_3x3, (char *)livebox->preview[9], livebox->touch_effect[9], livebox->need_frame[9]);
 		if (ret < 0)
 			goto errout;
 	}
 
 	if (livebox->size_list & LB_SIZE_TYPE_0x0) {
-		ret = db_insert_box_size((char *)livebox->pkgid, LB_SIZE_TYPE_0x0, (char *)livebox->preview[10]);
+		ret = db_insert_box_size((char *)livebox->pkgid, LB_SIZE_TYPE_0x0, (char *)livebox->preview[10], livebox->touch_effect[10], livebox->need_frame[10]);
 		if (ret < 0)
 			goto errout;
 	}

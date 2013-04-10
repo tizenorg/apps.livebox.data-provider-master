@@ -12,14 +12,14 @@
 
 	<setup>org.tizen.nicesj</setup>
 
-	<box type="image" mouse_event="false" touch_effect="true">
-		<size preview="ABSPATH">1x1</size>
-		<size preview="ABSPATH">2x1</size>
-		<size>2x2</size>
+	<box type="image" mouse_event="false">
+		<size touch_effect="true" preview="ABSPATH">1x1</size>
+		<size touch_effect="true" preview="ABSPATH">2x1</size>
+		<size touch_effect="true" need_frame="true">2x2</size>
 		<size>4x1</size>
-		<size>4x2</size>
-		<size>4x3</size>
-		<size>4x4</size>
+		<size need_frame="true">4x2</size>
+		<size touch_effect="false" need_frame="true">4x3</size>
+		<size touch_effect="false">4x4</size>
 
 		<!-- Easy home -->
 		<size>21x21</size>

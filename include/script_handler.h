@@ -25,6 +25,7 @@ extern int script_handler_parse_desc(const char *pkgname, const char *filename, 
 extern int script_handler_unload(struct script_info *info, int is_pd);
 extern int script_handler_load(struct script_info *info, int is_pd);
 extern int script_handler_is_loaded(struct script_info *info);
+extern int script_handler_feed_event(struct script_info *info, int event, double timestamp);
 
 extern int script_init(void);
 extern int script_fini(void);

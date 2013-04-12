@@ -503,8 +503,8 @@ static int update_access(struct inst_info *inst, struct block *block, int is_pd)
 	struct script_info *info;
 	Evas *e;
 
-	if (!block || !block->part || !block->data) {
-		ErrPrint("Block or block->part or block->data is NIL\n");
+	if (!block || !block->part) {
+		ErrPrint("Block or block->part is NIL\n");
 		return LB_STATUS_ERROR_INVALID;
 	}
 

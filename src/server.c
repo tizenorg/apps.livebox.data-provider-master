@@ -83,8 +83,11 @@ static Eina_Bool lazy_access_status_cb(void *data)
 {
 	struct access_cbdata *cbdata = data;
 
-	if (instance_unref(cbdata->inst))
+	if (instance_unref(cbdata->inst)) {
 		instance_send_access_status(cbdata->inst, cbdata->status);
+	} else {
+		DbgPrint("Skip sending access status (%d)\n", cbdata->status);
+	}
 	/*!
 	 * If instance_unref returns NULL,
 	 * The instance is destroyed. it means, we don't need to send event to the viewer
@@ -1516,7 +1519,7 @@ out:
 
 static int inst_del_cb(struct inst_info *inst, void *data)
 {
-	event_deactivate();
+	(void)event_deactivate();
 	return -1; /* Delete this callback */
 }
 
@@ -2510,6 +2513,129 @@ out:
 	return result;
 }
 
+static struct packet *client_pd_access_unhighlight(pid_t pid, int handle, const struct packet *packet)
+{
+	struct packet *result;
+	struct client_node *client;
+	const char *pkgname;
+	const char *id;
+	int x;
+	int y;
+	struct inst_info *inst;
+	const struct pkg_info *pkg;
+	int ret;
+	double timestamp;
+
+	client = client_find_by_pid(pid);
+	if (!client) {
+		ErrPrint("Client %d is not exists\n", pid);
+		ret = LB_STATUS_ERROR_NOT_EXIST;
+		goto out;
+	}
+
+	ret = packet_get(packet, "ssdii", &pkgname, &id, &timestamp, &x, &y);
+	if (ret != 5) {
+		ErrPrint("Invalid parameter\n");
+		ret = LB_STATUS_ERROR_INVALID;
+		goto out;
+	}
+
+	inst = package_find_instance_by_id(pkgname, id);
+	if (!inst) {
+		ErrPrint("Instance[%s] is not exists\n", id);
+		ret = LB_STATUS_ERROR_NOT_EXIST;
+		goto out;
+	}
+
+	pkg = instance_package(inst);
+	if (!pkg) {
+		ErrPrint("Package[%s] info is not found\n", pkgname);
+		ret = LB_STATUS_ERROR_FAULT;
+		goto out;
+	}
+
+	if (package_is_fault(pkg)) {
+		DbgPrint("Package[%s] is faulted\n", pkgname);
+		ret = LB_STATUS_ERROR_FAULT;
+	} else if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
+		struct buffer_info *buffer;
+		struct slave_node *slave;
+		// struct packet *packet;
+
+		buffer = instance_pd_buffer(inst);
+		if (!buffer) {
+			ErrPrint("Instance[%s] has no buffer\n", id);
+			ret = LB_STATUS_ERROR_FAULT;
+			goto out;
+		}
+
+		slave = package_slave(pkg);
+		if (!slave) {
+			ErrPrint("Package[%s] has no slave\n", pkgname);
+			ret = LB_STATUS_ERROR_INVALID;
+			goto out;
+		}
+
+		/*
+		packet = packet_create_noack("pd_mouse_enter", "ssiiddd", pkgname, id, w, h, timestamp, x, y);
+		if (!packet) {
+			ErrPrint("Failed to create a packet[%s]\n", pkgname);
+			ret = LB_STATUS_ERROR_FAULT;
+			goto out;
+		}
+		*/
+
+		packet_ref((struct packet *)packet);
+		ret = slave_rpc_request_only(slave, pkgname, (struct packet *)packet, 0);
+	} else if (package_pd_type(pkg) == PD_TYPE_SCRIPT) {
+		struct script_info *script;
+		Evas *e;
+
+		script = instance_pd_script(inst);
+		if (!script) {
+			ret = LB_STATUS_ERROR_FAULT;
+			goto out;
+		}
+
+		e = script_handler_evas(script);
+		if (!e) {
+			ret = LB_STATUS_ERROR_FAULT;
+			goto out;
+		}
+
+		script_handler_update_pointer(script, x, y, -1);
+		ret = script_handler_feed_event(script, LB_SCRIPT_ACCESS_UNHIGHLIGHT, timestamp);
+		if (ret >= 0) {
+			struct access_cbdata *cbdata;
+
+			cbdata = malloc(sizeof(*cbdata));
+			if (!cbdata) {
+				ret = LB_STATUS_ERROR_MEMORY;
+			} else {
+				cbdata->inst = instance_ref(inst);
+				cbdata->status = ret;
+
+				if (!ecore_timer_add(DELAY_TIME, lazy_access_status_cb, cbdata)) {
+					instance_unref(cbdata->inst);
+					free(cbdata);
+					ret = LB_STATUS_ERROR_FAULT;
+				} else {
+					ret = LB_STATUS_SUCCESS;
+				}
+			}
+		}
+	} else {
+		ErrPrint("Unsupported package\n");
+		ret = LB_STATUS_ERROR_INVALID;
+	}
+out:
+	result = packet_create_reply(packet, "i", ret);
+	if (!result)
+		ErrPrint("Failed to create a reply packet\n");
+
+	return result;
+}
+
 static struct packet *client_pd_access_hl(pid_t pid, int handle, const struct packet *packet)
 {
 	struct packet *result;
@@ -2805,6 +2931,7 @@ static struct packet *client_pd_access_hl_next(pid_t pid, int handle, const stru
 		goto out;
 	}
 
+	DbgPrint("%s %s %lf %d %d\n", pkgname, id, timestamp, x, y);
 	/*!
 	 * \NOTE:
 	 * Trust the package name which are sent by the client.
@@ -2859,6 +2986,7 @@ static struct packet *client_pd_access_hl_next(pid_t pid, int handle, const stru
 			goto out;
 		}
 		*/
+		DbgPrint("Buffer type PD\n");
 
 		packet_ref((struct packet *)packet);
 		ret = slave_rpc_request_only(slave, pkgname, (struct packet *)packet, 0);
@@ -2868,12 +2996,14 @@ static struct packet *client_pd_access_hl_next(pid_t pid, int handle, const stru
 
 		script = instance_pd_script(inst);
 		if (!script) {
+			DbgPrint("Script is not created yet\n");
 			ret = LB_STATUS_ERROR_FAULT;
 			goto out;
 		}
 
 		e = script_handler_evas(script);
 		if (!e) {
+			DbgPrint("Evas is not exists\n");
 			ret = LB_STATUS_ERROR_FAULT;
 			goto out;
 		}
@@ -2885,19 +3015,24 @@ static struct packet *client_pd_access_hl_next(pid_t pid, int handle, const stru
 
 			cbdata = malloc(sizeof(*cbdata));
 			if (!cbdata) {
+				ErrPrint("Heap: %s\n", strerror(errno));
 				ret = LB_STATUS_ERROR_MEMORY;
 			} else {
 				cbdata->inst = instance_ref(inst);
 				cbdata->status = ret;
 
 				if (!ecore_timer_add(DELAY_TIME, lazy_access_status_cb, cbdata)) {
+					DbgPrint("Failed to add timer\n");
 					instance_unref(cbdata->inst);
 					free(cbdata);
 					ret = LB_STATUS_ERROR_FAULT;
 				} else {
+					DbgPrint("Timer is added\n");
 					ret = LB_STATUS_SUCCESS;
 				}
 			}
+		} else {
+			DbgPrint("Returns: %d\n", ret);
 		}
 	} else {
 		ErrPrint("Unsupported package\n");
@@ -3351,7 +3486,7 @@ static struct packet *client_lb_access_hl(pid_t pid, int handle, const struct pa
 	}
 
 	ret = packet_get(packet, "ssdii", &pkgname, &id, &timestamp, &x, &y);
-	if (ret != 7) {
+	if (ret != 5) {
 		ErrPrint("Parameter is not matched\n");
 		ret = LB_STATUS_ERROR_INVALID;
 		goto out;
@@ -3485,7 +3620,7 @@ static struct packet *client_lb_access_hl_prev(pid_t pid, int handle, const stru
 	}
 
 	ret = packet_get(packet, "ssdii", &pkgname, &id, &timestamp, &x, &y);
-	if (ret != 7) {
+	if (ret != 5) {
 		ErrPrint("Parameter is not matched\n");
 		ret = LB_STATUS_ERROR_INVALID;
 		goto out;
@@ -3619,7 +3754,7 @@ static struct packet *client_lb_access_hl_next(pid_t pid, int handle, const stru
 	}
 
 	ret = packet_get(packet, "ssdii", &pkgname, &id, &timestamp, &x, &y);
-	if (ret != 7) {
+	if (ret != 5) {
 		ErrPrint("Parameter is not matched\n");
 		ret = LB_STATUS_ERROR_INVALID;
 		goto out;
@@ -3748,28 +3883,33 @@ static struct packet *client_lb_access_value_change(pid_t pid, int handle, const
 	client = client_find_by_pid(pid);
 	if (!client) {
 		ErrPrint("Client %d is not exist\n", pid);
+		ret = LB_STATUS_ERROR_NOT_EXIST;
 		goto out;
 	}
 
 	ret = packet_get(packet, "ssdii", &pkgname, &id, &timestamp, &x, &y);
 	if (ret != 5) {
-		ErrPrint("Invalid argument\n");
+		ErrPrint("Parameter is not matched\n");
+		ret = LB_STATUS_ERROR_INVALID;
 		goto out;
 	}
 
 	inst = package_find_instance_by_id(pkgname, id);
 	if (!inst) {
 		ErrPrint("Instance[%s] is not exists\n", id);
+		ret = LB_STATUS_ERROR_NOT_EXIST;
 		goto out;
 	}
 
 	pkg = instance_package(inst);
 	if (!pkg) {
 		ErrPrint("Package[%s] info is not exists\n", pkgname);
+		ret = LB_STATUS_ERROR_FAULT;
 		goto out;
 	}
 
 	if (package_is_fault(pkg)) {
+		ret = LB_STATUS_ERROR_FAULT;
 	} else if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
 		struct buffer_info *buffer;
 		struct slave_node *slave;
@@ -3777,12 +3917,14 @@ static struct packet *client_lb_access_value_change(pid_t pid, int handle, const
 		buffer = instance_lb_buffer(inst);
 		if (!buffer) {
 			ErrPrint("Instance[%s] has no buffer\n", id);
+			ret = LB_STATUS_ERROR_FAULT;
 			goto out;
 		}
 
 		slave = package_slave(pkg);
 		if (!slave) {
 			ErrPrint("Slave is not exists\n");
+			ret = LB_STATUS_ERROR_INVALID;
 			goto out;
 		}
 
@@ -3800,12 +3942,14 @@ static struct packet *client_lb_access_value_change(pid_t pid, int handle, const
 		script = instance_lb_script(inst);
 		if (!script) {
 			ErrPrint("Instance has no script\n");
+			ret = LB_STATUS_ERROR_FAULT;
 			goto out;
 		}
 
 		e = script_handler_evas(script);
 		if (!e) {
 			ErrPrint("Script has no evas\n");
+			ret = LB_STATUS_ERROR_INVALID;
 			goto out;
 		}
 
@@ -3832,6 +3976,141 @@ static struct packet *client_lb_access_value_change(pid_t pid, int handle, const
 		}
 	} else {
 		ErrPrint("Unsupported package\n");
+		ret = LB_STATUS_ERROR_INVALID;
+	}
+
+out:
+	result = packet_create_reply(packet, "i", ret);
+	if (!result)
+		ErrPrint("Failed to create a reply packet\n");
+
+	return result;
+}
+
+static struct packet *client_lb_access_unhighlight(pid_t pid, int handle, const struct packet *packet)
+{
+	struct packet *result;
+	struct client_node *client;
+	const char *pkgname;
+	const char *id;
+	int ret;
+	double timestamp;
+	int x;
+	int y;
+	struct inst_info *inst;
+	const struct pkg_info *pkg;
+
+	client = client_find_by_pid(pid);
+	if (!client) {
+		ErrPrint("Client %d is not exists\n", pid);
+		ret = LB_STATUS_ERROR_NOT_EXIST;
+		goto out;
+	}
+
+	ret = packet_get(packet, "ssdii", &pkgname, &id, &timestamp, &x, &y);
+	if (ret != 5) {
+		ErrPrint("Parameter is not matched\n");
+		ret = LB_STATUS_ERROR_INVALID;
+		goto out;
+	}
+
+	/*!
+	 * \NOTE:
+	 * Trust the package name which are sent by the client.
+	 * The package has to be a livebox package name.
+	 */
+	inst = package_find_instance_by_id(pkgname, id);
+	if (!inst) {
+		ErrPrint("Instance[%s] is not exists\n", id);
+		ret = LB_STATUS_ERROR_NOT_EXIST;
+		goto out;
+	}
+
+	pkg = instance_package(inst);
+	if (!pkg) {
+		ErrPrint("Package[%s] info is not exists\n", pkgname);
+		ret = LB_STATUS_ERROR_FAULT;
+		goto out;
+	}
+
+	if (package_is_fault(pkg)) {
+		/*!
+		 * \note
+		 * If the package is registered as fault module,
+		 * slave has not load it, so we don't need to do anything at here!
+		 */
+		DbgPrint("Package[%s] is faulted\n", pkgname);
+		ret = LB_STATUS_ERROR_FAULT;
+	} else if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
+		struct buffer_info *buffer;
+		struct slave_node *slave;
+		//struct packet *packet;
+
+		buffer = instance_lb_buffer(inst);
+		if (!buffer) {
+			ErrPrint("Instance[%s] has no buffer\n", id);
+			ret = LB_STATUS_ERROR_FAULT;
+			goto out;
+		}
+
+		slave = package_slave(pkg);
+		if (!slave) {
+			ErrPrint("Package[%s] has no slave\n", pkgname);
+			ret = LB_STATUS_ERROR_INVALID;
+			goto out;
+		}
+
+		/*
+		packet = packet_create_noack("lb_mouse_leave", "ssiiddd", pkgname, id, w, h, timestamp, x, y);
+		if (!packet) {
+			ErrPrint("Failed to create a packet[%s]\n", pkgname);
+			ret = LB_STATUS_ERROR_FAULT;
+			goto out;
+		}
+		*/
+
+		packet_ref((struct packet *)packet);
+		ret = slave_rpc_request_only(slave, pkgname, (struct packet *)packet, 0);
+	} else if (package_lb_type(pkg) == LB_TYPE_SCRIPT) {
+		struct script_info *script;
+		Evas *e;
+
+		script = instance_lb_script(inst);
+		if (!script) {
+			ret = LB_STATUS_ERROR_FAULT;
+			goto out;
+		}
+
+		e = script_handler_evas(script);
+		if (!e) {
+			ret = LB_STATUS_ERROR_FAULT;
+			goto out;
+		}
+
+		script_handler_update_pointer(script, x, y, -1);
+		ret = script_handler_feed_event(script, LB_SCRIPT_ACCESS_UNHIGHLIGHT, timestamp);
+		if (ret >= 0) {
+			struct access_cbdata *cbdata;
+
+			cbdata = malloc(sizeof(*cbdata));
+			if (!cbdata) {
+				ret = LB_STATUS_ERROR_MEMORY;
+			} else {
+				cbdata->inst = instance_ref(inst);
+				cbdata->status = ret;
+
+				if (!ecore_timer_add(DELAY_TIME, lazy_access_status_cb, cbdata)) {
+					instance_unref(cbdata->inst);
+					free(cbdata);
+					ret = LB_STATUS_ERROR_FAULT;
+				} else {
+					ret = LB_STATUS_SUCCESS;
+				}
+			}
+		}
+	} else {
+		ErrPrint("Unsupported package\n");
+		ret = LB_STATUS_ERROR_INVALID;
 	}
 
 out:
@@ -3858,28 +4137,33 @@ static struct packet *client_lb_access_scroll(pid_t pid, int handle, const struc
 	client = client_find_by_pid(pid);
 	if (!client) {
 		ErrPrint("Client %d is not exist\n", pid);
+		ret = LB_STATUS_ERROR_NOT_EXIST;
 		goto out;
 	}
 
 	ret = packet_get(packet, "ssdii", &pkgname, &id, &timestamp, &x, &y);
 	if (ret != 5) {
-		ErrPrint("Invalid argument\n");
+		ErrPrint("Parameter is not matched\n");
+		ret = LB_STATUS_ERROR_INVALID;
 		goto out;
 	}
 
 	inst = package_find_instance_by_id(pkgname, id);
 	if (!inst) {
 		ErrPrint("Instance[%s] is not exists\n", id);
+		ret = LB_STATUS_ERROR_NOT_EXIST;
 		goto out;
 	}
 
 	pkg = instance_package(inst);
 	if (!pkg) {
 		ErrPrint("Package[%s] info is not exists\n", pkgname);
+		ret = LB_STATUS_ERROR_FAULT;
 		goto out;
 	}
 
 	if (package_is_fault(pkg)) {
+		ret = LB_STATUS_ERROR_FAULT;
 	} else if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
 		struct buffer_info *buffer;
 		struct slave_node *slave;
@@ -3887,12 +4171,14 @@ static struct packet *client_lb_access_scroll(pid_t pid, int handle, const struc
 		buffer = instance_lb_buffer(inst);
 		if (!buffer) {
 			ErrPrint("Instance[%s] has no buffer\n", id);
+			ret = LB_STATUS_ERROR_FAULT;
 			goto out;
 		}
 
 		slave = package_slave(pkg);
 		if (!slave) {
 			ErrPrint("Slave is not exists\n");
+			ret = LB_STATUS_ERROR_INVALID;
 			goto out;
 		}
 
@@ -3910,12 +4196,14 @@ static struct packet *client_lb_access_scroll(pid_t pid, int handle, const struc
 		script = instance_lb_script(inst);
 		if (!script) {
 			ErrPrint("Instance has no script\n");
+			ret = LB_STATUS_ERROR_FAULT;
 			goto out;
 		}
 
 		e = script_handler_evas(script);
 		if (!e) {
 			ErrPrint("Instance has no evas\n");
+			ret = LB_STATUS_ERROR_INVALID;
 			goto out;
 		}
 
@@ -3942,6 +4230,7 @@ static struct packet *client_lb_access_scroll(pid_t pid, int handle, const struc
 		}
 	} else {
 		ErrPrint("Unsupported package\n");
+		ret = LB_STATUS_ERROR_INVALID;
 	}
 
 out:
@@ -3973,8 +4262,9 @@ static struct packet *client_lb_access_activate(pid_t pid, int handle, const str
 	}
 
 	ret = packet_get(packet, "ssdii", &pkgname, &id, &timestamp, &x, &y);
-	if (ret != 7) {
+	if (ret != 5) {
 		ErrPrint("Parameter is not matched\n");
+		ret = LB_STATUS_ERROR_INVALID;
 		goto out;
 	}
 
@@ -3986,12 +4276,14 @@ static struct packet *client_lb_access_activate(pid_t pid, int handle, const str
 	inst = package_find_instance_by_id(pkgname, id);
 	if (!inst) {
 		ErrPrint("Instance[%s] is not exists\n", id);
+		ret = LB_STATUS_ERROR_NOT_EXIST;
 		goto out;
 	}
 
 	pkg = instance_package(inst);
 	if (!pkg) {
 		ErrPrint("Package[%s] info is not exists\n", pkgname);
+		ret = LB_STATUS_ERROR_INVALID;
 		goto out;
 	}
 
@@ -4002,6 +4294,7 @@ static struct packet *client_lb_access_activate(pid_t pid, int handle, const str
 		 * slave has not load it, so we don't need to do anything at here!
 		 */
 		DbgPrint("Package[%s] is faulted\n", pkgname);
+		ret = LB_STATUS_ERROR_FAULT;
 	} else if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
 		struct buffer_info *buffer;
 		struct slave_node *slave;
@@ -4010,12 +4303,14 @@ static struct packet *client_lb_access_activate(pid_t pid, int handle, const str
 		buffer = instance_lb_buffer(inst);
 		if (!buffer) {
 			ErrPrint("Instance[%s] has no buffer\n", id);
+			ret = LB_STATUS_ERROR_FAULT;
 			goto out;
 		}
 
 		slave = package_slave(pkg);
 		if (!slave) {
 			ErrPrint("Package[%s] has no slave\n", pkgname);
+			ret = LB_STATUS_ERROR_INVALID;
 			goto out;
 		}
 
@@ -4037,12 +4332,14 @@ static struct packet *client_lb_access_activate(pid_t pid, int handle, const str
 		script = instance_lb_script(inst);
 		if (!script) {
 			ErrPrint("Instance has no script\n");
+			ret = LB_STATUS_ERROR_FAULT;
 			goto out;
 		}
 
 		e = script_handler_evas(script);
 		if (!e) {
 			ErrPrint("Script has no Evas\n");
+			ret = LB_STATUS_ERROR_INVALID;
 			goto out;
 		}
 
@@ -4069,6 +4366,7 @@ static struct packet *client_lb_access_activate(pid_t pid, int handle, const str
 		}
 	} else {
 		ErrPrint("Unsupported package\n");
+		ret = LB_STATUS_ERROR_INVALID;
 	}
 
 out:
@@ -4326,6 +4624,7 @@ static struct packet *client_lb_acquire_pixmap(pid_t pid, int handle, const stru
 	int ret;
 	int pixmap = 0;
 	void *buf_ptr;
+	struct buffer_info *buffer;
 
 	client = client_find_by_pid(pid);
 	if (!client) {
@@ -4351,8 +4650,13 @@ static struct packet *client_lb_acquire_pixmap(pid_t pid, int handle, const stru
 	}
 
 	DbgPrint("pid[%d] pkgname[%s] id[%s]\n", pid, pkgname, id);
+	buffer = instance_lb_buffer(inst);
+	if (!buffer) {
+		ErrPrint("Unable to get LB buffer: %s\n", id);
+		goto out;
+	}
 
-	buf_ptr = buffer_handler_pixmap_ref(instance_lb_buffer(inst));
+	buf_ptr = buffer_handler_pixmap_ref(buffer);
 	if (!buf_ptr) {
 		ErrPrint("Failed to ref pixmap\n");
 		goto out;
@@ -4362,9 +4666,8 @@ static struct packet *client_lb_acquire_pixmap(pid_t pid, int handle, const stru
 	if (ret < 0) {
 		ErrPrint("Failed to add a new client deactivate callback\n");
 		buffer_handler_pixmap_unref(buf_ptr);
-		pixmap = 0;
 	} else {
-		pixmap = buffer_handler_pixmap(instance_lb_buffer(inst));
+		pixmap = buffer_handler_pixmap(buffer);
 	}
 
 out:
@@ -4433,6 +4736,7 @@ static struct packet *client_pd_acquire_pixmap(pid_t pid, int handle, const stru
 	int ret;
 	int pixmap = 0;
 	void *buf_ptr;
+	struct buffer_info *buffer;
 
 	client = client_find_by_pid(pid);
 	if (!client) {
@@ -4458,8 +4762,13 @@ static struct packet *client_pd_acquire_pixmap(pid_t pid, int handle, const stru
 	}
 
 	DbgPrint("pid[%d] pkgname[%s] id[%s]\n", pid, pkgname, id);
+	buffer = instance_pd_buffer(inst);
+	if (!buffer) {
+		ErrPrint("Unable to get PD buffer (%s)\n", id);
+		goto out;
+	}
 
-	buf_ptr = buffer_handler_pixmap_ref(instance_pd_buffer(inst));
+	buf_ptr = buffer_handler_pixmap_ref(buffer);
 	if (!buf_ptr) {
 		ErrPrint("Failed to ref pixmap\n");
 		goto out;
@@ -4469,7 +4778,7 @@ static struct packet *client_pd_acquire_pixmap(pid_t pid, int handle, const stru
 	if (ret < 0)
 		buffer_handler_pixmap_unref(buf_ptr);
 
-	pixmap = buffer_handler_pixmap(instance_pd_buffer(inst));
+	pixmap = buffer_handler_pixmap(buffer);
 out:
 	result = packet_create_reply(packet, "i", pixmap);
 	if (!result)
@@ -6161,11 +6470,13 @@ static struct packet *service_update(pid_t pid, int handle, const struct packet 
 	pkg = package_find(lb_pkgname);
 	if (!pkg) {
 		ret = LB_STATUS_ERROR_NOT_EXIST;
+		DbgFree(lb_pkgname);
 		goto out;
 	}
 
 	if (package_is_fault(pkg)) {
 		ret = LB_STATUS_ERROR_FAULT;
+		DbgFree(lb_pkgname);
 		goto out;
 	}
 
@@ -6175,7 +6486,7 @@ static struct packet *service_update(pid_t pid, int handle, const struct packet 
 	 */
 	slave_rpc_request_update(lb_pkgname, id, cluster, category);
 	DbgFree(lb_pkgname);
-	ret = 0;
+	ret = LB_STATUS_SUCCESS;
 
 out:
 	result = packet_create_reply(packet, "i", ret);
@@ -6723,6 +7034,10 @@ static struct method s_client_table[] = {
 		.cmd = "pd_access_scroll",
 		.handler = client_pd_access_scroll,
 	},
+	{
+		.cmd = "pd_access_unhighlight",
+		.handler = client_pd_access_unhighlight,
+	},
 
 	{
 		.cmd = "lb_access_hl",
@@ -6747,6 +7062,10 @@ static struct method s_client_table[] = {
 	{
 		.cmd = "lb_access_scroll",
 		.handler = client_lb_access_scroll,
+	},
+	{
+		.cmd = "lb_access_unhighlight",
+		.handler = client_lb_access_unhighlight,
 	},
 
 	{

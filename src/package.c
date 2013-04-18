@@ -168,7 +168,15 @@ static int slave_fault_cb(struct slave_node *slave, void *data)
 	struct inst_info *inst;
 	struct pkg_info *info = (struct pkg_info *)data;
 
-	DbgPrint("Slave %s has critical fault. destroy all instances\n", slave_name(slave));
+	if (package_is_fault(info)) {
+		ErrPrint("Already faulted package: %s\n", package_name(info));
+		return 0;
+	}
+
+	package_set_fault_info(info, util_timestamp(), slave_name(slave), __func__);
+	fault_broadcast_info(package_name(info), slave_name(slave), __func__);
+
+	DbgPrint("Slave critical fault - package: %s (by slave fault %s\n", package_name(info), slave_name(slave));
 	EINA_LIST_FOREACH_SAFE(info->inst_list, l, n, inst) {
 		DbgPrint("Destroy instance %p\n", inst);
 		instance_destroyed(inst);

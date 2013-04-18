@@ -171,6 +171,8 @@ static inline struct buffer *create_pixmap(struct buffer_info *info)
 	struct buffer *buffer;
 	Display *disp;
 	Window parent;
+	XGCValues gcv;
+	GC gc;
 
 	disp = ecore_x_display_get();
 	if (!disp)
@@ -210,7 +212,20 @@ static inline struct buffer *create_pixmap(struct buffer_info *info)
 		return NULL;
 	}
 
-	XSync(disp, False);
+	/*!
+	 * \note
+	 * Clear pixmap
+	 */
+	memset(&gcv, 0, sizeof(gcv));
+	gc = XCreateGC(disp, gem->pixmap, GCForeground, &gcv);
+	if (gc) {
+		XFillRectangle(disp, gem->pixmap, gc, 0, 0, info->w, info->h);
+		XSync(disp, False);
+		XFreeGC(disp, gc);
+	} else {
+		XSync(disp, False);
+		ErrPrint("Unable to clear the pixmap\n");
+	}
 
 	DbgPrint("Pixmap:0x%X is created\n", gem->pixmap);
 	return buffer;

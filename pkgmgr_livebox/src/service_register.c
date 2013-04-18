@@ -171,14 +171,17 @@ struct livebox {
 	int nodisplay;
 	int mouse_event; /* Mouse event processing option for livebox */
 
+	int default_touch_effect;
+	int default_need_frame;
+
 	enum lb_type lb_type;
 	xmlChar *lb_src;
 	xmlChar *lb_group;
 	int size_list; /* 1x1, 2x1, 2x2, 4x1, 4x2, 4x3, 4x4 */
 
-	xmlChar *preview[11];
-	int touch_effect[11]; /* Touch effect of a livebox */
-	int need_frame[11]; /* Box needs frame which should be cared by viewer */
+	xmlChar *preview[NR_OF_SIZE_LIST];
+	int touch_effect[NR_OF_SIZE_LIST]; /* Touch effect of a livebox */
+	int need_frame[NR_OF_SIZE_LIST]; /* Box needs frame which should be cared by viewer */
 
 	enum pd_type pd_type;
 	xmlChar *pd_src;
@@ -1499,10 +1502,12 @@ static inline int livebox_destroy(struct livebox *livebox)
 	xmlFree(livebox->preview[4]); /* 4x2 */
 	xmlFree(livebox->preview[5]); /* 4x3 */
 	xmlFree(livebox->preview[6]); /* 4x4 */
-	xmlFree(livebox->preview[7]); /* 21x21 */
-	xmlFree(livebox->preview[8]); /* 23x21 */
-	xmlFree(livebox->preview[9]); /* 23x23 */
-	xmlFree(livebox->preview[10]); /* 0x0 */
+	xmlFree(livebox->preview[7]); /* 4x5 */
+	xmlFree(livebox->preview[8]); /* 4x6 */
+	xmlFree(livebox->preview[9]); /* easy 1x1 */
+	xmlFree(livebox->preview[10]); /* easy 3x1 */
+	xmlFree(livebox->preview[11]); /* easy 3x3 */
+	xmlFree(livebox->preview[12]); /* full */
 
 	dlist_foreach_safe(livebox->i18n_list, l, n, i18n) {
 		livebox->i18n_list = dlist_remove(livebox->i18n_list, l);
@@ -1698,10 +1703,10 @@ static inline void update_size_info(struct livebox *livebox, int idx, xmlNodePtr
 			livebox->need_frame[idx] = !xmlStrcasecmp(need_frame, (const xmlChar *)"true");
 			xmlFree(need_frame);
 		} else {
-			livebox->need_frame[idx] = 0;
+			livebox->need_frame[idx] = livebox->default_need_frame;
 		}
 	} else {
-		livebox->need_frame[idx] = 0;
+		livebox->need_frame[idx] = livebox->default_need_frame;
 	}
 
 	if (xmlHasProp(node, (const xmlChar *)"touch_effect")) {
@@ -1712,10 +1717,10 @@ static inline void update_size_info(struct livebox *livebox, int idx, xmlNodePtr
 			livebox->touch_effect[idx] = !xmlStrcasecmp(touch_effect, (const xmlChar *)"true");
 			xmlFree(touch_effect);
 		} else {
-			livebox->touch_effect[idx] = 1;
+			livebox->touch_effect[idx] = livebox->default_touch_effect;
 		}
 	} else {
-		livebox->touch_effect[idx] = 1;
+		livebox->touch_effect[idx] = livebox->default_touch_effect;
 	}
 }
 
@@ -1759,6 +1764,36 @@ static inline void update_box(struct livebox *livebox, xmlNodePtr node)
 		}
 	}
 
+	if (!xmlHasProp(node, (const xmlChar *)"touch_effect")) {
+		livebox->default_touch_effect = 1;
+	} else {
+		xmlChar *touch_effect;
+
+		touch_effect = xmlGetProp(node, (const xmlChar *)"touch_effect");
+		if (!touch_effect) {
+			ErrPrint("default touch_effect is NIL\n");
+			livebox->default_touch_effect = 1;
+		} else {
+			livebox->default_touch_effect = !xmlStrcasecmp(touch_effect, (const xmlChar *)"true");
+			xmlFree(touch_effect);
+		}
+	}
+
+	if (!xmlHasProp(node, (const xmlChar *)"need_frame")) {
+		livebox->default_need_frame = 0;
+	} else {
+		xmlChar *need_frame;
+
+		need_frame = xmlGetProp(node, (const xmlChar *)"need_frame");
+		if (!need_frame) {
+			ErrPrint("default need_frame is NIL\n");
+			livebox->default_need_frame = 0;
+		} else {
+			livebox->default_need_frame = !xmlStrcasecmp(need_frame, (const xmlChar *)"true");
+			xmlFree(need_frame);
+		}
+	}
+
 	for (node = node->children; node; node = node->next) {
 		if (!xmlStrcasecmp(node->name, (const xmlChar *)"size")) {
 			xmlChar *size;
@@ -1783,7 +1818,7 @@ static inline void update_box(struct livebox *livebox, xmlNodePtr node)
 			if (!xmlStrcasecmp(size, (const xmlChar *)"1x1")) {
 				if (is_easy) {
 					livebox->size_list |= LB_SIZE_TYPE_EASY_1x1;
-					update_size_info(livebox, 7, node);
+					update_size_info(livebox, 9, node);
 				} else {
 					livebox->size_list |= LB_SIZE_TYPE_1x1;
 					update_size_info(livebox, 0, node);
@@ -1791,14 +1826,14 @@ static inline void update_box(struct livebox *livebox, xmlNodePtr node)
 			} else if (!xmlStrcasecmp(size, (const xmlChar *)"3x1")) {
 				if (is_easy) {
 					livebox->size_list |= LB_SIZE_TYPE_EASY_3x1;
-					update_size_info(livebox, 8, node);
+					update_size_info(livebox, 10, node);
 				} else {
 					ErrPrint("Invalid size tag (%s)\n", size);
 				}
 			} else if (!xmlStrcasecmp(size, (const xmlChar *)"3x3")) {
 				if (is_easy) {
 					livebox->size_list |= LB_SIZE_TYPE_EASY_3x3;
-					update_size_info(livebox, 9, node);
+					update_size_info(livebox, 11, node);
 				} else {
 					ErrPrint("Invalid size tag (%s)\n", size);
 				}
@@ -1820,18 +1855,24 @@ static inline void update_box(struct livebox *livebox, xmlNodePtr node)
 			} else if (!xmlStrcasecmp(size, (const xmlChar *)"4x4")) {
 				livebox->size_list |= LB_SIZE_TYPE_4x4;
 				update_size_info(livebox, 6, node);
+			} else if (!xmlStrcasecmp(size, (const xmlChar *)"4x5")) {
+				livebox->size_list |= LB_SIZE_TYPE_4x5;
+				update_size_info(livebox, 7, node);
+			} else if (!xmlStrcasecmp(size, (const xmlChar *)"4x6")) {
+				livebox->size_list |= LB_SIZE_TYPE_4x6;
+				update_size_info(livebox, 8, node);
 			} else if (!xmlStrcasecmp(size, (const xmlChar *)"21x21")) {
 				livebox->size_list |= LB_SIZE_TYPE_EASY_1x1;
-				update_size_info(livebox, 7, node);
+				update_size_info(livebox, 9, node);
 			} else if (!xmlStrcasecmp(size, (const xmlChar *)"23x21")) {
 				livebox->size_list |= LB_SIZE_TYPE_EASY_3x1;
-				update_size_info(livebox, 8, node);
+				update_size_info(livebox, 10, node);
 			} else if (!xmlStrcasecmp(size, (const xmlChar *)"23x23")) {
 				livebox->size_list |= LB_SIZE_TYPE_EASY_3x3;
-				update_size_info(livebox, 9, node);
+				update_size_info(livebox, 11, node);
 			} else if (!xmlStrcasecmp(size, (const xmlChar *)"0x0")) {
 				livebox->size_list |= LB_SIZE_TYPE_0x0;
-				update_size_info(livebox, 10, node);
+				update_size_info(livebox, 12, node);
 			} else {
 				ErrPrint("Invalid size tag (%s)\n", size);
 			}
@@ -2154,26 +2195,38 @@ static inline int db_insert_livebox(struct livebox *livebox, const char *appid)
 			goto errout;
 	}
 
+	if (livebox->size_list & LB_SIZE_TYPE_4x5) {
+		ret = db_insert_box_size((char *)livebox->pkgid, LB_SIZE_TYPE_4x5, (char *)livebox->preview[7], livebox->touch_effect[7], livebox->need_frame[7]);
+		if (ret < 0)
+			goto errout;
+	}
+
+	if (livebox->size_list & LB_SIZE_TYPE_4x6) {
+		ret = db_insert_box_size((char *)livebox->pkgid, LB_SIZE_TYPE_4x6, (char *)livebox->preview[8], livebox->touch_effect[8], livebox->need_frame[8]);
+		if (ret < 0)
+			goto errout;
+	}
+
 	if (livebox->size_list & LB_SIZE_TYPE_EASY_1x1) {
-		ret = db_insert_box_size((char *)livebox->pkgid, LB_SIZE_TYPE_EASY_1x1, (char *)livebox->preview[7], livebox->touch_effect[7], livebox->need_frame[7]);
+		ret = db_insert_box_size((char *)livebox->pkgid, LB_SIZE_TYPE_EASY_1x1, (char *)livebox->preview[9], livebox->touch_effect[9], livebox->need_frame[9]);
 		if (ret < 0)
 			goto errout;
 	}
 
 	if (livebox->size_list & LB_SIZE_TYPE_EASY_3x1) {
-		ret = db_insert_box_size((char *)livebox->pkgid, LB_SIZE_TYPE_EASY_3x1, (char *)livebox->preview[8], livebox->touch_effect[8], livebox->need_frame[8]);
+		ret = db_insert_box_size((char *)livebox->pkgid, LB_SIZE_TYPE_EASY_3x1, (char *)livebox->preview[10], livebox->touch_effect[10], livebox->need_frame[10]);
 		if (ret < 0)
 			goto errout;
 	}
 
 	if (livebox->size_list & LB_SIZE_TYPE_EASY_3x3) {
-		ret = db_insert_box_size((char *)livebox->pkgid, LB_SIZE_TYPE_EASY_3x3, (char *)livebox->preview[9], livebox->touch_effect[9], livebox->need_frame[9]);
+		ret = db_insert_box_size((char *)livebox->pkgid, LB_SIZE_TYPE_EASY_3x3, (char *)livebox->preview[11], livebox->touch_effect[11], livebox->need_frame[11]);
 		if (ret < 0)
 			goto errout;
 	}
 
 	if (livebox->size_list & LB_SIZE_TYPE_0x0) {
-		ret = db_insert_box_size((char *)livebox->pkgid, LB_SIZE_TYPE_0x0, (char *)livebox->preview[10], livebox->touch_effect[10], livebox->need_frame[10]);
+		ret = db_insert_box_size((char *)livebox->pkgid, LB_SIZE_TYPE_0x0, (char *)livebox->preview[12], livebox->touch_effect[12], livebox->need_frame[12]);
 		if (ret < 0)
 			goto errout;
 	}

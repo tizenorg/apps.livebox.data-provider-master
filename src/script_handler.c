@@ -79,7 +79,7 @@ struct script_port {
 	int (*update_drag)(void *handle, Evas *e, const char *id, const char *part, double x, double y);
 	int (*update_size)(void *handle, Evas *e, const char *id, int w, int h);
 	int (*update_category)(void *handle, Evas *e, const char *id, const char *category);
-	int (*feed_event)(void *handle, Evas *e, int event_type, int x, int y, double timestamp);
+	int (*feed_event)(void *handle, Evas *e, int event_type, int x, int y, int down, double timestamp);
 
 	void *(*create)(const char *file, const char *option);
 	int (*destroy)(void *handle);
@@ -1367,7 +1367,7 @@ HAPI int script_handler_feed_event(struct script_info *info, int event, double t
 		return LB_STATUS_ERROR_FAULT;
 	}
 
-	return info->port->feed_event(info->port_data, e, event, info->x, info->y, timestamp);
+	return info->port->feed_event(info->port_data, e, event, info->x, info->y, info->down, timestamp);
 }
 
 /* End of a file */

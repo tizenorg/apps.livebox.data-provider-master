@@ -146,6 +146,9 @@ HAPI int util_unlink(const char *filename)
 	int desclen;
 	int ret;
 
+	if (!filename)
+		return LB_STATUS_ERROR_INVALID;
+
 	desclen = strlen(filename) + 6; /* .desc */
 	descfile = malloc(desclen);
 	if (!descfile) {
@@ -199,6 +202,7 @@ HAPI unsigned long util_free_space(const char *path)
 	}
 
 	space = st.f_bsize * st.f_bfree;
+	DbgPrint("Available size: %lu, f_bsize: %lu, f_bfree: %lu\n", space, st.f_bsize, st.f_bfree);
 	/*!
 	 * \note
 	 * Must have to check the overflow

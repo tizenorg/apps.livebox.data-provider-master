@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- * http://floralicense.org
+ * http://floralicense.org/license/
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -690,12 +690,17 @@ static inline int fork_package(struct inst_info *inst, const char *pkgname)
 	inst->info = info;
 
 	if (package_secured(info)) {
-		DbgPrint("Register the update timer for secured livebox [%s]\n", package_name(info));
-		inst->update_timer = util_timer_add(inst->lb.period, update_timer_cb, inst);
-		if (!inst->update_timer)
-			ErrPrint("Failed to add an update timer for instance %s\n", inst->id);
-		else
-			timer_freeze(inst); /* Freeze the update timer as default */
+		if (inst->lb.period > 0.0f) {
+			DbgPrint("Register the update timer for secured livebox [%s]\n", package_name(info));
+			inst->update_timer = util_timer_add(inst->lb.period, update_timer_cb, inst);
+			if (!inst->update_timer)
+				ErrPrint("Failed to add an update timer for instance %s\n", inst->id);
+			else
+				timer_freeze(inst); /* Freeze the update timer as default */
+		} else {
+			DbgPrint("secured livebox [%s] has no period (%lf)\n", package_name(info), inst->lb.period);
+			inst->update_timer = NULL;
+		}
 	}
 
 	return LB_STATUS_SUCCESS;

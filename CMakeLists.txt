@@ -77,6 +77,10 @@ ADD_EXECUTABLE(${PROJECT_NAME}
 	src/liveinfo.c
 	src/pkgmgr.c
 	src/event.c
+	src/shortcut_service.c
+	src/badge_service.c
+	src/notification_service.c
+	src/service_common.c
 )
 
 TARGET_LINK_LIBRARIES(${PROJECT_NAME} ${pkg_LDFLAGS} "-ldl")

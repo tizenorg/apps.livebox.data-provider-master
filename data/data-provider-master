@@ -23,6 +23,7 @@ launch_provider()
 		# PROVIDER_DISABLE_CALL_OPTION=false
 		# PROVIDER_METHOD="shm", "pixmap", "file" (default = "file")
 		BUFMGR_LOCK_TYPE="once" BUFMGR_MAP_CACHE="true" /usr/bin/data-provider-master
+		vconftool set -t bool memory/data-provider-master/started 0 -f
 		let RETRY_COUNT=$RETRY_COUNT+1
 		if [ $RETRY_COUNT -gt 5 ]; then
 			echo "EXCEED THE MAXIMUM RETRY COUNT: $RETRY_COUNT (max 5)"

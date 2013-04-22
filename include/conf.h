@@ -155,6 +155,10 @@ extern int conf_loader(void);
 #define DEFAULT_CLUSTER	"user,created"
 #define MINIMUM_REACTIVATION_TIME	10
 
+#if !defined(VCONFKEY_MASTER_STARTED)
+#define VCONFKEY_MASTER_STARTED	"memory/data-provider-master/started"
+#endif
+
 #define USE_XMONITOR		g_conf.use_xmonitor
 
 #define HAPI __attribute__((visibility("hidden")))

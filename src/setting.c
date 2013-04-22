@@ -99,7 +99,12 @@ HAPI int setting_fini(void)
 {
 	int ret;
 	ret = vconf_ignore_key_changed(VCONFKEY_PM_STATE, lcd_state_cb);
+	if (ret < 0)
+		ErrPrint("Failed to ignore vconf key (%d)\n", ret);
+
 	ret = vconf_ignore_key_changed(VCONFKEY_SYSMAN_POWER_OFF_STATUS, power_off_cb);
+	if (ret < 0)
+		ErrPrint("Failed to ignore vconf key (%d)\n", ret);
 	return ret;
 }
 

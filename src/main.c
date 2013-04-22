@@ -28,6 +28,7 @@
 #include <glib.h>
 #include <glib-object.h>
 #include <aul.h>
+#include <vconf.h>
 
 #include <packet.h>
 #include <dlog.h>
@@ -50,6 +51,7 @@
 #include "debug.h"
 #include "critical_log.h"
 #include "event.h"
+#include "shortcut_service.h"
 
 #if defined(FLOG)
 FILE *__file_log_fp;
@@ -238,13 +240,19 @@ int main(int argc, char *argv[])
 	(void)util_unlink_files(IMAGE_PATH);
 	(void)util_unlink_files(SLAVE_LOG_PATH);
 
+	shortcut_service_init();
 	script_init();
 
 	app_create();
+
+	vconf_set_bool(VCONFKEY_MASTER_STARTED, 1);
 	ecore_main_loop_begin();
+	vconf_set_bool(VCONFKEY_MASTER_STARTED, 0);
+
 	app_terminate();
 
 	script_fini();
+	shortcut_service_fini();
 
 	ecore_evas_shutdown();
 	evas_shutdown();

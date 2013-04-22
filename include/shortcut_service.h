@@ -14,4 +14,7 @@
  * limitations under the License.
  */
 
+extern int shortcut_service_init(void);
+extern int shortcut_service_fini(void);
+
 /* End of a file */

@@ -36,38 +36,6 @@
 #include "conf.h"
 #include "event.h"
 
-#define CRITICAL_SECTION_BEGIN(lock) do { \
-	int ret; \
-	ret = pthread_mutex_lock(&lock); \
-	if (ret != 0) { \
-		ErrPrint("Unable to get lock: %s\n", strerror(ret)); \
-	} \
-} while (0)
-
-#define CRITICAL_SECTION_END(lock) do { \
-	int ret; \
-	ret = pthread_mutex_unlock(&lock); \
-	if (ret != 0) { \
-		ErrPrint("Unable to unlock: %s\n", strerror(ret)); \
-	} \
-} while (0)
-
-#define CANCEL_SECTION_BEGIN() do { \
-	int ret; \
-	ret = pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL); \
-	if (ret != 0) \
-		ErrPrint("Unable to set cancelate state: %s\n", strerror(ret)); \
-} while (0)
-
-#define CANCEL_SECTION_END() do { \
-	int ret; \
-	ret = pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, NULL); \
-	if (ret != 0) \
-		ErrPrint("Unable to set cancelate state: %s\n", strerror(ret)); \
-} while (0)
-
-#define PIPE_READ	0
-#define PIPE_WRITE	1
 #define EVENT_CH	'e'
 
 int errno;
@@ -77,8 +45,10 @@ static struct info {
 	Eina_List *event_list;
 	int handle;
 	pthread_mutex_t event_list_lock;
-	int evt_pipe[2];
+	int evt_pipe[PIPE_MAX];
+	int tcb_pipe[PIPE_MAX];
 	Ecore_Fd_Handler *event_handler;
+	Ecore_Fd_Handler *tcb_handler;
 
 	int (*event_cb)(enum event_state state, struct event_data *event, void *data);
 	void *cbdata;
@@ -144,9 +114,9 @@ static inline int processing_input_event(struct input_event *event)
 
 				memcpy(item, &s_info.event_data, sizeof(*item));
 
-				CRITICAL_SECTION_BEGIN(s_info.event_list_lock);
+				CRITICAL_SECTION_BEGIN(&s_info.event_list_lock);
 				s_info.event_list = eina_list_append(s_info.event_list, item);
-				CRITICAL_SECTION_END(s_info.event_list_lock);
+				CRITICAL_SECTION_END(&s_info.event_list_lock);
 
 				event_ch = EVENT_CH;
 				if (write(s_info.evt_pipe[PIPE_WRITE], &event_ch, sizeof(event_ch)) != sizeof(event_ch)) {
@@ -225,7 +195,7 @@ static inline int processing_input_event(struct input_event *event)
 	return LB_STATUS_SUCCESS;
 }
 
-static void *event_main(void *data)
+static void *event_thread_main(void *data)
 {
 	fd_set set;
 	int ret = 0;
@@ -233,11 +203,11 @@ static void *event_main(void *data)
 	char *ptr = (char *)&input_event;
 	int offset = 0;
 	int readsize = 0;
+	char event_ch = EVENT_CH;
 
-	DbgPrint("event_main initiated\n");
+	DbgPrint("Initiated\n");
 
 	while (1) {
-		CANCEL_SECTION_BEGIN();
 		FD_ZERO(&set);
 		FD_SET(s_info.handle, &set);
 		ret = select(s_info.handle + 1, &set, NULL, NULL, NULL);
@@ -245,18 +215,15 @@ static void *event_main(void *data)
 			ret = -errno;
 			if (errno == EINTR) {
 				DbgPrint("Select receives INTR\n");
-				CANCEL_SECTION_END();
 				continue;
 			}
 			ErrPrint("Error: %s\n", strerror(errno));
-			CANCEL_SECTION_END();
-			return (void *)ret;
+			break;
 		} else if (ret == 0) {
 			ErrPrint("Timeout expired\n");
-			CANCEL_SECTION_END();
-			return (void *)LB_STATUS_ERROR_TIMEOUT;
+			ret = LB_STATUS_ERROR_TIMEOUT;
+			break;
 		}
-		CANCEL_SECTION_END();
 
 		if (!FD_ISSET(s_info.handle, &set)) {
 			ErrPrint("Unexpected handle is toggled\n");
@@ -281,7 +248,82 @@ static void *event_main(void *data)
 		}
 	}
 
+	if (write(s_info.tcb_pipe[PIPE_WRITE], &event_ch, sizeof(event_ch)) != sizeof(event_ch))
+		ErrPrint("Unable to write PIPE: %s\n", strerror(errno));
+
 	return (void *)ret;
+}
+
+static inline int reclaim_tcb_resources(void)
+{
+	int status;
+	struct event_data *event;
+	void *ret;
+
+	if (close(s_info.handle) < 0)
+		ErrPrint("Unable to release the fd: %s\n", strerror(errno));
+
+	s_info.handle = -1;
+	DbgPrint("Event handler deactivated\n");
+
+	status = pthread_join(s_info.tid, &ret);
+	if (status != 0)
+		ErrPrint("Failed to join a thread: %s\n", strerror(errno));
+	else
+		DbgPrint("Thread returns: %d\n", (int)ret);
+
+	ecore_main_fd_handler_del(s_info.event_handler);
+	s_info.event_handler = NULL;
+
+	ecore_main_fd_handler_del(s_info.tcb_handler);
+	s_info.tcb_handler = NULL;
+
+	CLOSE_PIPE(s_info.tcb_pipe);
+	CLOSE_PIPE(s_info.evt_pipe);
+
+	EINA_LIST_FREE(s_info.event_list, event) {
+		if (s_info.event_cb) {
+			if (s_info.event_state == EVENT_STATE_DEACTIVATE) {
+				s_info.event_state = EVENT_STATE_ACTIVATE;
+			} else if (s_info.event_state == EVENT_STATE_ACTIVATE) {
+				s_info.event_state = EVENT_STATE_ACTIVATED;
+			}
+			s_info.event_cb(s_info.event_state, event, s_info.cbdata);
+		}
+		free(event);
+	}
+
+	if (s_info.event_state != EVENT_STATE_DEACTIVATE) {
+		s_info.event_state = EVENT_STATE_DEACTIVATE;
+
+		if (s_info.event_cb)
+			s_info.event_cb(s_info.event_state, &s_info.event_data, s_info.cbdata);
+	}
+
+	s_info.event_data.x = -1;
+	s_info.event_data.y = -1;
+	return LB_STATUS_SUCCESS;
+}
+
+static Eina_Bool event_deactivate_cb(void *data, Ecore_Fd_Handler *handler)
+{
+	int fd;
+	char event_ch;
+
+	fd = ecore_main_fd_handler_fd_get(handler);
+	if (fd < 0) {
+		ErrPrint("Invalid fd\n");
+		return ECORE_CALLBACK_CANCEL;
+	}
+
+	if (read(fd, &event_ch, sizeof(event_ch)) != sizeof(event_ch)) {
+		ErrPrint("Unable to read event ch: %s\n", strerror(errno));
+		return ECORE_CALLBACK_CANCEL;
+	}
+
+	DbgPrint("Deactivated event received: %c\n", event_ch);
+	reclaim_tcb_resources();
+	return ECORE_CALLBACK_CANCEL;
 }
 
 static Eina_Bool event_read_cb(void *data, Ecore_Fd_Handler *handler)
@@ -301,13 +343,13 @@ static Eina_Bool event_read_cb(void *data, Ecore_Fd_Handler *handler)
 		return ECORE_CALLBACK_CANCEL;
 	}
 
-	CRITICAL_SECTION_BEGIN(s_info.event_list_lock);
+	CRITICAL_SECTION_BEGIN(&s_info.event_list_lock);
 	item = eina_list_nth(s_info.event_list, 0);
 	if (item)
 		s_info.event_list = eina_list_remove(s_info.event_list, item);
 	else
 		ErrPrint("Unable to get event\n");
-	CRITICAL_SECTION_END(s_info.event_list_lock);
+	CRITICAL_SECTION_END(&s_info.event_list_lock);
 
 	if (item && s_info.event_cb) {
 		switch (s_info.event_state) {
@@ -328,6 +370,9 @@ static Eina_Bool event_read_cb(void *data, Ecore_Fd_Handler *handler)
 	return ECORE_CALLBACK_RENEW;
 }
 
+/*!
+ * x, y is the starting point.
+ */
 HAPI int event_activate(int x, int y, int (*event_cb)(enum event_state state, struct event_data *event, void *data), void *data)
 {
 	int status;
@@ -358,37 +403,56 @@ HAPI int event_activate(int x, int y, int (*event_cb)(enum event_state state, st
 		return LB_STATUS_ERROR_FAULT;
 	}
 
+	status = pipe2(s_info.tcb_pipe, O_NONBLOCK | O_CLOEXEC);
+	if (status < 0) {
+		ErrPrint("Unable to prepare tcb pipe: %s\n", strerror(errno));
+		if (close(s_info.handle) < 0)
+			ErrPrint("Failed to close handle: %s\n", strerror(errno));
+		s_info.handle = -1;
+		CLOSE_PIPE(s_info.evt_pipe);
+		return LB_STATUS_ERROR_FAULT;
+	}
+
 	s_info.event_handler = ecore_main_fd_handler_add(s_info.evt_pipe[PIPE_READ], ECORE_FD_READ, event_read_cb, NULL, NULL, NULL);
 	if (!s_info.event_handler) {
 		if (close(s_info.handle) < 0)
 			ErrPrint("Failed to close handle: %s\n", strerror(errno));
-
-		if (close(s_info.evt_pipe[PIPE_READ]) < 0)
-			ErrPrint("Failed to close handle: %s\n", strerror(errno));
-
-		if (close(s_info.evt_pipe[PIPE_WRITE]) < 0)
-			ErrPrint("Failed to close handle: %s\n", strerror(errno));
-
 		s_info.handle = -1;
+
+		CLOSE_PIPE(s_info.tcb_pipe);
+		CLOSE_PIPE(s_info.evt_pipe);
 		return LB_STATUS_ERROR_FAULT;
 	}
 
-	status = pthread_create(&s_info.tid, NULL, event_main, NULL);
+	s_info.tcb_handler = ecore_main_fd_handler_add(s_info.tcb_pipe[PIPE_READ], ECORE_FD_READ, event_deactivate_cb, NULL, NULL, NULL);
+	if (!s_info.event_handler) {
+		ecore_main_fd_handler_del(s_info.event_handler);
+		s_info.event_handler = NULL;
+
+		if (close(s_info.handle) < 0)
+			ErrPrint("Failed to close handle: %s\n", strerror(errno));
+		s_info.handle = -1;
+
+		CLOSE_PIPE(s_info.tcb_pipe);
+		CLOSE_PIPE(s_info.evt_pipe);
+		return LB_STATUS_ERROR_FAULT;
+	}
+
+	status = pthread_create(&s_info.tid, NULL, event_thread_main, NULL);
 	if (status != 0) {
 		ErrPrint("Failed to initiate the thread: %s\n", strerror(status));
 		ecore_main_fd_handler_del(s_info.event_handler);
 		s_info.event_handler = NULL;
 
+		ecore_main_fd_handler_del(s_info.tcb_handler);
+		s_info.tcb_handler = NULL;
+
 		if (close(s_info.handle) < 0)
 			ErrPrint("close: %s\n", strerror(errno));
 		s_info.handle = -1;
 
-		if (close(s_info.evt_pipe[PIPE_READ]) < 0)
-			ErrPrint("close: %s\n", strerror(errno));
-
-		if (close(s_info.evt_pipe[PIPE_WRITE]) < 0)
-			ErrPrint("close: %s\n", strerror(errno));
-
+		CLOSE_PIPE(s_info.tcb_pipe);
+		CLOSE_PIPE(s_info.evt_pipe);
 		return LB_STATUS_ERROR_FAULT;
 	}
 
@@ -403,63 +467,12 @@ HAPI int event_activate(int x, int y, int (*event_cb)(enum event_state state, st
 
 HAPI int event_deactivate(void)
 {
-	int status;
-	struct event_data *event;
-	void *ret;
-
 	if (s_info.handle < 0) {
 		ErrPrint("Event handler is not actiavated\n");
 		return LB_STATUS_SUCCESS;
 	}
 
-	status = pthread_cancel(s_info.tid);
-	if (status != 0)
-		ErrPrint("Failed to cacnel a thread: %s\n", strerror(errno));
-
-	status = pthread_join(s_info.tid, &ret);
-	if (status != 0)
-		ErrPrint("Failed to join a thread: %s\n", strerror(errno));
-	else if (ret == PTHREAD_CANCELED)
-		DbgPrint("Thread is canceled\n");
-
-	ecore_main_fd_handler_del(s_info.event_handler);
-	s_info.event_handler = NULL;
-
-	if (close(s_info.evt_pipe[PIPE_READ]) < 0)
-		ErrPrint("Failed to close: %s\n", strerror(errno));
-
-	if (close(s_info.evt_pipe[PIPE_WRITE]) < 0)
-		ErrPrint("Failed to close: %s\n", strerror(errno));
-
-	if (close(s_info.handle) < 0)
-		ErrPrint("Unable to release the fd: %s\n", strerror(errno));
-
-	s_info.handle = -1;
-	DbgPrint("Event handler deactivated\n");
-
-	EINA_LIST_FREE(s_info.event_list, event) {
-		if (s_info.event_cb) {
-			if (s_info.event_state == EVENT_STATE_DEACTIVATE) {
-				s_info.event_state = EVENT_STATE_ACTIVATE;
-			} else if (s_info.event_state == EVENT_STATE_ACTIVATE) {
-				s_info.event_state = EVENT_STATE_ACTIVATED;
-			}
-			s_info.event_cb(s_info.event_state, event, s_info.cbdata);
-		}
-		free(event);
-	}
-
-	if (s_info.event_state != EVENT_STATE_DEACTIVATE) {
-		s_info.event_state = EVENT_STATE_DEACTIVATE;
-
-		if (s_info.event_cb)
-			s_info.event_cb(s_info.event_state, &s_info.event_data, s_info.cbdata);
-	}
-
-	s_info.event_data.x = -1;
-	s_info.event_data.y = -1;
-
-	return LB_STATUS_SUCCESS;
+	return reclaim_tcb_resources();
 }
 
 HAPI int event_is_activated(void)

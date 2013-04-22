@@ -32,25 +32,8 @@
 #include "debug.h"
 #include "conf.h"
 
-#define EVT_CH	'e'
+#define EVT_CH		'e'
 #define EVT_END_CH	'x'
-
-#define CRITICAL_SECTION_BEGIN(handle) \
-do { \
-	int ret; \
-	ret = pthread_mutex_lock(handle); \
-	if (ret != 0) \
-		ErrPrint("Failed to lock: %s\n", strerror(ret)); \
-} while (0)
-
-#define CRITICAL_SECTION_END(handle) \
-do { \
-	int ret; \
-	ret = pthread_mutex_unlock(handle); \
-	if (ret != 0) \
-		ErrPrint("Failed to unlock: %s\n", strerror(ret)); \
-} while (0)
-
 
 int errno;
 
@@ -58,22 +41,17 @@ int errno;
  * \note
  * Server information and global (only in this file-scope) variables are defined
  */
-#define EVT_READ 0
-#define EVT_WRITE 1
-#define EVT_MAX 2
 
 struct service_context {
-	pthread_t thid; /*!< Server thread Id */
+	pthread_t server_thid; /*!< Server thread Id */
 	int fd; /*!< Server socket handle */
 
-	pthread_t service_thid;
-
 	Eina_List *tcb_list; /*!< TCB list, list of every thread for client connections */
-	pthread_mutex_t tcb_list_lock; /*!< tcb_list has to be handled safely */
 
 	Eina_List *packet_list;
 	pthread_mutex_t packet_list_lock;
-	int evt_pipe[EVT_MAX];
+	int evt_pipe[PIPE_MAX];
+	int tcb_pipe[PIPE_MAX];
 
 	int (*service_thread_main)(struct tcb *tcb, struct packet *packet, void *data);
 	void *service_thread_data;
@@ -98,38 +76,9 @@ struct tcb { /* Thread controll block */
 };
 
 /*!
- * \note
- * Called from Client Thread
- */
-static inline int tcb_destroy(struct service_context *svc_ctx, struct tcb *tcb)
-{
-	void *ret;
-	int status;
-
-	CRITICAL_SECTION_BEGIN(&svc_ctx->tcb_list_lock);
-	svc_ctx->tcb_list = eina_list_remove(svc_ctx->tcb_list, tcb);
-	CRITICAL_SECTION_END(&svc_ctx->tcb_list_lock);
-
-	/*!
-	 * ASSERT(tcb->fd >= 0);
-	 */
-	secure_socket_destroy_handle(tcb->fd);
-
-	status = pthread_join(tcb->thid, &ret);
-	if (status != 0)
-		ErrPrint("Unable to join a thread: %s\n", strerror(status));
-	/*!
-	 * \NOTE
-	 * Waiting termination client thread
-	 */
-	free(tcb);
-
-	return 0;
-}
-
-/*!
- * Do service for clients
+ * Do services for clients
  * Routing packets to destination processes.
+ * CLIENT THREAD
  */
 static void *client_packet_pump_main(void *data)
 {
@@ -151,9 +100,11 @@ static void *client_packet_pump_main(void *data)
 		RECV_DONE,
 	} recv_state;
 	struct packet_info *packet_info;
+	Eina_List *l;
 
 	ret = 0;
 	recv_state = RECV_INIT;
+	DbgPrint("Socket data pumping thread is activated\n");
 	/*!
 	 * \note
 	 * To escape from the switch statement, we use this ret value
@@ -177,7 +128,7 @@ static void *client_packet_pump_main(void *data)
 			break;
 		}
 
-		if (FD_ISSET(tcb->fd, &set)) {
+		if (!FD_ISSET(tcb->fd, &set)) {
 			ErrPrint("Unexpected handler is toggled\n");
 			ret = -EINVAL;
 			break;
@@ -223,9 +174,15 @@ static void *client_packet_pump_main(void *data)
 
 				packet_offset += recv_offset;
 
+				size = packet_payload_size(packet);
+				if (size == 0) {
+					recv_state = RECV_DONE;
+					recv_offset = 0;
+					break;
+				}
+
 				recv_state = RECV_PAYLOAD;
 				recv_offset = 0;
-				size = packet_payload_size(packet);
 
 				ptr = malloc(size);
 				if (!ptr) {
@@ -261,6 +218,12 @@ static void *client_packet_pump_main(void *data)
 			}
 			break;
 		case RECV_DONE:
+		default:
+			/* Dead code */
+			break;
+		}
+
+		if (recv_state == RECV_DONE) {
 			/*!
 			 * Push this packet to the packet list with TCB
 			 * Then the service main function will get this.
@@ -276,38 +239,52 @@ static void *client_packet_pump_main(void *data)
 			packet_info->packet = packet;
 			packet_info->tcb = tcb;
 
+			DbgPrint("New packet is built\n");
 			CRITICAL_SECTION_BEGIN(&svc_ctx->packet_list_lock);
 			svc_ctx->packet_list = eina_list_append(svc_ctx->packet_list, packet_info);
 			CRITICAL_SECTION_END(&svc_ctx->packet_list_lock);
 
-			if (write(svc_ctx->evt_pipe[EVT_WRITE], &evt_ch, sizeof(evt_ch)) != sizeof(evt_ch)) {
+			if (write(svc_ctx->evt_pipe[PIPE_WRITE], &evt_ch, sizeof(evt_ch)) != sizeof(evt_ch)) {
 				ret = -errno;
-				ErrPrint("Unable to write a pipe\n");
+				ErrPrint("Unable to write a pipe: %s\n", strerror(errno));
 				CRITICAL_SECTION_BEGIN(&svc_ctx->packet_list_lock);
 				svc_ctx->packet_list = eina_list_remove(svc_ctx->packet_list, packet_info);
 				CRITICAL_SECTION_END(&svc_ctx->packet_list_lock);
 
 				packet_destroy(packet);
 				free(packet_info);
+				ErrPrint("Terminate thread: %p\n", tcb);
 				break;
+			} else {
+				DbgPrint("Packet received: %d bytes\n", packet_offset);
+				recv_state = RECV_INIT;
 			}
-			DbgPrint("Packet received: %d bytes\n", packet_offset);
-
-			recv_state = RECV_INIT;
-			break;
-		default:
-			/* Dead code */
-			break;
 		}
 	}
 
-	tcb_destroy(svc_ctx, tcb);
+	CRITICAL_SECTION_BEGIN(&svc_ctx->packet_list_lock);
+	EINA_LIST_FOREACH(svc_ctx->packet_list, l, packet_info) {
+		if (packet_info->tcb == tcb) {
+			DbgPrint("Reset ptr of the TCB[%p] in the list of packet info\n", tcb);
+			packet_info->tcb = NULL;
+		}
+	}
+	CRITICAL_SECTION_END(&svc_ctx->packet_list_lock);
+
+	/*!
+	 * \note
+	 * Emit a signal to collect this TCB from the SERVER THREAD.
+	 */
+	DbgPrint("Emit a signal to destroy TCB[%p]\n", tcb);
+	if (write(svc_ctx->tcb_pipe[PIPE_WRITE], &tcb, sizeof(tcb)) != sizeof(tcb))
+		ErrPrint("Unable to write pipe: %s\n", strerror(errno));
+
 	return (void *)ret;
 }
 
 /*!
  * \note
- * Called from Server Main Thread
+ * SERVER THREAD
  */
 static inline struct tcb *tcb_create(struct service_context *svc_ctx, int fd)
 {
@@ -322,7 +299,9 @@ static inline struct tcb *tcb_create(struct service_context *svc_ctx, int fd)
 
 	tcb->fd = fd;
 	tcb->svc_ctx = svc_ctx;
+	tcb->type = TCB_CLIENT_TYPE_APP;
 
+	DbgPrint("Create a new service thread [%d]\n", fd);
 	status = pthread_create(&tcb->thid, NULL, client_packet_pump_main, tcb);
 	if (status != 0) {
 		ErrPrint("Unable to create a new thread: %s\n", strerror(status));
@@ -330,16 +309,13 @@ static inline struct tcb *tcb_create(struct service_context *svc_ctx, int fd)
 		return NULL;
 	}
 
-	CRITICAL_SECTION_BEGIN(&svc_ctx->tcb_list_lock);
 	svc_ctx->tcb_list = eina_list_append(svc_ctx->tcb_list, tcb);
-	CRITICAL_SECTION_END(&svc_ctx->tcb_list_lock);
-
 	return tcb;
 }
 
 /*!
  * \note
- * Called from Main Thread
+ * SERVER THREAD
  */
 static inline void tcb_teminate_all(struct service_context *svc_ctx)
 {
@@ -352,7 +328,6 @@ static inline void tcb_teminate_all(struct service_context *svc_ctx)
 	 * If we call this after terminate the server thread first.
 	 * Then there is no other thread to access tcb_list.
 	 */
-	CRITICAL_SECTION_BEGIN(&svc_ctx->tcb_list_lock);
 	EINA_LIST_FREE(svc_ctx->tcb_list, tcb) {
 		/*!
 		 * ASSERT(tcb->fd >= 0);
@@ -362,79 +337,44 @@ static inline void tcb_teminate_all(struct service_context *svc_ctx)
 		status = pthread_join(tcb->thid, &ret);
 		if (status != 0)
 			ErrPrint("Unable to join a thread: %s\n", strerror(status));
+		else
+			DbgPrint("Thread returns: %d\n", (int)ret);
 
 		free(tcb);
 	}
-	CRITICAL_SECTION_END(&svc_ctx->tcb_list_lock);
 }
 
 /*!
- * \NOTE
- * Packet consuming thread. service thread.
+ * \note
+ * SERVER THREAD
  */
-static void *service_main(void *data)
+static inline void tcb_destroy(struct service_context *svc_ctx, struct tcb *tcb)
 {
-	struct service_context *svc_ctx = data;
-	fd_set set;
-	int ret;
-	char evt_ch;
-	struct packet_info *packet_info;
+	void *ret;
+	int status;
 
-	while (1) {
-		FD_ZERO(&set);
-		FD_SET(svc_ctx->evt_pipe[EVT_READ], &set);
-		ret = select(svc_ctx->evt_pipe[EVT_READ] + 1, &set, NULL, NULL, NULL);
-		if (ret < 0) {
-			ret = -errno;
-			if (errno == EINTR) {
-				DbgPrint("INTERRUPTED\n");
-				continue;
-			}
-			ErrPrint("Error: %s\n",strerror(errno));
-			break;
-		} else if (ret == 0) {
-			ErrPrint("Timeout\n");
-			ret = -ETIMEDOUT;
-			break;
-		}
+	svc_ctx->tcb_list = eina_list_remove(svc_ctx->tcb_list, tcb);
+	/*!
+	 * ASSERT(tcb->fd >= 0);
+	 * Close the connection, and then collecting the return value of thread
+	 */
+	secure_socket_destroy_handle(tcb->fd);
 
-		if (FD_ISSET(svc_ctx->evt_pipe[EVT_READ], &set)) {
-			ErrPrint("Unexpected handler is toggled\n");
-			ret = -EINVAL;
-			break;
-		}
+	status = pthread_join(tcb->thid, &ret);
+	if (status != 0)
+		ErrPrint("Unable to join a thread: %s\n", strerror(status));
+	else
+		DbgPrint("Thread returns: %d\n", (int)ret);
 
-		if (read(svc_ctx->evt_pipe[EVT_READ], &evt_ch, sizeof(evt_ch)) != sizeof(evt_ch)) {
-			ErrPrint("Unable to read pipe: %s\n", strerror(errno));
-			ret = -EIO;
-			break;
-		}
-
-		if (evt_ch == EVT_END_CH) {
-			ErrPrint("Thread is terminated\n");
-			ret = 0;
-			break;
-		}
-
-		CRITICAL_SECTION_BEGIN(&svc_ctx->packet_list_lock);
-		packet_info = eina_list_nth(svc_ctx->packet_list, 0);
-		svc_ctx->packet_list = eina_list_remove(svc_ctx->packet_list, packet_info);
-		CRITICAL_SECTION_END(&svc_ctx->packet_list_lock);
-
-		ret = svc_ctx->service_thread_main(packet_info->tcb, packet_info->packet, svc_ctx->service_thread_data);
-		if (ret < 0)
-			ErrPrint("Service thread returns: %d\n", ret);
-
-		packet_destroy(packet_info->packet);
-		free(packet_info);
-	}
-
-	return (void *)ret;
+	free(tcb);
 }
 
 /*!
  * Accept new client connections
  * And create a new thread for service.
+ *
+ * Create Client threads & Destroying them
+ * SERVER THREAD
  */
 static void *server_main(void *data)
 {
@@ -443,11 +383,24 @@ static void *server_main(void *data)
 	int ret;
 	int client_fd;
 	struct tcb *tcb;
+	int fd;
+	char evt_ch;
+	Eina_List *l;
+	Eina_List *n;
+	struct packet_info *packet_info;
+
+	DbgPrint("Server thread is activated\n");
+	fd = svc_ctx->fd > svc_ctx->tcb_pipe[PIPE_READ] ? svc_ctx->fd : svc_ctx->tcb_pipe[PIPE_READ];
+	fd = fd > svc_ctx->evt_pipe[PIPE_READ] ? fd : svc_ctx->evt_pipe[PIPE_READ];
+	fd += 1;
 
 	while (1) {
 		FD_ZERO(&set);
 		FD_SET(svc_ctx->fd, &set);
-		ret = select(svc_ctx->fd + 1, &set, NULL, NULL, NULL);
+		FD_SET(svc_ctx->tcb_pipe[PIPE_READ], &set);
+		FD_SET(svc_ctx->evt_pipe[PIPE_READ], &set);
+
+		ret = select(fd, &set, NULL, NULL, NULL);
 		if (ret < 0) {
 			ret = -errno;
 			if (errno == EINTR) {
@@ -463,27 +416,97 @@ static void *server_main(void *data)
 		}
 
 		if (FD_ISSET(svc_ctx->fd, &set)) {
-			ErrPrint("Unexpected handler is toggled\n");
-			ret = -EINVAL;
-			break;
+			client_fd = secure_socket_get_connection_handle(svc_ctx->fd);
+			DbgPrint("New client connection arrived (%d)\n", client_fd);
+			if (client_fd < 0) {
+				ErrPrint("Failed to establish the client connection\n");
+				ret = -EFAULT;
+				break;
+			}
+
+			tcb = tcb_create(svc_ctx, client_fd);
+			if (!tcb)
+				secure_socket_destroy_handle(client_fd);
+			else
+				DbgPrint("Creating TCB[%p]\n", tcb);
+		} 
+
+		if (FD_ISSET(svc_ctx->tcb_pipe[PIPE_READ], &set)) {
+			if (read(svc_ctx->tcb_pipe[PIPE_READ], &tcb, sizeof(tcb)) != sizeof(tcb)) {
+				ErrPrint("Unable to read pipe: %s\n", strerror(errno));
+				ret = -EFAULT;
+				break;
+			}
+
+			DbgPrint("Destroying TCB[%p]\n", tcb);
+			/*!
+			 * at this time, the client thread can access this tcb.
+			 * how can I protect this TCB from deletion without disturbing the server thread?
+			 */
+			tcb_destroy(svc_ctx, tcb);
+		} 
+
+		if (FD_ISSET(svc_ctx->evt_pipe[PIPE_READ], &set)) {
+			if (read(svc_ctx->evt_pipe[PIPE_READ], &evt_ch, sizeof(evt_ch)) != sizeof(evt_ch)) {
+				ErrPrint("Unable to read pipe: %s\n", strerror(errno));
+				ret = -EFAULT;
+				break;
+			}
+
+			DbgPrint("Event CH: %c\n", evt_ch);
+
+			CRITICAL_SECTION_BEGIN(&svc_ctx->packet_list_lock);
+			packet_info = eina_list_nth(svc_ctx->packet_list, 0);
+			svc_ctx->packet_list = eina_list_remove(svc_ctx->packet_list, packet_info);
+			CRITICAL_SECTION_END(&svc_ctx->packet_list_lock);
+
+			/*!
+			 * \CRITICAL
+			 * What happens if the client thread is terminated, so the packet_info->tcb is deleted
+			 * while processing svc_ctx->service_thread_main?
+			 */
+			ret = svc_ctx->service_thread_main(packet_info->tcb, packet_info->packet, svc_ctx->service_thread_data);
+			if (ret < 0)
+				ErrPrint("Service thread returns: %d\n", ret);
+
+			packet_destroy(packet_info->packet);
+			free(packet_info);
 		}
 
-		client_fd = secure_socket_get_connection_handle(svc_ctx->fd);
-		DbgPrint("New client connection arrived (%d)\n", client_fd);
-		if (client_fd < 0) {
-			ErrPrint("Failed to establish the client connection\n");
-			ret = -EFAULT;
-			break;
-		}
-
-		tcb = tcb_create(svc_ctx, client_fd);
-		if (!tcb)
-			secure_socket_destroy_handle(client_fd);
+		/* If there is no such triggered FD? */
 	}
 
+	/*!
+	 * Consuming all pended packets before terminates server thread.
+	 *
+	 * If the server thread is terminated, we should flush all pended packets.
+	 * And we should services them.
+	 * While processing this routine, the mutex is locked.
+	 * So every other client thread will be slowed down, sequently, every clients can meet problems.
+	 * But in case of termination of server thread, there could be systemetic problem.
+	 * This only should be happenes while terminating the master daemon process.
+	 */
+	CRITICAL_SECTION_BEGIN(&svc_ctx->packet_list_lock);
+	EINA_LIST_FOREACH_SAFE(svc_ctx->packet_list, l, n, packet_info) {
+		ret = read(svc_ctx->evt_pipe[PIPE_READ], &evt_ch, sizeof(evt_ch));
+		DbgPrint("Flushing pipe: %d (%c)\n", ret, evt_ch);
+		svc_ctx->packet_list = eina_list_remove(svc_ctx->packet_list, packet_info);
+		ret = svc_ctx->service_thread_main(packet_info->tcb, packet_info->packet, svc_ctx->service_thread_data);
+		if (ret < 0)
+			ErrPrint("Service thread returns: %d\n", ret);
+		packet_destroy(packet_info->packet);
+		free(packet_info);
+	}
+	CRITICAL_SECTION_END(&svc_ctx->packet_list_lock);
+
+	tcb_teminate_all(svc_ctx);
 	return (void *)ret;
 }
 
+/*!
+ * \NOTE
+ * MAIN THREAD
+ */
 HAPI struct service_context *service_common_create(const char *addr, int (*service_thread_main)(struct tcb *tcb, struct packet *packet, void *data), void *data)
 {
 	int status;
@@ -494,7 +517,10 @@ HAPI struct service_context *service_common_create(const char *addr, int (*servi
 		return NULL;
 	}
 
-	svc_ctx = malloc(sizeof(*svc_ctx));
+	if (unlink(addr) < 0)
+		ErrPrint("[%s] - %s\n", addr, strerror(errno));
+
+	svc_ctx = calloc(1, sizeof(*svc_ctx));
 	if (!svc_ctx) {
 		ErrPrint("Heap: %s\n", strerror(errno));
 		return NULL;
@@ -522,80 +548,33 @@ HAPI struct service_context *service_common_create(const char *addr, int (*servi
 		return NULL;
 	}
 
+	if (pipe2(svc_ctx->tcb_pipe, O_NONBLOCK | O_CLOEXEC) < 0) {
+		ErrPrint("pipe: %s\n", strerror(errno));
+		CLOSE_PIPE(svc_ctx->evt_pipe);
+		secure_socket_destroy_handle(svc_ctx->fd);
+		free(svc_ctx);
+		return NULL;
+	}
+
 	status = pthread_mutex_init(&svc_ctx->packet_list_lock, NULL);
 	if (status != 0) {
 		ErrPrint("Unable to create a mutex: %s\n", strerror(status));
-		status = close(svc_ctx->evt_pipe[EVT_READ]);
-		if (status < 0)
-			ErrPrint("Error: %s\n", strerror(errno));
-		status = close(svc_ctx->evt_pipe[EVT_WRITE]);
-		if (status < 0)
-			ErrPrint("Error: %s\n", strerror(errno));
+		CLOSE_PIPE(svc_ctx->evt_pipe);
+		CLOSE_PIPE(svc_ctx->tcb_pipe);
 		secure_socket_destroy_handle(svc_ctx->fd);
 		free(svc_ctx);
 		return NULL;
 	}
 
-	status = pthread_mutex_init(&svc_ctx->tcb_list_lock, NULL);
-	if (status != 0) {
-		ErrPrint("Unable to initiate the mutex: %s\n", strerror(status));
-		status = pthread_mutex_destroy(&svc_ctx->packet_list_lock);
-		if (status != 0)
-			ErrPrint("Error: %s\n", strerror(status));
-		status = close(svc_ctx->evt_pipe[EVT_READ]);
-		if (status < 0)
-			ErrPrint("Error: %s\n", strerror(errno));
-		status = close(svc_ctx->evt_pipe[EVT_WRITE]);
-		if (status < 0)
-			ErrPrint("Error: %s\n", strerror(errno));
-		secure_socket_destroy_handle(svc_ctx->fd);
-		free(svc_ctx);
-		return NULL;
-	}
-
-	status = pthread_create(&svc_ctx->thid, NULL, server_main, svc_ctx);
+	DbgPrint("Creating server thread\n");
+	status = pthread_create(&svc_ctx->server_thid, NULL, server_main, svc_ctx);
 	if (status != 0) {
 		ErrPrint("Unable to create a thread for shortcut service: %s\n", strerror(status));
-		status = pthread_mutex_destroy(&svc_ctx->tcb_list_lock);
-		if (status != 0)
-			ErrPrint("Error: %s\n", strerror(status));
 		status = pthread_mutex_destroy(&svc_ctx->packet_list_lock);
 		if (status != 0)
 			ErrPrint("Error: %s\n", strerror(status));
-		status = close(svc_ctx->evt_pipe[EVT_READ]);
-		if (status != 0)
-			ErrPrint("Error: %s\n", strerror(status));
-		status = close(svc_ctx->evt_pipe[EVT_WRITE]);
-		if (status != 0)
-			ErrPrint("Error: %s\n", strerror(status));
-		secure_socket_destroy_handle(svc_ctx->fd);
-		free(svc_ctx);
-		return NULL;
-	}
-
-	status = pthread_create(&svc_ctx->service_thid, NULL, service_main, svc_ctx);
-	if (status != 0) {
-		void *ret;
-		ErrPrint("Unable to create a thread for shortcut service: %s\n", strerror(status));
-
-		secure_socket_destroy_handle(svc_ctx->fd);
-
-		status = pthread_join(svc_ctx->thid, &ret);
-		if (status != 0)
-			ErrPrint("Error: %s\n", strerror(status));
-
-		status = pthread_mutex_destroy(&svc_ctx->tcb_list_lock);
-		if (status != 0)
-			ErrPrint("Error: %s\n", strerror(status));
-		status = pthread_mutex_destroy(&svc_ctx->packet_list_lock);
-		if (status != 0)
-			ErrPrint("Error: %s\n", strerror(status));
-		status = close(svc_ctx->evt_pipe[EVT_READ]);
-		if (status < 0)
-			ErrPrint("Error: %s\n", strerror(errno));
-		status = close(svc_ctx->evt_pipe[EVT_WRITE]);
-		if (status < 0)
-			ErrPrint("Error: %s\n", strerror(errno));
+		CLOSE_PIPE(svc_ctx->evt_pipe);
+		CLOSE_PIPE(svc_ctx->tcb_pipe);
 		secure_socket_destroy_handle(svc_ctx->fd);
 		free(svc_ctx);
 		return NULL;
@@ -604,11 +583,14 @@ HAPI struct service_context *service_common_create(const char *addr, int (*servi
 	return svc_ctx;
 }
 
+/*!
+ * \note
+ * MAIN THREAD
+ */
 HAPI int service_common_destroy(struct service_context *svc_ctx)
 {
 	int status;
 	void *ret;
-	char evt_ch = EVT_END_CH;
 
 	if (!svc_ctx)
 		return -EINVAL;
@@ -618,38 +600,27 @@ HAPI int service_common_destroy(struct service_context *svc_ctx)
 	 * Terminate server thread
 	 */
 	secure_socket_destroy_handle(svc_ctx->fd);
-	status = pthread_join(svc_ctx->thid, &ret);
+
+	status = pthread_join(svc_ctx->server_thid, &ret);
 	if (status != 0)
 		ErrPrint("Join: %s\n", strerror(status));
-	/*!
-	 * \note
-	 * Terminate all client threads.
-	 */
-	tcb_teminate_all(svc_ctx);
-
-	/* Emit a finish event */
-	if (write(svc_ctx->evt_pipe[EVT_WRITE], &evt_ch, sizeof(evt_ch)) == sizeof(evt_ch))
-		ErrPrint("write: %s\n", strerror(errno));
-
-	/* Waiting */
-	status = pthread_join(svc_ctx->service_thid, &ret);
-	if (status != 0)
-		ErrPrint("Join: %s\n", strerror(status));
-
-	status = pthread_mutex_destroy(&svc_ctx->tcb_list_lock);
-	if (status != 0)
-		ErrPrint("Unable to destroy a mutex: %s\n", strerror(status));
+	else
+		DbgPrint("Thread returns: %d\n", (int)ret);
 
 	status = pthread_mutex_destroy(&svc_ctx->packet_list_lock);
 	if (status != 0)
 		ErrPrint("Unable to destroy a mutex: %s\n", strerror(status));
 
-	status = close(svc_ctx->evt_pipe[EVT_WRITE]);
-	status = close(svc_ctx->evt_pipe[EVT_READ]);
+	CLOSE_PIPE(svc_ctx->evt_pipe);
+	CLOSE_PIPE(svc_ctx->tcb_pipe);
 	free(svc_ctx);
 	return 0;
 }
 
+/*!
+ * \note
+ * SERVER THREAD
+ */
 HAPI int tcb_fd(struct tcb *tcb)
 {
 	if (!tcb)
@@ -658,6 +629,10 @@ HAPI int tcb_fd(struct tcb *tcb)
 	return tcb->fd;
 }
 
+/*!
+ * \note
+ * SERVER THREAD
+ */
 HAPI int tcb_client_type(struct tcb *tcb)
 {
 	if (!tcb)
@@ -666,15 +641,24 @@ HAPI int tcb_client_type(struct tcb *tcb)
 	return tcb->type;
 }
 
+/*!
+ * \note
+ * SERVER THREAD
+ */
 HAPI int tcb_client_type_set(struct tcb *tcb, enum tcb_type type)
 {
 	if (!tcb)
 		return -EINVAL;
 
+	DbgPrint("TCB[%p] Client type is changed to %d from %d\n", tcb, type, tcb->type);
 	tcb->type = type;
 	return 0;
 }
 
+/*!
+ * \note
+ * SERVER THREAD
+ */
 HAPI struct service_context *tcb_svc_ctx(struct tcb *tcb)
 {
 	if (!tcb)
@@ -683,14 +667,26 @@ HAPI struct service_context *tcb_svc_ctx(struct tcb *tcb)
 	return tcb->svc_ctx;
 }
 
+/*!
+ * \note
+ * SERVER THREAD
+ */
 HAPI int service_common_unicast_packet(struct tcb *tcb, struct packet *packet)
 {
+	struct service_context *svc_ctx;
 	if (!tcb || !packet)
 		return -EINVAL;
 
+	svc_ctx = tcb->svc_ctx;
+
+	DbgPrint("Unicast packet\n");
 	return secure_socket_send(tcb->fd, (void *)packet_data(packet), packet_size(packet));
 }
 
+/*!
+ * \note
+ * SERVER THREAD
+ */
 HAPI int service_common_multicast_packet(struct tcb *tcb, struct packet *packet, int type)
 {
 	Eina_List *l;
@@ -703,17 +699,18 @@ HAPI int service_common_multicast_packet(struct tcb *tcb, struct packet *packet,
 
 	svc_ctx = tcb->svc_ctx;
 
-	CRITICAL_SECTION_BEGIN(&svc_ctx->tcb_list_lock);
+	DbgPrint("Multicasting packets\n");
 	EINA_LIST_FOREACH(svc_ctx->tcb_list, l, target) {
-		if (target == tcb || target->type != type)
+		if (target == tcb || target->type != type) {
+			DbgPrint("Skip target: %p(%d) == %p/%d\n", target, target->type, tcb, type);
 			continue;
+		}
 
 		ret = secure_socket_send(target->fd, (void *)packet_data(packet), packet_size(packet));
 		if (ret < 0)
 			ErrPrint("Failed to send packet: %d\n", ret);
 	}
-	CRITICAL_SECTION_END(&svc_ctx->tcb_list_lock);
-
+	DbgPrint("Finish to multicast packet\n");
 	return 0;
 }
 

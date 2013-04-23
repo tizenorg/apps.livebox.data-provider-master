@@ -173,7 +173,7 @@ static int slave_fault_cb(struct slave_node *slave, void *data)
 		return 0;
 	}
 
-	package_set_fault_info(info, util_timestamp(), slave_name(slave), __func__);
+	(void)package_set_fault_info(info, util_timestamp(), slave_name(slave), __func__);
 	fault_broadcast_info(package_name(info), slave_name(slave), __func__);
 
 	DbgPrint("Slave critical fault - package: %s (by slave fault %s\n", package_name(info), slave_name(slave));

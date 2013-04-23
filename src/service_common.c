@@ -120,17 +120,23 @@ static void *client_packet_pump_main(void *data)
 				ret = 0;
 				continue;
 			}
-			ErrPrint("Error: %s\n",strerror(errno));
+			ErrPrint("Error: %s\n", strerror(errno));
+			free(ptr);
+			ptr = NULL;
 			break;
 		} else if (ret == 0) {
 			ErrPrint("Timeout\n");
 			ret = -ETIMEDOUT;
+			free(ptr);
+			ptr = NULL;
 			break;
 		}
 
 		if (!FD_ISSET(tcb->fd, &set)) {
 			ErrPrint("Unexpected handler is toggled\n");
 			ret = -EINVAL;
+			free(ptr);
+			ptr = NULL;
 			break;
 		}
 		
@@ -158,6 +164,7 @@ static void *client_packet_pump_main(void *data)
 				if (ret == 0)
 					ret = -ECANCELED;
 				free(ptr);
+				ptr = NULL;
 				break;
 			}
 
@@ -167,6 +174,7 @@ static void *client_packet_pump_main(void *data)
 			if (recv_offset == size) {
 				packet = packet_build(packet, packet_offset, ptr, size);
 				free(ptr);
+				ptr = NULL;
 				if (!packet) {
 					ret = -EFAULT;
 					break;
@@ -175,7 +183,7 @@ static void *client_packet_pump_main(void *data)
 				packet_offset += recv_offset;
 
 				size = packet_payload_size(packet);
-				if (size == 0) {
+				if (size <= 0) {
 					recv_state = RECV_DONE;
 					recv_offset = 0;
 					break;
@@ -197,6 +205,7 @@ static void *client_packet_pump_main(void *data)
 				if (ret == 0)
 					ret = -ECANCELED;
 				free(ptr);
+				ptr = NULL;
 				break;
 			}
 
@@ -206,6 +215,7 @@ static void *client_packet_pump_main(void *data)
 			if (recv_offset == size) {
 				packet = packet_build(packet, packet_offset, ptr, size);
 				free(ptr);
+				ptr = NULL;
 				if (!packet) {
 					ret = -EFAULT;
 					break;

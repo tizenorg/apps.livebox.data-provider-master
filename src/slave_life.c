@@ -1,7 +1,7 @@
 /*
  * Copyright 2013  Samsung Electronics Co., Ltd
  *
- * Licensed under the Flora License, Version 1.0 (the "License");
+ * Licensed under the Flora License, Version 1.1 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
@@ -509,8 +509,11 @@ HAPI int slave_activated(struct slave_node *slave)
 	slave_set_reactivation(slave, 0);
 	slave_set_reactivate_instances(slave, 0);
 
-	if (gettimeofday(&slave->activated_at, NULL) < 0)
+	if (gettimeofday(&slave->activated_at, NULL) < 0) {
 		ErrPrint("Failed to get time of day: %s\n", strerror(errno));
+		slave->activated_at.tv_sec = 0;
+		slave->activated_at.tv_usec = 0;
+	}
 
 	if (slave->activate_timer) {
 		ecore_timer_del(slave->activate_timer);

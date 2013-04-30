@@ -1,7 +1,7 @@
 /*
  * Copyright 2013  Samsung Electronics Co., Ltd
  *
- * Licensed under the Flora License, Version 1.0 (the "License");
+ * Licensed under the Flora License, Version 1.1 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
@@ -129,7 +129,11 @@ struct script_info {
 
 	struct script_port *port;
 	void *port_data;
+
+	Eina_List *cached_blocks;
 };
+
+static inline void consuming_parsed_block(int lineno, struct inst_info *inst, int is_pd, struct block *block);
 
 static inline struct script_port *find_port(const char *magic_id)
 {
@@ -142,6 +146,18 @@ static inline struct script_port *find_port(const char *magic_id)
 	}
 
 	return NULL;
+}
+
+static inline void delete_block(struct block *block)
+{
+	DbgFree(block->file);
+	DbgFree(block->type);
+	DbgFree(block->part);
+	DbgFree(block->data);
+	DbgFree(block->option);
+	DbgFree(block->id);
+	DbgFree(block->target_id);
+	DbgFree(block);
 }
 
 static void render_pre_cb(void *data, Evas *e, void *event_info)
@@ -230,6 +246,15 @@ int script_signal_emit(Evas *e, const char *part, const char *signal, double sx,
 	return ret;
 }
 
+static inline void flushing_cached_block(struct script_info *info)
+{
+	struct block *block;
+
+	EINA_LIST_FREE(info->cached_blocks, block) {
+		consuming_parsed_block(-1, info->inst, (instance_pd_script(info->inst) == info), block);
+	}
+}
+
 HAPI int script_handler_load(struct script_info *info, int is_pd)
 {
 	int ret;
@@ -270,6 +295,7 @@ HAPI int script_handler_load(struct script_info *info, int is_pd)
 			return LB_STATUS_ERROR_FAULT;
 		}
 		info->loaded = 1;
+		flushing_cached_block(info);
 		script_signal_emit(e, util_uri_to_path(instance_id(info->inst)),
 				is_pd ? "pd,show" : "lb,show", 0.0f, 0.0f, 0.0f, 0.0f);
 	} else {
@@ -371,6 +397,7 @@ HAPI struct script_info *script_handler_create(struct inst_info *inst, const cha
 
 HAPI int script_handler_destroy(struct script_info *info)
 {
+	struct block *block;
 	if (!info || !info->port) {
 		ErrPrint("port is not valid\n");
 		return LB_STATUS_ERROR_INVALID;
@@ -385,6 +412,10 @@ HAPI int script_handler_destroy(struct script_info *info)
 		ErrPrint("Failed to destroy port, but go ahead\n");
 
 	fb_destroy(info->fb);
+
+	EINA_LIST_FREE(info->cached_blocks, block) {
+		delete_block(block);
+	}
 	DbgFree(info);
 	return LB_STATUS_SUCCESS;
 }
@@ -640,14 +671,12 @@ HAPI int script_handler_resize(struct script_info *info, int w, int h)
 			ErrPrint("Evas(nil) resize to %dx%d\n", w, h);
 	}
 
-	if (info->w != w || info->h != h) {
-		if (instance_lb_script(info->inst) == info) {
-			instance_set_lb_info(info->inst, w, h, PRIORITY_NO_CHANGE, CONTENT_NO_CHANGE, TITLE_NO_CHANGE);
-		} else if (instance_pd_script(info->inst) == info) {
-			instance_set_pd_info(info->inst, w, h);
-		} else {
-			ErrPrint("Script is not known\n");
-		}
+	if (instance_lb_script(info->inst) == info) {
+		instance_set_lb_size(info->inst, w, h);
+	} else if (instance_pd_script(info->inst) == info) {
+		instance_set_pd_size(info->inst, w, h);
+	} else {
+		ErrPrint("Script is not known\n");
 	}
 
 	info->w = w;
@@ -706,43 +735,14 @@ static int update_info(struct inst_info *inst, struct block *block, int is_pd)
 	return LB_STATUS_SUCCESS;
 }
 
-HAPI int script_handler_parse_desc(const char *pkgname, const char *id, const char *descfile, int is_pd)
+static inline void consuming_parsed_block(int lineno, struct inst_info *inst, int is_pd, struct block *block)
 {
-	struct inst_info *inst;
-	FILE *fp;
-	int ch;
-	int lineno;
-	enum state {
-		UNKNOWN = 0x10,
-		BLOCK_OPEN = 0x11,
-		FIELD = 0x12,
-		VALUE = 0x13,
-		BLOCK_CLOSE = 0x14,
-
-		VALUE_TYPE = 0x00,
-		VALUE_PART = 0x01,
-		VALUE_DATA = 0x02,
-		VALUE_FILE = 0x03,
-		VALUE_OPTION = 0x04,
-		VALUE_ID = 0x05,
-		VALUE_TARGET = 0x06,
-	};
-	const char *field_name[] = {
-		"type",
-		"part",
-		"data",
-		"file",
-		"option",
-		"id",
-		"target",
-		NULL
-	};
-	enum state state;
-	register int field_idx;
-	register int idx = 0;
-	register int i;
-	struct block *block;
-	struct {
+	struct script_info *info;
+	/*!
+	 * To speed up, use the static.
+	 * But this will increase the memory slightly.
+	 */
+	static struct {
 		const char *type;
 		int (*handler)(struct inst_info *inst, struct block *block, int is_pd);
 	} handlers[] = {
@@ -784,6 +784,74 @@ HAPI int script_handler_parse_desc(const char *pkgname, const char *id, const ch
 		},
 	};
 
+	info = is_pd ? instance_pd_script(inst) : instance_lb_script(inst);
+	if (!info) {
+		ErrPrint("info is NIL (%d, %s)\n", is_pd, instance_id(inst));
+		goto free_out;
+	}
+
+	if (script_handler_is_loaded(info)) {
+		register int i = 0;
+
+		while (handlers[i].type) {
+			if (!strcasecmp(handlers[i].type, block->type)) {
+				handlers[i].handler(inst, block, is_pd);
+				break;
+			}
+			i++;
+		}
+
+		if (!handlers[i].type)
+			ErrPrint("%d: Unknown block type: %s\n", lineno, block->type);
+
+		goto free_out;
+	} else {
+		info->cached_blocks = eina_list_append(info->cached_blocks, block);
+		DbgPrint("%d: Block is cached (%p), %d, %s\n", lineno, block, eina_list_count(info->cached_blocks), instance_id(inst));
+	}
+
+	return;
+
+free_out:
+	delete_block(block);
+}
+
+HAPI int script_handler_parse_desc(const char *pkgname, const char *id, const char *descfile, int is_pd)
+{
+	struct inst_info *inst;
+	FILE *fp;
+	int ch;
+	int lineno;
+	enum state {
+		UNKNOWN = 0x10,
+		BLOCK_OPEN = 0x11,
+		FIELD = 0x12,
+		VALUE = 0x13,
+		BLOCK_CLOSE = 0x14,
+
+		VALUE_TYPE = 0x00,
+		VALUE_PART = 0x01,
+		VALUE_DATA = 0x02,
+		VALUE_FILE = 0x03,
+		VALUE_OPTION = 0x04,
+		VALUE_ID = 0x05,
+		VALUE_TARGET = 0x06,
+	};
+	const char *field_name[] = {
+		"type",
+		"part",
+		"data",
+		"file",
+		"option",
+		"id",
+		"target",
+		NULL
+	};
+	enum state state;
+	register int field_idx;
+	register int idx = 0;
+	struct block *block;
+
 	block = NULL;
 	inst = package_find_instance_by_id(pkgname, id);
 	if (!inst) {
@@ -796,6 +864,8 @@ HAPI int script_handler_parse_desc(const char *pkgname, const char *id, const ch
 		ErrPrint("Error: %s [%s]\n", descfile, strerror(errno));
 		return LB_STATUS_ERROR_IO;
 	}
+
+	DbgPrint("Parsing %s\n", descfile);
 
 	state = UNKNOWN;
 	field_idx = 0;
@@ -1127,28 +1197,7 @@ HAPI int script_handler_parse_desc(const char *pkgname, const char *id, const ch
 				}
 			}
 
-			i = 0;
-			while (handlers[i].type) {
-				if (!strcasecmp(handlers[i].type, block->type)) {
-					handlers[i].handler(inst, block, is_pd);
-					break;
-				}
-				i++;
-			}
-
-			if (!handlers[i].type)
-				ErrPrint("%d: Unknown block type: %s\n", lineno, block->type);
-
-			DbgFree(block->file);
-			DbgFree(block->type);
-			DbgFree(block->part);
-			DbgFree(block->data);
-			DbgFree(block->option);
-			DbgFree(block->id);
-			DbgFree(block->target_id);
-			DbgFree(block);
-			block = NULL;
-
+			consuming_parsed_block(lineno, inst, is_pd, block);
 			state = UNKNOWN;
 			break;
 
@@ -1167,16 +1216,8 @@ HAPI int script_handler_parse_desc(const char *pkgname, const char *id, const ch
 
 errout:
 	ErrPrint("Parse error at %d file %s\n", lineno, util_basename(descfile));
-	if (block) {
-		DbgFree(block->file);
-		DbgFree(block->type);
-		DbgFree(block->part);
-		DbgFree(block->data);
-		DbgFree(block->option);
-		DbgFree(block->id);
-		DbgFree(block->target_id);
-		DbgFree(block);
-	}
+	if (block)
+		delete_block(block);
 	fclose(fp);
 	return LB_STATUS_ERROR_INVALID;
 }

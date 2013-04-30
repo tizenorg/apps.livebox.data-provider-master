@@ -1,7 +1,7 @@
 /*
  * Copyright 2013  Samsung Electronics Co., Ltd
  *
- * Licensed under the Flora License, Version 1.0 (the "License");
+ * Licensed under the Flora License, Version 1.1 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
@@ -1026,13 +1026,14 @@ HAPI int buffer_handler_pixmap_unref(void *buffer_ptr)
 
 	s_info.pixmap_list = eina_list_remove(s_info.pixmap_list, buffer);
 
+	info = buffer->info;
+
 	if (destroy_gem(buffer) < 0)
 		ErrPrint("Failed to destroy gem buffer\n");
 
 	if (destroy_pixmap(buffer) < 0)
 		ErrPrint("Failed to destroy pixmap\n");
 
-	info = buffer->info;
 	if (info && info->buffer == buffer)
 		info->buffer = NULL;
 

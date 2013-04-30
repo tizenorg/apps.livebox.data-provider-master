@@ -1,7 +1,7 @@
 /*
  * Copyright 2013  Samsung Electronics Co., Ltd
  *
- * Licensed under the Flora License, Version 1.0 (the "License");
+ * Licensed under the Flora License, Version 1.1 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
@@ -20,7 +20,7 @@
 #include <errno.h>
 #include <unistd.h>
 #include <stdlib.h>
-#include <sys/statvfs.h>
+#include <sys/vfs.h>
 #include <sys/types.h>
 #include <dirent.h>
 #include <ctype.h>
@@ -191,18 +191,21 @@ HAPI const char *util_basename(const char *name)
 	return length <= 0 ? name : (name + length + (name[length] == '/'));
 }
 
-HAPI unsigned long util_free_space(const char *path)
+/*!
+ * Return size of stroage in MegaBytes unit.
+ */
+HAPI unsigned long long util_free_space(const char *path)
 {
-	struct statvfs st;
-	unsigned long space;
+	struct statfs st;
+	unsigned long long space;
 
-	if (statvfs(path, &st) < 0) {
+	if (statfs(path, &st) < 0) {
 		ErrPrint("statvfs: %s\n", strerror(errno));
 		return 0lu;
 	}
 
-	space = st.f_bsize * st.f_bfree;
-	DbgPrint("Available size: %lu, f_bsize: %lu, f_bfree: %lu\n", space, st.f_bsize, st.f_bfree);
+	space = (unsigned long long)st.f_bsize * (unsigned long long)st.f_bavail;
+	DbgPrint("Available size: %llu, f_bsize: %lu, f_bavail: %lu\n", space, st.f_bsize, st.f_bavail);
 	/*!
 	 * \note
 	 * Must have to check the overflow
@@ -348,23 +351,29 @@ HAPI double util_time_delay_for_compensation(double period)
 	unsigned long long curtime;
 	unsigned long long _period;
 	unsigned long long remain;
-	unsigned int sec;
-	unsigned int usec;
 	double ret;
 
-	gettimeofday(&tv, NULL);
-	curtime = (unsigned long long)tv.tv_sec * 1000000llu + (unsigned long long)tv.tv_usec;
+	if (period == 0.0f) {
+		DbgPrint("Period is ZERO\n");
+		return 0.0f;
+	}
 
-	sec = (unsigned int)period;
-	usec = (period - sec) * 1000000;
-	_period = (unsigned long long)sec * 1000000llu + usec;
+	if (gettimeofday(&tv, NULL) < 0){
+		ErrPrint("gettimeofday: %s\n", strerror(errno));
+		return period;
+	}
+
+	curtime = (unsigned long long)tv.tv_sec * 1000000llu + (unsigned long long)tv.tv_usec;
+	_period = (unsigned long long)(period * (double)1000000);
+	if (_period == 0llu) {
+		ErrPrint("%lf <> %llu\n", period, _period);
+		return period;
+	}
 
 	remain = curtime % _period;
 
-	sec = (unsigned int)(remain / 1000000llu);
-	usec = (unsigned int)(remain % 1000000llu);
-
-	ret = (double)sec + (double)usec / 1000000.0f;
+	ret = (double)remain / (double)1000000;
+	DbgPrint("curtime: %llu, _period: %llu, remain: %llu, ret: %lf, result: %lf\n", curtime, _period, remain, ret, period - ret);
 	return period - ret;
 }
 

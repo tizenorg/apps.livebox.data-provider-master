@@ -5645,6 +5645,10 @@ out:
 
 static Eina_Bool lazy_pd_created_cb(void *data)
 {
+	/*!
+	 * After unref instance first,
+	 * if the instance is not destroyed, try to notify the created PD event to the client.
+	 */
 	if (instance_unref(data)) {
 		int ret;
 		ret = instance_client_pd_created(data, LB_STATUS_SUCCESS);
@@ -5807,6 +5811,14 @@ static struct packet *client_create_pd(pid_t pid, int handle, const struct packe
 				 * the event correctly.
 				 */
 				inst = instance_ref(inst); /* To guarantee the inst */
+
+				/*!
+				 * \note
+				 * At here, we don't need to rememeber the timer object.
+				 * Even if the timer callback is called, after the instance is destroyed.
+				 * lazy_pd_created_cb will decrease the instance refcnt first.
+				 * At that time, if the instance is released, the timer callback will do nothing.
+				 */
 				if (!ecore_timer_add(DELAY_TIME, lazy_pd_created_cb, inst)) {
 					instance_unref(inst);
 					script_handler_unload(instance_pd_script(inst), 1);

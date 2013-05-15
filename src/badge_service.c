@@ -269,6 +269,10 @@ static int service_thread_main(struct tcb *tcb, struct packet *packet, void *dat
 	};
 
 	DbgPrint("TCB: %p, Packet: %p\n", tcb, packet);
+	if (!packet) {
+		DbgPrint("TCB: %p is terminated\n", tcb);
+		return 0;
+	}
 
 	command = packet_command(packet);
 	if (!command) {

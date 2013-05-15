@@ -22,6 +22,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <errno.h>
+#include <locale.h>
 
 #include <vconf.h>
 #include <dlog.h>
@@ -80,24 +81,91 @@ static void power_off_cb(keynode_t *node, void *user_data)
 	}
 }
 
+static void region_changed_cb(keynode_t *node, void *user_data)
+{
+        char *region;
+        char *r;
+
+        region = vconf_get_str(VCONFKEY_REGIONFORMAT);
+        if (!region)
+		return;
+
+	setenv("LC_CTYPE", region, 1);
+	setenv("LC_NUMERIC", region, 1);
+	setenv("LC_TIME", region, 1);
+	setenv("LC_COLLATE", region, 1);
+	setenv("LC_MONETARY", region, 1);
+	setenv("LC_PAPER", region, 1);
+	setenv("LC_NAME", region, 1);
+	setenv("LC_ADDRESS", region, 1);
+	setenv("LC_TELEPHONE", region, 1);
+	setenv("LC_MEASUREMENT", region, 1);
+	setenv("LC_IDENTIFICATION", region, 1);
+
+	r = setlocale(LC_ALL, "");
+	if (r == NULL)
+		ErrPrint("Failed to change region\n");
+
+	free(region);
+}
+
+static void lang_changed_cb(keynode_t *node, void *user_data)
+{
+        char *lang;
+       	char *r;
+
+        lang = vconf_get_str(VCONFKEY_LANGSET);
+        if (!lang)
+		return;
+
+	setenv("LANG", lang, 1);
+	setenv("LC_MESSAGES", lang, 1);
+
+	r = setlocale(LC_ALL, "");
+	if (!r)
+		ErrPrint("Failed to change locale\n");
+
+	DbgPrint("Locale: %s\n", setlocale(LC_ALL, NULL));
+	free(lang);
+}
+
 HAPI int setting_init(void)
 {
 	int ret;
 
 	ret = vconf_notify_key_changed(VCONFKEY_PM_STATE, lcd_state_cb, NULL);
 	if (ret < 0)
-		ErrPrint("Failed to add vconf for lock state\n");
+		ErrPrint("Failed to add vconf for lock state: %d\n", ret);
 
 	ret = vconf_notify_key_changed(VCONFKEY_SYSMAN_POWER_OFF_STATUS, power_off_cb, NULL);
 	if (ret < 0)
-		ErrPrint("Failed to add vconf for power state\n");
+		ErrPrint("Failed to add vconf for power state: %d \n", ret);
 
+	ret = vconf_notify_key_changed(VCONFKEY_LANGSET, lang_changed_cb, NULL);
+	if (ret < 0)
+		ErrPrint("Failed to add vconf for lang change: %d\n", ret);
+
+	ret = vconf_notify_key_changed(VCONFKEY_REGIONFORMAT, region_changed_cb, NULL);
+	if (ret < 0)
+		ErrPrint("Failed to add vconf for region change: %d\n", ret);
+
+	lang_changed_cb(NULL, NULL);
+	region_changed_cb(NULL, NULL);
 	return ret;
 }
 
 HAPI int setting_fini(void)
 {
 	int ret;
+
+	ret = vconf_ignore_key_changed(VCONFKEY_REGIONFORMAT, region_changed_cb);
+	if (ret < 0)
+		ErrPrint("Failed to ignore vconf key (%d)\n", ret);
+
+	ret = vconf_ignore_key_changed(VCONFKEY_LANGSET, lang_changed_cb);
+	if (ret < 0)
+		ErrPrint("Failed to ignore vconf key (%d)\n", ret);
+
 	ret = vconf_ignore_key_changed(VCONFKEY_PM_STATE, lcd_state_cb);
 	if (ret < 0)
 		ErrPrint("Failed to ignore vconf key (%d)\n", ret);
@@ -105,6 +173,7 @@ HAPI int setting_fini(void)
 	ret = vconf_ignore_key_changed(VCONFKEY_SYSMAN_POWER_OFF_STATUS, power_off_cb);
 	if (ret < 0)
 		ErrPrint("Failed to ignore vconf key (%d)\n", ret);
+
 	return ret;
 }
 

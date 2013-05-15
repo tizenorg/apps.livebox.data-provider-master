@@ -21,6 +21,7 @@ enum tcb_type {
 
 struct tcb;
 struct service_context;
+struct service_event_item;
 
 extern int tcb_fd(struct tcb *tcb);
 extern struct service_context *tcb_svc_ctx(struct tcb *tcb);
@@ -32,5 +33,8 @@ extern int service_common_destroy(struct service_context *svc_ctx);
 
 extern int service_common_multicast_packet(struct tcb *tcb, struct packet *packet, int type);
 extern int service_common_unicast_packet(struct tcb *tcb, struct packet *packet);
+
+extern struct service_event_item *service_common_add_timer(struct service_context *svc_ctx, double timer, int (*timer_cb)(struct service_context *svc_cx, void *data), void *data);
+extern int service_common_del_timer(struct service_context *svc_ctx, struct service_event_item *item);
 
 /* End of a file */

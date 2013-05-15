@@ -10,6 +10,10 @@
 		</provide>
 		<request>
 			<smack request="sys-assert::core" type="rwxat" />
+			<!--
+			<smack request="notification::db" type="rw" />
+			<smack request="badge::db" type="rw" />
+			-->
 		</request>
 		<permit>
 			<smack permit="dbus" type="rx" />
@@ -47,8 +51,9 @@
 		<!-- Init script -->
 		<filesystem path="/etc/rc.d/init.d/data-provider-master" label="_" exec_label="none" />
 		<filesystem path="/etc/rc.d/rc3.d/S99data-provider-master" label="_" exec_label="none" />
-		<filesystem path="/usr/lib/systemd/user/data-provider-master.service" label="_" />
-		<filesystem path="/usr/lib/systemd/user/tizen-middleware.target.wants/data-provider-master.service" label="_" />
+
+		<filesystem path="/usr/lib/systemd/system/data-provider-master.service" label="_" />
+		<filesystem path="/usr/lib/systemd/system/multi-user.target.wants/data-provider-master.service" label="_" />
 
 		<!-- Package manager plugin -->
 		<filesystem path="/usr/etc/package-manager/parserlib/liblivebox.so" label="_" />

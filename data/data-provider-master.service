@@ -16,7 +16,8 @@
 
 [Unit]
 Description=Data Provider daemon
-After=xorg.target
+After=rc-sdlevelinit.service
+Requires=rc-sdlevelinit.service
 
 [Service]
 Environment=BUFMGR_LOCK_TYPE="once"
@@ -24,6 +25,7 @@ Environment=BUFMGR_MAP_CACHE="true"
 Type=simple
 ExecStart=/usr/bin/data-provider-master
 RestartSec=1
+Restart=restart-always
 
 [Install]
-WantedBy=tizen-middleware.target
+WantedBy=multi-user.target

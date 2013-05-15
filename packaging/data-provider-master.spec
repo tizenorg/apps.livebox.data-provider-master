@@ -1,6 +1,6 @@
 Name: data-provider-master
 Summary: Master service provider for liveboxes.
-Version: 0.23.0
+Version: 0.23.2
 Release: 1
 Group: HomeTF/Livebox
 License: Flora License
@@ -57,11 +57,12 @@ mkdir -p %{buildroot}/opt/usr/share/live_magazine/reader
 mkdir -p %{buildroot}/opt/usr/share/live_magazine/always
 mkdir -p %{buildroot}/opt/dbspace
 mkdir -p %{buildroot}/%{_sysconfdir}/rc.d/rc3.d
-mkdir -p %{buildroot}/%{_libdir}/systemd/user/tizen-middleware.target.wants
+mkdir -p %{buildroot}%{_libdir}/systemd/system/multi-user.target.wants
 touch %{buildroot}/opt/dbspace/.livebox.db
 touch %{buildroot}/opt/dbspace/.livebox.db-journal
 ln -sf %{_sysconfdir}/rc.d/init.d/data-provider-master %{buildroot}/%{_sysconfdir}/rc.d/rc3.d/S99data-provider-master
-ln -sf %{_libdir}/systemd/user/data-provider-master.service %{buildroot}/%{_libdir}/systemd/user/tizen-middleware.target.wants/data-provider-master.service
+ln -sf ../data-provider-master.service %{buildroot}%{_libdir}/systemd/system/multi-user.target.wants/data-provider-master.service
+
 
 %pre
 # Executing the stop script for stopping the service of installed provider (old version)
@@ -82,7 +83,7 @@ chown 0:5000 /opt/dbspace/.livebox.db
 chmod 640 /opt/dbspace/.livebox.db
 chown 0:5000 /opt/dbspace/.livebox.db-journal
 chmod 640 /opt/dbspace/.livebox.db-journal
-vconftool set -t bool "memory/data-provider-master/started" 0 -i -u 5000 -f
+vconftool set -t bool "memory/data-provider-master/started" 0 -i -u 5000 -f -s system::vconf_system
 echo "Successfully installed. Please start a daemon again manually"
 echo "%{_sysconfdir}/init.d/data-provider-master start"
 
@@ -95,8 +96,8 @@ echo "%{_sysconfdir}/init.d/data-provider-master start"
 %{_bindir}/liveinfo
 %{_prefix}/etc/package-manager/parserlib/*
 %{_datarootdir}/data-provider-master/*
-%{_libdir}/systemd/user/data-provider-master.service
-%{_libdir}/systemd/user/tizen-middleware.target.wants/data-provider-master.service
+%{_libdir}/systemd/system/multi-user.target.wants/data-provider-master.service
+%{_libdir}/systemd/system/data-provider-master.service
 %{_datarootdir}/license/*
 /opt/usr/share/live_magazine
 /opt/usr/share/live_magazine/log

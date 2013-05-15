@@ -21,6 +21,7 @@
 #include <errno.h>
 #include <sys/time.h>
 #include <sys/types.h>
+#include <sys/timerfd.h>
 #include <unistd.h>
 #include <fcntl.h>
 
@@ -37,11 +38,25 @@
 
 int errno;
 
+struct service_event_item {
+	enum {
+		SERVICE_EVENT_TIMER,
+	} type;
+
+	union {
+		struct {
+			int fd;
+		} timer;
+	} info;
+
+	int (*event_cb)(struct service_context *svc_cx, void *data);
+	void *cbdata;
+};
+
 /*!
  * \note
  * Server information and global (only in this file-scope) variables are defined
  */
-
 struct service_context {
 	pthread_t server_thid; /*!< Server thread Id */
 	int fd; /*!< Server socket handle */
@@ -55,6 +70,8 @@ struct service_context {
 
 	int (*service_thread_main)(struct tcb *tcb, struct packet *packet, void *data);
 	void *service_thread_data;
+
+	Eina_List *event_list;
 };
 
 struct packet_info {
@@ -380,6 +397,88 @@ static inline void tcb_destroy(struct service_context *svc_ctx, struct tcb *tcb)
 }
 
 /*!
+ * \note
+ * SERVER THREAD
+ */
+static inline int find_max_fd(struct service_context *svc_ctx)
+{
+	int fd;
+	Eina_List *l;
+	struct service_event_item *item;
+
+	fd = svc_ctx->fd > svc_ctx->tcb_pipe[PIPE_READ] ? svc_ctx->fd : svc_ctx->tcb_pipe[PIPE_READ];
+	fd = fd > svc_ctx->evt_pipe[PIPE_READ] ? fd : svc_ctx->evt_pipe[PIPE_READ];
+
+	EINA_LIST_FOREACH(svc_ctx->event_list, l, item) {
+		if (item->type == SERVICE_EVENT_TIMER && fd < item->info.timer.fd)
+			fd = item->info.timer.fd;
+	}
+
+	fd += 1;
+	return fd;
+}
+
+/*!
+ * \note
+ * SERVER THREAD
+ */
+static inline void update_fdset(struct service_context *svc_ctx, fd_set *set)
+{
+	Eina_List *l;
+	struct service_event_item *item;
+
+	FD_ZERO(set);
+	FD_SET(svc_ctx->fd, set);
+	FD_SET(svc_ctx->tcb_pipe[PIPE_READ], set);
+	FD_SET(svc_ctx->evt_pipe[PIPE_READ], set);
+
+	EINA_LIST_FOREACH(svc_ctx->event_list, l, item) {
+		if (item->type == SERVICE_EVENT_TIMER)
+			FD_SET(item->info.timer.fd, set);
+	}
+}
+
+/*!
+ * \note
+ * SERVER THREAD
+ */
+static inline void processing_timer_event(struct service_context *svc_ctx, fd_set *set)
+{
+	uint64_t expired_count;
+	Eina_List *l;
+	Eina_List *n;
+	struct service_event_item *item;
+
+	EINA_LIST_FOREACH_SAFE(svc_ctx->event_list, l, n, item) {
+		switch (item->type) {
+		case SERVICE_EVENT_TIMER:
+			if (!FD_ISSET(item->info.timer.fd, set))
+				break;
+
+			if (read(item->info.timer.fd, &expired_count, sizeof(expired_count)) == sizeof(expired_count)) {
+				DbgPrint("Expired %d times\n", expired_count);
+				if (item->event_cb(svc_ctx, item->cbdata) >= 0)
+					break;
+			} else {
+				ErrPrint("read: %s\n", strerror(errno));
+			}
+
+			if (!eina_list_data_find(svc_ctx->event_list, item))
+				break;
+
+			svc_ctx->event_list = eina_list_remove(svc_ctx->event_list, item);
+			if (close(item->info.timer.fd) < 0)
+				ErrPrint("close: %s\n", strerror(errno));
+			free(item);
+			break;
+		default:
+			ErrPrint("Unknown event: %d\n", item->type);
+			break;
+		}
+	}
+}
+
+/*!
  * Accept new client connections
  * And create a new thread for service.
  *
@@ -398,15 +497,9 @@ static void *server_main(void *data)
 	struct packet_info *packet_info;
 
 	DbgPrint("Server thread is activated\n");
-	fd = svc_ctx->fd > svc_ctx->tcb_pipe[PIPE_READ] ? svc_ctx->fd : svc_ctx->tcb_pipe[PIPE_READ];
-	fd = fd > svc_ctx->evt_pipe[PIPE_READ] ? fd : svc_ctx->evt_pipe[PIPE_READ];
-	fd += 1;
-
 	while (1) {
-		FD_ZERO(&set);
-		FD_SET(svc_ctx->fd, &set);
-		FD_SET(svc_ctx->tcb_pipe[PIPE_READ], &set);
-		FD_SET(svc_ctx->evt_pipe[PIPE_READ], &set);
+		fd = find_max_fd(svc_ctx);
+		update_fdset(svc_ctx, &set);
 
 		ret = select(fd, &set, NULL, NULL, NULL);
 		if (ret < 0) {
@@ -446,6 +539,12 @@ static void *server_main(void *data)
 				break;
 			}
 
+			/*!
+			 * \note
+			 * Invoke the service thread main, to notify the termination of a TCB
+			 */
+			ret = svc_ctx->service_thread_main(tcb, NULL, svc_ctx->service_thread_data);
+
 			DbgPrint("Destroying TCB[%p]\n", tcb);
 			/*!
 			 * at this time, the client thread can access this tcb.
@@ -481,6 +580,7 @@ static void *server_main(void *data)
 			free(packet_info);
 		}
 
+		processing_timer_event(svc_ctx, &set);
 		/* If there is no such triggered FD? */
 	}
 
@@ -718,6 +818,66 @@ HAPI int service_common_multicast_packet(struct tcb *tcb, struct packet *packet,
 			ErrPrint("Failed to send packet: %d\n", ret);
 	}
 	DbgPrint("Finish to multicast packet\n");
+	return 0;
+}
+
+/*!
+ * \note
+ * SERVER THREAD
+ */
+HAPI struct service_event_item *service_common_add_timer(struct service_context *svc_ctx, double timer, int (*timer_cb)(struct service_context *svc_cx, void *data), void *data)
+{
+	struct service_event_item *item;
+	struct itimerspec spec;
+
+	item = calloc(1, sizeof(*item));
+	if (!item) {
+		ErrPrint("Heap: %s\n", strerror(errno));
+		return NULL;
+	}
+
+	item->type = SERVICE_EVENT_TIMER;
+	item->info.timer.fd = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK | TFD_CLOEXEC);
+	if (item->info.timer.fd < 0) {
+		ErrPrint("Error: %s\n", strerror(errno));
+		free(item);
+		return NULL;
+	}
+
+	spec.it_interval.tv_sec = (time_t)timer;
+	spec.it_interval.tv_nsec = (timer - spec.it_interval.tv_sec) * 1000000000;
+	spec.it_value.tv_sec = 0;
+	spec.it_value.tv_nsec = 0;
+
+	if (timerfd_settime(item->info.timer.fd, 0, &spec, NULL) < 0) {
+		ErrPrint("Error: %s\n", strerror(errno));
+		close(item->info.timer.fd);
+		free(item);
+		return NULL;
+	}
+
+	item->event_cb = timer_cb;
+	item->cbdata = data;
+
+	svc_ctx->event_list = eina_list_append(svc_ctx->event_list, item);
+	return item;
+}
+
+/*!
+ * \note
+ * SERVER THREAD
+ */
+HAPI int service_common_del_timer(struct service_context *svc_ctx, struct service_event_item *item)
+{
+	if (!eina_list_data_find(svc_ctx->event_list, item)) {
+		ErrPrint("Invalid event item\n");
+		return -EINVAL;
+	}
+
+	svc_ctx->event_list = eina_list_remove(svc_ctx->event_list, item);
+
+	close(item->info.timer.fd);
+	free(item);
 	return 0;
 }
 

@@ -83,6 +83,11 @@ struct event_item {
 	void *data;
 };
 
+struct tag_item {
+	char *tag;
+	void *data;
+};
+
 struct inst_info {
 	struct pkg_info *info;
 
@@ -144,6 +149,8 @@ struct inst_info {
 	Ecore_Timer *update_timer; /*!< Only used for secured livebox */
 
 	Eina_List *delete_event_list;
+
+	Eina_List *data_list;
 };
 
 #define CLIENT_SEND_EVENT(instance, packet)	((instance)->client ? client_rpc_async_request((instance)->client, (packet)) : client_broadcast((instance), (packet)))
@@ -595,6 +602,7 @@ static inline void destroy_instance(struct inst_info *inst)
 	enum pd_type pd_type;
 	struct slave_node *slave;
 	struct event_item *item;
+	struct tag_item *tag_item;
 
 	invoke_delete_callbacks(inst);
 
@@ -632,6 +640,12 @@ static inline void destroy_instance(struct inst_info *inst)
 
 	if (inst->update_timer)
 		ecore_timer_del(inst->update_timer);
+
+	EINA_LIST_FREE(inst->data_list, tag_item) {
+		DbgPrint("Tagged item[%s] %p\n", tag_item->tag, tag_item->data);
+		free(tag_item->tag);
+		free(tag_item);
+	}
 
 	/*!
 	 * \note
@@ -1301,6 +1315,9 @@ static int pd_buffer_close_cb(struct client_node *client, void *inst)
 
 	ret = instance_slave_close_pd(inst, client);
 	DbgPrint("Forcely close the PD ret: %d\n", ret);
+
+	instance_unref(inst);
+
 	return -1; /* Delete this callback */
 }
 
@@ -1314,6 +1331,8 @@ static int pd_script_close_cb(struct client_node *client, void *inst)
 
 	ret = instance_slave_close_pd(inst, client);
 	DbgPrint("Forcely close the PD ret: %d\n", ret);
+
+	instance_unref(inst);
 
 	return -1; /* Delete this callback */
 }
@@ -3036,6 +3055,80 @@ HAPI void instance_init(void)
 
 HAPI void instance_fini(void)
 {
+}
+
+static inline struct tag_item *find_tag_item(struct inst_info *inst, const char *tag)
+{
+	struct tag_item *item;
+	Eina_List *l;
+
+	EINA_LIST_FOREACH(inst->data_list, l, item) {
+		if (!strcmp(item->tag, tag))
+			return item;
+	}
+
+	return NULL;
+}
+
+HAPI int instance_set_data(struct inst_info *inst, const char *tag, void *data)
+{
+	struct tag_item *item;
+
+	item = find_tag_item(inst, tag);
+	if (!item) {
+		item = malloc(sizeof(*item));
+		if (!item) {
+			ErrPrint("Heap: %s\n", strerror(errno));
+			return LB_STATUS_ERROR_MEMORY;
+		}
+
+		item->tag = strdup(tag);
+		if (!item->tag) {
+			ErrPrint("Heap: %s\n", strerror(errno));
+			free(item);
+			return LB_STATUS_ERROR_MEMORY;
+		}
+
+		inst->data_list = eina_list_append(inst->data_list, item);
+	}
+
+	if (!data) {
+		inst->data_list = eina_list_remove(inst->data_list, item);
+		free(item->tag);
+		free(item);
+	} else {
+		item->data = data;
+	}
+
+	return LB_STATUS_SUCCESS;
+}
+
+HAPI void *instance_del_data(struct inst_info *inst, const char *tag)
+{
+	struct tag_item *item;
+	void *data;
+
+	item = find_tag_item(inst, tag);
+	if (!item)
+		return NULL;
+
+	inst->data_list = eina_list_remove(inst->data_list, item);
+	data = item->data;
+	free(item->tag);
+	free(item);
+
+	return data;
+}
+
+HAPI void *instance_get_data(struct inst_info *inst, const char *tag)
+{
+	struct tag_item *item;
+
+	item = find_tag_item(inst, tag);
+	if (!item)
+		return NULL;
+
+	return item->data;
 }
 
 /* End of a file */

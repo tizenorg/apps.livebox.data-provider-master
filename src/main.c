@@ -53,6 +53,7 @@
 #include "event.h"
 #include "shortcut_service.h"
 #include "notification_service.h"
+#include "utility_service.h"
 #include "badge_service.h"
 
 #if defined(FLOG)
@@ -156,11 +157,11 @@ static inline int app_terminate(void)
 static void signal_handler(int signum, siginfo_t *info, void *unused)
 {
 	int fd;
+
 	CRITICAL_LOG("Terminated(SIGTERM)\n");
 	fd = creat("/tmp/.stop.provider", 0644);
 	if (fd > 0)
 		close(fd);
-	exit(0);
 }
 
 int main(int argc, char *argv[])
@@ -174,7 +175,7 @@ int main(int argc, char *argv[])
 	 */
 	ret = critical_log_init(util_basename(argv[0]));
 	if (ret < 0)
-		fprintf(stderr, "Failed to init the critical log\n");
+		ErrPrint("Failed to init the critical log\n");
 
 #if defined(FLOG)
 	__file_log_fp = fopen("/tmp/live.log", "w+t");
@@ -245,6 +246,7 @@ int main(int argc, char *argv[])
 	shortcut_service_init();
 	notification_service_init();
 	badge_service_init();
+	utility_service_init();
 	script_init();
 
 	app_create();
@@ -256,6 +258,7 @@ int main(int argc, char *argv[])
 	app_terminate();
 
 	script_fini();
+	utility_service_fini();
 	badge_service_fini();
 	notification_service_fini();
 	shortcut_service_fini();

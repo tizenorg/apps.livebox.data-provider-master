@@ -235,4 +235,10 @@ extern void instance_fini(void);
 extern int instance_event_callback_add(struct inst_info *inst, enum instance_event type, int (*event_cb)(struct inst_info *inst, void *data), void *data);
 extern int instance_event_callback_del(struct inst_info *inst, enum instance_event type, int (*event_cb)(struct inst_info *inst, void *data));
 
+/*!
+ */
+extern int instance_set_data(struct inst_info *inst, const char *tag, void *data);
+extern void *instance_del_data(struct inst_info *inst, const char *tag);
+extern void *instance_get_data(struct inst_info *inst, const char *tag);
+
 /* End of a file */

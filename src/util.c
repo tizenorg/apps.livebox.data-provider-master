@@ -249,7 +249,7 @@ HAPI char *util_replace_string(const char *src, const char *pattern, const char 
 	out_sz = strlen(src);
 	ret = strdup(src);
 	if (!ret) {
-		printf("Heap: %s\n", strerror(errno));
+		ErrPrint("Heap: %s\n", strerror(errno));
 		return NULL;
 	}
 

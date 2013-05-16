@@ -57,12 +57,11 @@ mkdir -p %{buildroot}/opt/usr/share/live_magazine/reader
 mkdir -p %{buildroot}/opt/usr/share/live_magazine/always
 mkdir -p %{buildroot}/opt/dbspace
 mkdir -p %{buildroot}/%{_sysconfdir}/rc.d/rc3.d
-mkdir -p %{buildroot}%{_libdir}/systemd/system/multi-user.target.wants
+mkdir -p %{buildroot}/%{_libdir}/systemd/user/tizen-middleware.target.wants
 touch %{buildroot}/opt/dbspace/.livebox.db
 touch %{buildroot}/opt/dbspace/.livebox.db-journal
 ln -sf %{_sysconfdir}/rc.d/init.d/data-provider-master %{buildroot}/%{_sysconfdir}/rc.d/rc3.d/S99data-provider-master
-ln -sf ../data-provider-master.service %{buildroot}%{_libdir}/systemd/system/multi-user.target.wants/data-provider-master.service
-
+ln -sf %{_libdir}/systemd/user/data-provider-master.service %{buildroot}/%{_libdir}/systemd/user/tizen-middleware.target.wants/data-provider-master.service
 
 %pre
 # Executing the stop script for stopping the service of installed provider (old version)
@@ -96,8 +95,8 @@ echo "%{_sysconfdir}/init.d/data-provider-master start"
 %{_bindir}/liveinfo
 %{_prefix}/etc/package-manager/parserlib/*
 %{_datarootdir}/data-provider-master/*
-%{_libdir}/systemd/system/multi-user.target.wants/data-provider-master.service
-%{_libdir}/systemd/system/data-provider-master.service
+%{_libdir}/systemd/user/data-provider-master.service
+%{_libdir}/systemd/user/tizen-middleware.target.wants/data-provider-master.service
 %{_datarootdir}/license/*
 /opt/usr/share/live_magazine
 /opt/usr/share/live_magazine/log

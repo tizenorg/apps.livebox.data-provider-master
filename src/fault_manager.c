@@ -34,6 +34,7 @@
 #include "client_rpc.h"
 #include "package.h"
 #include "conf.h"
+#include "critical_log.h"
 
 static struct info {
 	Eina_List *call_list;
@@ -139,11 +140,10 @@ HAPI void fault_broadcast_info(const char *pkgname, const char *filename, const 
 
 static inline void dump_fault_info(const char *name, pid_t pid, const char *pkgname, const char *filename, const char *funcname)
 {
-	ErrPrint("Fault processing ====\n");
-	ErrPrint("Slavename: %s[%d]\n", name, pid);
-	ErrPrint("Package: %s\n", pkgname);
-	ErrPrint("Filename: %s\n", filename);
-	ErrPrint("Funcname: %s\n", funcname);
+	CRITICAL_LOG("Slavename: %s[%d]\n"	\
+			"Package: %s\n"		\
+			"Filename: %s\n"	\
+			"Funcname: %s\n", name, pid, pkgname, filename, funcname);
 }
 
 HAPI int fault_info_set(struct slave_node *slave, const char *pkgname, const char *id, const char *func)

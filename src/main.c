@@ -20,6 +20,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <sys/signalfd.h>
 
 #include <Ecore.h>
 #include <Ecore_X.h>
@@ -117,6 +118,13 @@ static inline int app_create(void)
 	DbgPrint("Server initialized: %d\n", ret);
 
 	event_init();
+
+	shortcut_service_init();
+	notification_service_init();
+	badge_service_init();
+	utility_service_init();
+	script_init();
+
 	return 0;
 }
 
@@ -124,10 +132,29 @@ static inline int app_terminate(void)
 {
 	int ret;
 
-	event_fini();
+	ret = script_fini();
+	DbgPrint("script: %d\n", ret);
+
+	ret = utility_service_fini();
+	DbgPrint("utility: %d\n", ret);
+
+	ret = badge_service_fini();
+	DbgPrint("badge: %d\n", ret);
+
+	ret = notification_service_fini();
+	DbgPrint("noti: %d\n", ret);
+
+	ret = shortcut_service_fini();
+	DbgPrint("shortcut: %d\n", ret);
+
+	ret = event_fini();
+	DbgPrint("event: %d\n", ret);
 
 	ret = setting_fini();
 	DbgPrint("Finalize setting : %d\n", ret);
+
+	ret = buffer_handler_fini();
+	DbgPrint("buffer handler: %d\n", ret);
 
 	xmonitor_fini();
 
@@ -154,22 +181,57 @@ static inline int app_terminate(void)
 	return 0;
 }
 
-static void signal_handler(int signum, siginfo_t *info, void *unused)
+static Eina_Bool signal_cb(void *data, Ecore_Fd_Handler *handler)
 {
+	struct signalfd_siginfo fdsi;
+	ssize_t size;
 	int fd;
 
-	CRITICAL_LOG("Terminated(SIGTERM)\n");
-	fd = creat("/tmp/.stop.provider", 0644);
-	if (fd > 0)
-		close(fd);
+	fd = ecore_main_fd_handler_fd_get(handler);
+	if (fd < 0) {
+		ErrPrint("Unable to get FD\n");
+		return ECORE_CALLBACK_CANCEL;
+	}
 
-	exit(0);
+	size = read(fd, &fdsi, sizeof(fdsi));
+	if (size != sizeof(fdsi)) {
+		ErrPrint("Unable to get siginfo: %s\n", strerror(errno));
+		return ECORE_CALLBACK_CANCEL;
+	}
+
+	if (fdsi.ssi_signo == SIGTERM) {
+		int cfd;
+
+		CRITICAL_LOG("Terminated(SIGTERM)\n");
+
+		cfd = creat("/tmp/.stop.provider", 0644);
+		if (cfd < 0 || close(cfd) < 0)
+			ErrPrint("stop.provider: %s\n", strerror(errno));
+
+		vconf_set_bool(VCONFKEY_MASTER_STARTED, 0);
+		exit(0);
+		//ecore_main_loop_quit();
+	} else {
+		CRITICAL_LOG("Unknown SIG[%d] received\n", fdsi.ssi_signo);
+	}
+
+	return ECORE_CALLBACK_RENEW;
 }
 
 int main(int argc, char *argv[])
 {
-	struct sigaction act;
 	int ret;
+	sigset_t mask;
+	Ecore_Fd_Handler *signal_handler = NULL;
+
+	/*!
+	 * \note
+	 * Clear old contents files before start the master provider.
+	 */
+	(void)util_unlink_files(ALWAYS_PATH);
+	(void)util_unlink_files(READER_PATH);
+	(void)util_unlink_files(IMAGE_PATH);
+	(void)util_unlink_files(SLAVE_LOG_PATH);
 
 	/*!
 	 * How could we care this return values?
@@ -191,20 +253,23 @@ int main(int argc, char *argv[])
 		return -EFAULT;
 	}
 
-	act.sa_sigaction = signal_handler;
-	act.sa_flags = SA_SIGINFO;
+	sigemptyset(&mask);
 
-	ret = sigemptyset(&act.sa_mask);
+	ret = sigaddset(&mask, SIGTERM);
 	if (ret < 0)
 		CRITICAL_LOG("Failed to do sigemptyset: %s\n", strerror(errno));
 
-	ret = sigaddset(&act.sa_mask, SIGTERM);
+	ret = sigprocmask(SIG_BLOCK, &mask, NULL);
 	if (ret < 0)
 		CRITICAL_LOG("Failed to mask the SIGTERM: %s\n", strerror(errno));
 
-	ret = sigaction(SIGTERM, &act, NULL);
-	if (ret < 0)
-		CRITICAL_LOG("Failed to add sigaction: %s\n", strerror(errno));
+	ret = signalfd(-1, &mask, 0);
+	if (ret < 0) {
+		CRITICAL_LOG("Failed to initiate the signalfd: %s\n", strerror(errno));
+	} else {
+		signal_handler = ecore_main_fd_handler_add(ret, ECORE_FD_READ, signal_cb, NULL, NULL, NULL);
+		CRITICAL_LOG("Signal handler initiated: %d\n", ret);
+	}
 
 	if (ecore_x_init(NULL) <= 0) {
 		CRITICAL_LOG("Failed to ecore x init\n");
@@ -236,21 +301,6 @@ int main(int argc, char *argv[])
 
 	conf_loader();
 
-	/*!
-	 * \note
-	 * Clear old contents files before start the master provider.
-	 */
-	(void)util_unlink_files(ALWAYS_PATH);
-	(void)util_unlink_files(READER_PATH);
-	(void)util_unlink_files(IMAGE_PATH);
-	(void)util_unlink_files(SLAVE_LOG_PATH);
-
-	shortcut_service_init();
-	notification_service_init();
-	badge_service_init();
-	utility_service_init();
-	script_init();
-
 	app_create();
 
 	vconf_set_bool(VCONFKEY_MASTER_STARTED, 1);
@@ -259,16 +309,14 @@ int main(int argc, char *argv[])
 
 	app_terminate();
 
-	script_fini();
-	utility_service_fini();
-	badge_service_fini();
-	notification_service_fini();
-	shortcut_service_fini();
-
 	ecore_evas_shutdown();
 	evas_shutdown();
 
 	ecore_x_shutdown();
+
+	if (signal_handler)
+		ecore_main_fd_handler_del(signal_handler);
+
 	ecore_shutdown();
 	critical_log_fini();
 

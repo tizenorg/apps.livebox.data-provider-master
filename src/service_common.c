@@ -400,42 +400,34 @@ static inline void tcb_destroy(struct service_context *svc_ctx, struct tcb *tcb)
  * \note
  * SERVER THREAD
  */
-static inline int find_max_fd(struct service_context *svc_ctx)
-{
-	int fd;
-	Eina_List *l;
-	struct service_event_item *item;
-
-	fd = svc_ctx->fd > svc_ctx->tcb_pipe[PIPE_READ] ? svc_ctx->fd : svc_ctx->tcb_pipe[PIPE_READ];
-	fd = fd > svc_ctx->evt_pipe[PIPE_READ] ? fd : svc_ctx->evt_pipe[PIPE_READ];
-
-	EINA_LIST_FOREACH(svc_ctx->event_list, l, item) {
-		if (item->type == SERVICE_EVENT_TIMER && fd < item->info.timer.fd)
-			fd = item->info.timer.fd;
-	}
-
-	fd += 1;
-	return fd;
-}
-
-/*!
- * \note
- * SERVER THREAD
- */
-static inline void update_fdset(struct service_context *svc_ctx, fd_set *set)
+static inline int update_fdset(struct service_context *svc_ctx, fd_set *set)
 {
 	Eina_List *l;
 	struct service_event_item *item;
+	int fd = 0;
 
 	FD_ZERO(set);
+
 	FD_SET(svc_ctx->fd, set);
+	fd = svc_ctx->fd;
+
 	FD_SET(svc_ctx->tcb_pipe[PIPE_READ], set);
+	if (svc_ctx->tcb_pipe[PIPE_READ] > fd)
+		fd = svc_ctx->tcb_pipe[PIPE_READ];
+
 	FD_SET(svc_ctx->evt_pipe[PIPE_READ], set);
+	if (svc_ctx->evt_pipe[PIPE_READ] > fd)
+		fd = svc_ctx->evt_pipe[PIPE_READ];
 
 	EINA_LIST_FOREACH(svc_ctx->event_list, l, item) {
-		if (item->type == SERVICE_EVENT_TIMER)
+		if (item->type == SERVICE_EVENT_TIMER) {
 			FD_SET(item->info.timer.fd, set);
+			if (fd < item->info.timer.fd)
+				fd = item->info.timer.fd;
+		}
 	}
+
+	return fd + 1;
 }
 
 /*!
@@ -498,8 +490,7 @@ static void *server_main(void *data)
 
 	DbgPrint("Server thread is activated\n");
 	while (1) {
-		fd = find_max_fd(svc_ctx);
-		update_fdset(svc_ctx, &set);
+		fd = update_fdset(svc_ctx, &set);
 
 		ret = select(fd, &set, NULL, NULL, NULL);
 		if (ret < 0) {

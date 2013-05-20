@@ -98,6 +98,8 @@ HAPI int critical_log(const char *func, int line, const char *fmt, ...)
 	ret = vfprintf(s_info.fp, fmt, ap);
 	va_end(ap);
 
+	fflush(s_info.fp);
+
 	s_info.nr_of_lines++;
 	rotate_log();
 	return ret;

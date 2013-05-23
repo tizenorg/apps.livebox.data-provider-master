@@ -182,7 +182,7 @@ static int service_thread_main(struct tcb *tcb, struct packet *packet, void *dat
 	int ret;
 
 	if (!packet) {
-		DbgPrint("TCB %p is terminated\n", tcb);
+		DbgPrint("TCB %p is terminated (NIL packet)\n", tcb);
 
 		if (tcb == s_info.svc_daemon) {
 			s_info.svc_daemon = NULL;

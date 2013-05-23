@@ -191,7 +191,6 @@ static int event_pd_route_cb(enum event_state state, struct event_data *event_in
 	if (!slave)
 		return LB_STATUS_ERROR_INVALID;
 
-	DbgPrint("Event: %dx%d\n", event_info->x, event_info->y);
 	switch (state) {
 	case EVENT_STATE_ACTIVATE:
 		cmdstr = "pd_mouse_down";
@@ -233,7 +232,6 @@ static int event_pd_consume_cb(enum event_state state, struct event_data *event_
 	if (!e)
 		return LB_STATUS_ERROR_FAULT;
 
-	DbgPrint("Event: %dx%d\n", event_info->x, event_info->y);
 	timestamp = util_timestamp();
 
 	switch (state) {
@@ -343,7 +341,7 @@ static struct packet *client_clicked(pid_t pid, int handle, const struct packet 
 		goto out;
 	}
 
-	DbgPrint("pid[%d] pkgname[%s] id[%s] event[%s] timestamp[%lf] x[%lf] y[%lf]\n", pid, pkgname, id, event, timestamp, x, y);
+	DbgPrint("pid[%d] pkgname[%s]\n", pid, pkgname);
 
 	/*!
 	 * \NOTE:
@@ -440,7 +438,7 @@ static struct packet *client_text_signal(pid_t pid, int handle, const struct pac
 		goto out;
 	}
 
-	DbgPrint("pid[%d] pkgname[%s] id[%s] emission[%s] source[%s] sx[%lf] sy[%lf] ex[%lf] ey[%lf]\n", pid, pkgname, id, emission, source, sx, sy, ex, ey);
+	DbgPrint("pid[%d] pkgname[%s] emission[%s] source[%s]\n", pid, pkgname, emission, source);
 
 	/*!
 	 * \NOTE:
@@ -507,7 +505,7 @@ static struct packet *client_delete(pid_t pid, int handle, const struct packet *
 		goto out;
 	}
 
-	DbgPrint("pid[%d] pkgname[%s] id[%s]\n", pid, pkgname, id);
+	DbgPrint("pid[%d] pkgname[%s]\n", pid, pkgname);
 
 	/*!
 	 * \NOTE:
@@ -590,8 +588,7 @@ static struct packet *client_resize(pid_t pid, int handle, const struct packet *
 		goto out;
 	}
 
-	DbgPrint("pid[%d] pkgname[%s] id[%s] w[%d] h[%d]\n", pid, pkgname, id, w, h);
-	DbgPrint("RESIZE: INSTANCE[%s] Client request resize to %dx%d\n", id, w, h);
+	DbgPrint("RESIZE: Client request resize to %dx%d (pid: %d, pkgname: %s)\n", w, h, pid, pkgname);
 
 	/*!
 	 * \NOTE:
@@ -715,7 +712,7 @@ static struct packet *client_change_visibility(pid_t pid, int handle, const stru
 		goto out;
 	}
 
-	DbgPrint("pid[%d] pkgname[%s] id[%s] state[%d]\n", pid, pkgname, id, state);
+	DbgPrint("pid[%d] pkgname[%s] state[%d]\n", pid, pkgname, state);
 
 	/*!
 	 * \NOTE:
@@ -762,7 +759,7 @@ static struct packet *client_set_period(pid_t pid, int handle, const struct pack
 		goto out;
 	}
 
-	DbgPrint("pid[%d] pkgname[%s] id[%s] period[%lf]\n", pid, pkgname, id, period);
+	DbgPrint("pid[%d] pkgname[%s] period[%lf]\n", pid, pkgname, period);
 
 	/*!
 	 * \NOTE:
@@ -813,7 +810,7 @@ static struct packet *client_change_group(pid_t pid, int handle, const struct pa
 		goto out;
 	}
 
-	DbgPrint("pid[%d] pkgname[%s] id[%s] cluster[%s] category[%s]\n", pid, pkgname, id, cluster, category);
+	DbgPrint("pid[%d] pkgname[%s] cluster[%s] category[%s]\n", pid, pkgname, cluster, category);
 
 	/*!
 	 * \NOTE:
@@ -895,7 +892,6 @@ static struct packet *client_pd_mouse_enter(pid_t pid, int handle, const struct 
 	} else if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
 		struct buffer_info *buffer;
 		struct slave_node *slave;
-		// struct packet *packet;
 
 		buffer = instance_pd_buffer(inst);
 		if (!buffer) {
@@ -910,15 +906,6 @@ static struct packet *client_pd_mouse_enter(pid_t pid, int handle, const struct 
 			ret = LB_STATUS_ERROR_INVALID;
 			goto out;
 		}
-
-		/*
-		packet = packet_create_noack("pd_mouse_enter", "ssiiddd", pkgname, id, w, h, timestamp, x, y);
-		if (!packet) {
-			ErrPrint("Failed to create a packet[%s]\n", pkgname);
-			ret = LB_STATUS_ERROR_FAULT;
-			goto out;
-		}
-		*/
 
 		packet_ref((struct packet *)packet);
 		ret = slave_rpc_request_only(slave, pkgname, (struct packet *)packet, 0);
@@ -1007,7 +994,6 @@ static struct packet *client_pd_mouse_leave(pid_t pid, int handle, const struct 
 	} else if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
 		struct buffer_info *buffer;
 		struct slave_node *slave;
-		// struct packet *packet;
 
 		buffer = instance_pd_buffer(inst);
 		if (!buffer) {
@@ -1022,15 +1008,6 @@ static struct packet *client_pd_mouse_leave(pid_t pid, int handle, const struct 
 			ret = LB_STATUS_ERROR_INVALID;
 			goto out;
 		}
-
-		/*
-		packet = packet_create_noack("pd_mouse_leave", "ssiiddd", pkgname, id, w, h, timestamp, x, y);
-		if (!packet) {
-			ErrPrint("Failed to create a packet[%s]\n", pkgname);
-			ret = LB_STATUS_ERROR_FAULT;
-			goto out;
-		}
-		*/
 
 		packet_ref((struct packet *)packet);
 		ret = slave_rpc_request_only(slave, pkgname, (struct packet *)packet, 0);
@@ -1089,8 +1066,6 @@ static struct packet *client_pd_mouse_down(pid_t pid, int handle, const struct p
 		goto out;
 	}
 
-	DbgPrint("(%dx%d)\n", x, y);
-
 	/*!
 	 * \NOTE:
 	 * Trust the package name which are sent by the client.
@@ -1121,7 +1096,6 @@ static struct packet *client_pd_mouse_down(pid_t pid, int handle, const struct p
 	} else if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
 		struct buffer_info *buffer;
 		struct slave_node *slave;
-		// struct packet *packet;
 
 		buffer = instance_pd_buffer(inst);
 		if (!buffer) {
@@ -1136,15 +1110,6 @@ static struct packet *client_pd_mouse_down(pid_t pid, int handle, const struct p
 			ret = LB_STATUS_ERROR_INVALID;
 			goto out;
 		}
-
-		/*
-		packet = packet_create_noack("pd_mouse_down", "ssiiddd", pkgname, id, w, h, timestamp, x, y);
-		if (!packet) {
-			ErrPrint("Failed to create a packet[%s]\n", pkgname);
-			ret = LB_STATUS_ERROR_FAULT;
-			goto out;
-		}
-		*/
 
 		packet_ref((struct packet *)packet);
 		ret = slave_rpc_request_only(slave, pkgname, (struct packet *)packet, 0);
@@ -1203,7 +1168,6 @@ static struct packet *client_pd_mouse_up(pid_t pid, int handle, const struct pac
 		goto out;
 	}
 
-	DbgPrint("(%dx%d)\n", x, y);
 	/*!
 	 * \NOTE:
 	 * Trust the package name which are sent by the client.
@@ -1234,7 +1198,6 @@ static struct packet *client_pd_mouse_up(pid_t pid, int handle, const struct pac
 	} else if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
 		struct buffer_info *buffer;
 		struct slave_node *slave;
-		//struct packet *packet;
 
 		buffer = instance_pd_buffer(inst);
 		if (!buffer) {
@@ -1249,15 +1212,6 @@ static struct packet *client_pd_mouse_up(pid_t pid, int handle, const struct pac
 			ret = LB_STATUS_ERROR_INVALID;
 			goto out;
 		}
-
-		/*
-		packet = packet_create_noack("pd_mouse_up", "ssiiddd", pkgname, id, w, h, timestamp, x, y);
-		if (!packet) {
-			ErrPrint("Failed to create a packet[%s]\n", pkgname);
-			ret = LB_STATUS_ERROR_FAULT;
-			goto out;
-		}
-		*/
 
 		packet_ref((struct packet *)packet);
 		ret = slave_rpc_request_only(slave, pkgname, (struct packet *)packet, 0);
@@ -1316,7 +1270,6 @@ static struct packet *client_pd_mouse_move(pid_t pid, int handle, const struct p
 		goto out;
 	}
 
-	DbgPrint("(%dx%d)\n", x, y);
 	/*!
 	 * \NOTE:
 	 * Trust the package name which are sent by the client.
@@ -1347,7 +1300,6 @@ static struct packet *client_pd_mouse_move(pid_t pid, int handle, const struct p
 	} else if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
 		struct buffer_info *buffer;
 		struct slave_node *slave;
-		//struct packet *packet;
 
 		buffer = instance_pd_buffer(inst);
 		if (!buffer) {
@@ -1363,15 +1315,6 @@ static struct packet *client_pd_mouse_move(pid_t pid, int handle, const struct p
 			goto out;
 		}
 
-		/*!
-		 * Reuse the packet.
-		packet = packet_create_noack("pd_mouse_move", "ssiiddd", pkgname, id, w, h, timestamp, x, y);
-		if (!packet) {
-			ErrPrint("Failed to create a packet[%s]\n", pkgname);
-			ret = LB_STATUS_ERROR_FAULT;
-			goto out;
-		}
-		 */
 		packet_ref((struct packet *)packet);
 		ret = slave_rpc_request_only(slave, pkgname, (struct packet *)packet, 0);
 	} else if (package_pd_type(pkg) == PD_TYPE_SCRIPT) {
@@ -1459,7 +1402,6 @@ static struct packet *client_lb_mouse_move(pid_t pid, int handle, const struct p
 	} else if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
 		struct buffer_info *buffer;
 		struct slave_node *slave;
-		//struct packet *packet;
 
 		buffer = instance_lb_buffer(inst);
 		if (!buffer) {
@@ -1475,14 +1417,6 @@ static struct packet *client_lb_mouse_move(pid_t pid, int handle, const struct p
 			goto out;
 		}
 
-		/*
-		packet = packet_create_noack("lb_mouse_move", "ssiiddd", pkgname, id, w, h, timestamp, x, y);
-		if (!packet) {
-			ErrPrint("Failed to create a packet[%s]\n", pkgname);
-			ret = LB_STATUS_ERROR_FAULT;
-			goto out;
-		}
-		*/
 		packet_ref((struct packet *)packet);
 		ret = slave_rpc_request_only(slave, pkgname, (struct packet *)packet, 0);
 	} else if (package_lb_type(pkg) == LB_TYPE_SCRIPT) {
@@ -1851,7 +1785,6 @@ static struct packet *client_lb_mouse_enter(pid_t pid, int handle, const struct 
 	} else if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
 		struct buffer_info *buffer;
 		struct slave_node *slave;
-		//struct packet *packet;
 
 		buffer = instance_lb_buffer(inst);
 		if (!buffer) {
@@ -1867,14 +1800,6 @@ static struct packet *client_lb_mouse_enter(pid_t pid, int handle, const struct 
 			goto out;
 		}
 
-		/*
-		packet = packet_create_noack("lb_mouse_enter", "ssiiddd", pkgname, id, w, h, timestamp, x, y);
-		if (!packet) {
-			ErrPrint("Failed to create a packet[%s]\n", pkgname);
-			ret = LB_STATUS_ERROR_FAULT;
-			goto out;
-		}
-		*/
 		packet_ref((struct packet *)packet);
 		ret = slave_rpc_request_only(slave, pkgname, (struct packet *)packet, 0);
 	} else if (package_lb_type(pkg) == LB_TYPE_SCRIPT) {
@@ -1962,7 +1887,6 @@ static struct packet *client_lb_mouse_leave(pid_t pid, int handle, const struct 
 	} else if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
 		struct buffer_info *buffer;
 		struct slave_node *slave;
-		//struct packet *packet;
 
 		buffer = instance_lb_buffer(inst);
 		if (!buffer) {
@@ -1977,15 +1901,6 @@ static struct packet *client_lb_mouse_leave(pid_t pid, int handle, const struct 
 			ret = LB_STATUS_ERROR_INVALID;
 			goto out;
 		}
-
-		/*
-		packet = packet_create_noack("lb_mouse_leave", "ssiiddd", pkgname, id, w, h, timestamp, x, y);
-		if (!packet) {
-			ErrPrint("Failed to create a packet[%s]\n", pkgname);
-			ret = LB_STATUS_ERROR_FAULT;
-			goto out;
-		}
-		*/
 
 		packet_ref((struct packet *)packet);
 		ret = slave_rpc_request_only(slave, pkgname, (struct packet *)packet, 0);
@@ -2074,7 +1989,6 @@ static struct packet *client_lb_mouse_down(pid_t pid, int handle, const struct p
 	} else if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
 		struct buffer_info *buffer;
 		struct slave_node *slave;
-		// struct packet *packet;
 
 		buffer = instance_lb_buffer(inst);
 		if (!buffer) {
@@ -2089,15 +2003,6 @@ static struct packet *client_lb_mouse_down(pid_t pid, int handle, const struct p
 			ret = LB_STATUS_ERROR_INVALID;
 			goto out;
 		}
-
-		/*
-		packet = packet_create_noack("lb_mouse_down", "ssiiddd", pkgname, id, w, h, timestamp, x, y);
-		if (!packet) {
-			ErrPrint("Failed to create a packet[%s]\n", pkgname);
-			ret = LB_STATUS_ERROR_FAULT;
-			goto out;
-		}
-		*/
 
 		packet_ref((struct packet *)packet);
 		ret = slave_rpc_request_only(slave, pkgname, (struct packet *)packet, 0);
@@ -2186,7 +2091,6 @@ static struct packet *client_lb_mouse_up(pid_t pid, int handle, const struct pac
 	} else if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
 		struct buffer_info *buffer;
 		struct slave_node *slave;
-		//struct packet *packet;
 
 		buffer = instance_lb_buffer(inst);
 		if (!buffer) {
@@ -2201,15 +2105,6 @@ static struct packet *client_lb_mouse_up(pid_t pid, int handle, const struct pac
 			ret = LB_STATUS_ERROR_INVALID;
 			goto out;
 		}
-
-		/*
-		packet = packet_create_noack("lb_mouse_up", "ssiiddd", pkgname, id, w, h, timestamp, x, y);
-		if (!packet) {
-			ErrPrint("Failed to create a packet[%s]\n", pkgname);
-			ret = LB_STATUS_ERROR_FAULT;
-			goto out;
-		}
-		*/
 
 		packet_ref((struct packet *)packet);
 		ret = slave_rpc_request_only(slave, pkgname, (struct packet *)packet, 0);
@@ -2299,7 +2194,6 @@ static struct packet *client_pd_access_action_up(pid_t pid, int handle, const st
 	} else if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
 		struct buffer_info *buffer;
 		struct slave_node *slave;
-		// struct packet *packet;
 
 		buffer = instance_pd_buffer(inst);
 		if (!buffer) {
@@ -2314,15 +2208,6 @@ static struct packet *client_pd_access_action_up(pid_t pid, int handle, const st
 			ret = LB_STATUS_ERROR_INVALID;
 			goto out;
 		}
-
-		/*
-		packet = packet_create_noack("pd_mouse_enter", "ssiiddd", pkgname, id, w, h, timestamp, x, y);
-		if (!packet) {
-			ErrPrint("Failed to create a packet[%s]\n", pkgname);
-			ret = LB_STATUS_ERROR_FAULT;
-			goto out;
-		}
-		*/
 
 		packet_ref((struct packet *)packet);
 		ret = slave_rpc_request_only(slave, pkgname, (struct packet *)packet, 0);
@@ -2433,7 +2318,6 @@ static struct packet *client_pd_access_action_down(pid_t pid, int handle, const 
 	} else if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
 		struct buffer_info *buffer;
 		struct slave_node *slave;
-		// struct packet *packet;
 
 		buffer = instance_pd_buffer(inst);
 		if (!buffer) {
@@ -2448,15 +2332,6 @@ static struct packet *client_pd_access_action_down(pid_t pid, int handle, const 
 			ret = LB_STATUS_ERROR_INVALID;
 			goto out;
 		}
-
-		/*
-		packet = packet_create_noack("pd_mouse_enter", "ssiiddd", pkgname, id, w, h, timestamp, x, y);
-		if (!packet) {
-			ErrPrint("Failed to create a packet[%s]\n", pkgname);
-			ret = LB_STATUS_ERROR_FAULT;
-			goto out;
-		}
-		*/
 
 		packet_ref((struct packet *)packet);
 		ret = slave_rpc_request_only(slave, pkgname, (struct packet *)packet, 0);
@@ -2567,7 +2442,6 @@ static struct packet *client_pd_access_scroll_down(pid_t pid, int handle, const 
 	} else if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
 		struct buffer_info *buffer;
 		struct slave_node *slave;
-		// struct packet *packet;
 
 		buffer = instance_pd_buffer(inst);
 		if (!buffer) {
@@ -2582,15 +2456,6 @@ static struct packet *client_pd_access_scroll_down(pid_t pid, int handle, const 
 			ret = LB_STATUS_ERROR_INVALID;
 			goto out;
 		}
-
-		/*
-		packet = packet_create_noack("pd_mouse_enter", "ssiiddd", pkgname, id, w, h, timestamp, x, y);
-		if (!packet) {
-			ErrPrint("Failed to create a packet[%s]\n", pkgname);
-			ret = LB_STATUS_ERROR_FAULT;
-			goto out;
-		}
-		*/
 
 		packet_ref((struct packet *)packet);
 		ret = slave_rpc_request_only(slave, pkgname, (struct packet *)packet, 0);
@@ -2701,7 +2566,6 @@ static struct packet *client_pd_access_scroll_move(pid_t pid, int handle, const 
 	} else if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
 		struct buffer_info *buffer;
 		struct slave_node *slave;
-		// struct packet *packet;
 
 		buffer = instance_pd_buffer(inst);
 		if (!buffer) {
@@ -2716,15 +2580,6 @@ static struct packet *client_pd_access_scroll_move(pid_t pid, int handle, const 
 			ret = LB_STATUS_ERROR_INVALID;
 			goto out;
 		}
-
-		/*
-		packet = packet_create_noack("pd_mouse_enter", "ssiiddd", pkgname, id, w, h, timestamp, x, y);
-		if (!packet) {
-			ErrPrint("Failed to create a packet[%s]\n", pkgname);
-			ret = LB_STATUS_ERROR_FAULT;
-			goto out;
-		}
-		*/
 
 		packet_ref((struct packet *)packet);
 		ret = slave_rpc_request_only(slave, pkgname, (struct packet *)packet, 0);
@@ -2835,7 +2690,6 @@ static struct packet *client_pd_access_scroll_up(pid_t pid, int handle, const st
 	} else if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
 		struct buffer_info *buffer;
 		struct slave_node *slave;
-		// struct packet *packet;
 
 		buffer = instance_pd_buffer(inst);
 		if (!buffer) {
@@ -2850,15 +2704,6 @@ static struct packet *client_pd_access_scroll_up(pid_t pid, int handle, const st
 			ret = LB_STATUS_ERROR_INVALID;
 			goto out;
 		}
-
-		/*
-		packet = packet_create_noack("pd_mouse_enter", "ssiiddd", pkgname, id, w, h, timestamp, x, y);
-		if (!packet) {
-			ErrPrint("Failed to create a packet[%s]\n", pkgname);
-			ret = LB_STATUS_ERROR_FAULT;
-			goto out;
-		}
-		*/
 
 		packet_ref((struct packet *)packet);
 		ret = slave_rpc_request_only(slave, pkgname, (struct packet *)packet, 0);
@@ -2959,7 +2804,6 @@ static struct packet *client_pd_access_unhighlight(pid_t pid, int handle, const 
 	} else if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
 		struct buffer_info *buffer;
 		struct slave_node *slave;
-		// struct packet *packet;
 
 		buffer = instance_pd_buffer(inst);
 		if (!buffer) {
@@ -2974,15 +2818,6 @@ static struct packet *client_pd_access_unhighlight(pid_t pid, int handle, const 
 			ret = LB_STATUS_ERROR_INVALID;
 			goto out;
 		}
-
-		/*
-		packet = packet_create_noack("pd_mouse_enter", "ssiiddd", pkgname, id, w, h, timestamp, x, y);
-		if (!packet) {
-			ErrPrint("Failed to create a packet[%s]\n", pkgname);
-			ret = LB_STATUS_ERROR_FAULT;
-			goto out;
-		}
-		*/
 
 		packet_ref((struct packet *)packet);
 		ret = slave_rpc_request_only(slave, pkgname, (struct packet *)packet, 0);
@@ -3092,7 +2927,6 @@ static struct packet *client_pd_access_hl(pid_t pid, int handle, const struct pa
 	} else if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
 		struct buffer_info *buffer;
 		struct slave_node *slave;
-		// struct packet *packet;
 
 		buffer = instance_pd_buffer(inst);
 		if (!buffer) {
@@ -3107,15 +2941,6 @@ static struct packet *client_pd_access_hl(pid_t pid, int handle, const struct pa
 			ret = LB_STATUS_ERROR_INVALID;
 			goto out;
 		}
-
-		/*
-		packet = packet_create_noack("pd_mouse_enter", "ssiiddd", pkgname, id, w, h, timestamp, x, y);
-		if (!packet) {
-			ErrPrint("Failed to create a packet[%s]\n", pkgname);
-			ret = LB_STATUS_ERROR_FAULT;
-			goto out;
-		}
-		*/
 
 		packet_ref((struct packet *)packet);
 		ret = slave_rpc_request_only(slave, pkgname, (struct packet *)packet, 0);
@@ -3226,7 +3051,6 @@ static struct packet *client_pd_access_hl_prev(pid_t pid, int handle, const stru
 	} else if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
 		struct buffer_info *buffer;
 		struct slave_node *slave;
-		// struct packet *packet;
 
 		buffer = instance_pd_buffer(inst);
 		if (!buffer) {
@@ -3241,15 +3065,6 @@ static struct packet *client_pd_access_hl_prev(pid_t pid, int handle, const stru
 			ret = LB_STATUS_ERROR_INVALID;
 			goto out;
 		}
-
-		/*
-		packet = packet_create_noack("pd_mouse_enter", "ssiiddd", pkgname, id, w, h, timestamp, x, y);
-		if (!packet) {
-			ErrPrint("Failed to create a packet[%s]\n", pkgname);
-			ret = LB_STATUS_ERROR_FAULT;
-			goto out;
-		}
-		*/
 
 		packet_ref((struct packet *)packet);
 		ret = slave_rpc_request_only(slave, pkgname, (struct packet *)packet, 0);
@@ -3361,7 +3176,6 @@ static struct packet *client_pd_access_hl_next(pid_t pid, int handle, const stru
 	} else if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
 		struct buffer_info *buffer;
 		struct slave_node *slave;
-		// struct packet *packet;
 
 		buffer = instance_pd_buffer(inst);
 		if (!buffer) {
@@ -3377,14 +3191,6 @@ static struct packet *client_pd_access_hl_next(pid_t pid, int handle, const stru
 			goto out;
 		}
 
-		/*
-		packet = packet_create_noack("pd_mouse_enter", "ssiiddd", pkgname, id, w, h, timestamp, x, y);
-		if (!packet) {
-			ErrPrint("Failed to create a packet[%s]\n", pkgname);
-			ret = LB_STATUS_ERROR_FAULT;
-			goto out;
-		}
-		*/
 		DbgPrint("Buffer type PD\n");
 
 		packet_ref((struct packet *)packet);
@@ -3503,7 +3309,6 @@ static struct packet *client_pd_access_activate(pid_t pid, int handle, const str
 	} else if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
 		struct buffer_info *buffer;
 		struct slave_node *slave;
-		// struct packet *packet;
 
 		buffer = instance_pd_buffer(inst);
 		if (!buffer) {
@@ -3518,15 +3323,6 @@ static struct packet *client_pd_access_activate(pid_t pid, int handle, const str
 			ret = LB_STATUS_ERROR_INVALID;
 			goto out;
 		}
-
-		/*
-		packet = packet_create_noack("pd_mouse_enter", "ssiiddd", pkgname, id, w, h, timestamp, x, y);
-		if (!packet) {
-			ErrPrint("Failed to create a packet[%s]\n", pkgname);
-			ret = LB_STATUS_ERROR_FAULT;
-			goto out;
-		}
-		*/
 
 		packet_ref((struct packet *)packet);
 		ret = slave_rpc_request_only(slave, pkgname, (struct packet *)packet, 0);
@@ -3636,7 +3432,6 @@ static struct packet *client_pd_key_down(pid_t pid, int handle, const struct pac
 	} else if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
 		struct buffer_info *buffer;
 		struct slave_node *slave;
-		// struct packet *packet;
 
 		buffer = instance_pd_buffer(inst);
 		if (!buffer) {
@@ -3651,15 +3446,6 @@ static struct packet *client_pd_key_down(pid_t pid, int handle, const struct pac
 			ret = LB_STATUS_ERROR_INVALID;
 			goto out;
 		}
-
-		/*
-		packet = packet_create_noack("pd_mouse_enter", "ssiiddd", pkgname, id, w, h, timestamp, x, y);
-		if (!packet) {
-			ErrPrint("Failed to create a packet[%s]\n", pkgname);
-			ret = LB_STATUS_ERROR_FAULT;
-			goto out;
-		}
-		*/
 
 		packet_ref((struct packet *)packet);
 		ret = slave_rpc_request_only(slave, pkgname, (struct packet *)packet, 0);
@@ -3806,7 +3592,6 @@ static struct packet *client_pd_key_up(pid_t pid, int handle, const struct packe
 	} else if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
 		struct buffer_info *buffer;
 		struct slave_node *slave;
-		// struct packet *packet;
 
 		buffer = instance_pd_buffer(inst);
 		if (!buffer) {
@@ -3821,15 +3606,6 @@ static struct packet *client_pd_key_up(pid_t pid, int handle, const struct packe
 			ret = LB_STATUS_ERROR_INVALID;
 			goto out;
 		}
-
-		/*
-		packet = packet_create_noack("pd_mouse_enter", "ssiiddd", pkgname, id, w, h, timestamp, x, y);
-		if (!packet) {
-			ErrPrint("Failed to create a packet[%s]\n", pkgname);
-			ret = LB_STATUS_ERROR_FAULT;
-			goto out;
-		}
-		*/
 
 		packet_ref((struct packet *)packet);
 		ret = slave_rpc_request_only(slave, pkgname, (struct packet *)packet, 0);
@@ -3921,7 +3697,6 @@ static struct packet *client_lb_access_hl(pid_t pid, int handle, const struct pa
 	} else if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
 		struct buffer_info *buffer;
 		struct slave_node *slave;
-		//struct packet *packet;
 
 		buffer = instance_lb_buffer(inst);
 		if (!buffer) {
@@ -3936,15 +3711,6 @@ static struct packet *client_lb_access_hl(pid_t pid, int handle, const struct pa
 			ret = LB_STATUS_ERROR_INVALID;
 			goto out;
 		}
-
-		/*
-		packet = packet_create_noack("lb_mouse_leave", "ssiiddd", pkgname, id, w, h, timestamp, x, y);
-		if (!packet) {
-			ErrPrint("Failed to create a packet[%s]\n", pkgname);
-			ret = LB_STATUS_ERROR_FAULT;
-			goto out;
-		}
-		*/
 
 		packet_ref((struct packet *)packet);
 		ret = slave_rpc_request_only(slave, pkgname, (struct packet *)packet, 0);
@@ -4055,7 +3821,6 @@ static struct packet *client_lb_access_hl_prev(pid_t pid, int handle, const stru
 	} else if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
 		struct buffer_info *buffer;
 		struct slave_node *slave;
-		//struct packet *packet;
 
 		buffer = instance_lb_buffer(inst);
 		if (!buffer) {
@@ -4070,15 +3835,6 @@ static struct packet *client_lb_access_hl_prev(pid_t pid, int handle, const stru
 			ret = LB_STATUS_ERROR_INVALID;
 			goto out;
 		}
-
-		/*
-		packet = packet_create_noack("lb_mouse_leave", "ssiiddd", pkgname, id, w, h, timestamp, x, y);
-		if (!packet) {
-			ErrPrint("Failed to create a packet[%s]\n", pkgname);
-			ret = LB_STATUS_ERROR_FAULT;
-			goto out;
-		}
-		*/
 
 		packet_ref((struct packet *)packet);
 		ret = slave_rpc_request_only(slave, pkgname, (struct packet *)packet, 0);
@@ -4189,7 +3945,6 @@ static struct packet *client_lb_access_hl_next(pid_t pid, int handle, const stru
 	} else if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
 		struct buffer_info *buffer;
 		struct slave_node *slave;
-		//struct packet *packet;
 
 		buffer = instance_lb_buffer(inst);
 		if (!buffer) {
@@ -4204,15 +3959,6 @@ static struct packet *client_lb_access_hl_next(pid_t pid, int handle, const stru
 			ret = LB_STATUS_ERROR_INVALID;
 			goto out;
 		}
-
-		/*
-		packet = packet_create_noack("lb_mouse_leave", "ssiiddd", pkgname, id, w, h, timestamp, x, y);
-		if (!packet) {
-			ErrPrint("Failed to create a packet[%s]\n", pkgname);
-			ret = LB_STATUS_ERROR_FAULT;
-			goto out;
-		}
-		*/
 
 		packet_ref((struct packet *)packet);
 		ret = slave_rpc_request_only(slave, pkgname, (struct packet *)packet, 0);
@@ -4563,7 +4309,6 @@ static struct packet *client_lb_access_unhighlight(pid_t pid, int handle, const 
 	} else if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
 		struct buffer_info *buffer;
 		struct slave_node *slave;
-		//struct packet *packet;
 
 		buffer = instance_lb_buffer(inst);
 		if (!buffer) {
@@ -4578,15 +4323,6 @@ static struct packet *client_lb_access_unhighlight(pid_t pid, int handle, const 
 			ret = LB_STATUS_ERROR_INVALID;
 			goto out;
 		}
-
-		/*
-		packet = packet_create_noack("lb_mouse_leave", "ssiiddd", pkgname, id, w, h, timestamp, x, y);
-		if (!packet) {
-			ErrPrint("Failed to create a packet[%s]\n", pkgname);
-			ret = LB_STATUS_ERROR_FAULT;
-			goto out;
-		}
-		*/
 
 		packet_ref((struct packet *)packet);
 		ret = slave_rpc_request_only(slave, pkgname, (struct packet *)packet, 0);
@@ -5057,7 +4793,6 @@ static struct packet *client_lb_access_activate(pid_t pid, int handle, const str
 	} else if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
 		struct buffer_info *buffer;
 		struct slave_node *slave;
-		//struct packet *packet;
 
 		buffer = instance_lb_buffer(inst);
 		if (!buffer) {
@@ -5072,15 +4807,6 @@ static struct packet *client_lb_access_activate(pid_t pid, int handle, const str
 			ret = LB_STATUS_ERROR_INVALID;
 			goto out;
 		}
-
-		/*
-		packet = packet_create_noack("lb_mouse_leave", "ssiiddd", pkgname, id, w, h, timestamp, x, y);
-		if (!packet) {
-			ErrPrint("Failed to create a packet[%s]\n", pkgname);
-			ret = LB_STATUS_ERROR_FAULT;
-			goto out;
-		}
-		*/
 
 		packet_ref((struct packet *)packet);
 		ret = slave_rpc_request_only(slave, pkgname, (struct packet *)packet, 0);
@@ -5192,7 +4918,6 @@ static struct packet *client_lb_key_down(pid_t pid, int handle, const struct pac
 	} else if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
 		struct buffer_info *buffer;
 		struct slave_node *slave;
-		//struct packet *packet;
 
 		buffer = instance_lb_buffer(inst);
 		if (!buffer) {
@@ -5207,15 +4932,6 @@ static struct packet *client_lb_key_down(pid_t pid, int handle, const struct pac
 			ret = LB_STATUS_ERROR_INVALID;
 			goto out;
 		}
-
-		/*
-		packet = packet_create_noack("lb_mouse_leave", "ssiiddd", pkgname, id, w, h, timestamp, x, y);
-		if (!packet) {
-			ErrPrint("Failed to create a packet[%s]\n", pkgname);
-			ret = LB_STATUS_ERROR_FAULT;
-			goto out;
-		}
-		*/
 
 		packet_ref((struct packet *)packet);
 		ret = slave_rpc_request_only(slave, pkgname, (struct packet *)packet, 0);
@@ -5307,7 +5023,6 @@ static struct packet *client_lb_key_up(pid_t pid, int handle, const struct packe
 	} else if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
 		struct buffer_info *buffer;
 		struct slave_node *slave;
-		//struct packet *packet;
 
 		buffer = instance_lb_buffer(inst);
 		if (!buffer) {
@@ -5322,15 +5037,6 @@ static struct packet *client_lb_key_up(pid_t pid, int handle, const struct packe
 			ret = LB_STATUS_ERROR_INVALID;
 			goto out;
 		}
-
-		/*
-		packet = packet_create_noack("lb_mouse_leave", "ssiiddd", pkgname, id, w, h, timestamp, x, y);
-		if (!packet) {
-			ErrPrint("Failed to create a packet[%s]\n", pkgname);
-			ret = LB_STATUS_ERROR_FAULT;
-			goto out;
-		}
-		*/
 
 		packet_ref((struct packet *)packet);
 		ret = slave_rpc_request_only(slave, pkgname, (struct packet *)packet, 0);
@@ -5408,7 +5114,7 @@ static struct packet *client_lb_acquire_pixmap(pid_t pid, int handle, const stru
 		goto out;
 	}
 
-	DbgPrint("pid[%d] pkgname[%s] id[%s]\n", pid, pkgname, id);
+	DbgPrint("pid[%d] pkgname[%s]\n", pid, pkgname);
 	buffer = instance_lb_buffer(inst);
 	if (!buffer) {
 		ErrPrint("Unable to get LB buffer: %s\n", id);
@@ -5458,7 +5164,7 @@ static struct packet *client_lb_release_pixmap(pid_t pid, int handle, const stru
 		ErrPrint("Parameter is not matched\n");
 		goto out;
 	}
-	DbgPrint("pid[%d] pkgname[%s] id[%s] Pixmap[0x%X]\n", pid, pkgname, id, pixmap);
+	DbgPrint("pid[%d] pkgname[%s] Pixmap[0x%X]\n", pid, pkgname, pixmap);
 
 	/*!
 	 * \NOTE:
@@ -5520,7 +5226,7 @@ static struct packet *client_pd_acquire_pixmap(pid_t pid, int handle, const stru
 		goto out;
 	}
 
-	DbgPrint("pid[%d] pkgname[%s] id[%s]\n", pid, pkgname, id);
+	DbgPrint("pid[%d] pkgname[%s]\n", pid, pkgname);
 	buffer = instance_pd_buffer(inst);
 	if (!buffer) {
 		ErrPrint("Unable to get PD buffer (%s)\n", id);
@@ -5567,7 +5273,7 @@ static struct packet *client_pd_release_pixmap(pid_t pid, int handle, const stru
 		ErrPrint("Parameter is not matched\n");
 		goto out;
 	}
-	DbgPrint("pid[%d] pkgname[%s] id[%s]\n", pid, pkgname, id);
+	DbgPrint("pid[%d] pkgname[%s]\n", pid, pkgname);
 
 	/*!
 	 * \NOTE:
@@ -5620,7 +5326,7 @@ static struct packet *client_pinup_changed(pid_t pid, int handle, const struct p
 		goto out;
 	}
 
-	DbgPrint("pid[%d] pkgname[%s] id[%s] pinup[%d]\n", pid, pkgname, id, pinup);
+	DbgPrint("pid[%d] pkgname[%s] pinup[%d]\n", pid, pkgname, pinup);
 
 	/*!
 	 * \NOTE:
@@ -5692,7 +5398,7 @@ static struct packet *client_pd_move(pid_t pid, int handle, const struct packet 
 		goto out;
 	}
 
-	DbgPrint("pid[%d] pkgname[%s] id[%s] %lfx%lf\n", pid, pkgname, id, x, y);
+	DbgPrint("pid[%d] pkgname[%s]\n", pid, pkgname);
 
 	inst = package_find_instance_by_id(pkgname, id);
 	if (!inst)
@@ -5720,7 +5426,7 @@ static struct packet *client_pd_move(pid_t pid, int handle, const struct packet 
 		ret = LB_STATUS_ERROR_INVALID;
 	}
 out:
-	DbgPrint("Update PD position: %lfx%lf (%d)\n", x, y, ret);
+	DbgPrint("Update PD position: %d\n", ret);
 	return NULL;
 }
 
@@ -5749,7 +5455,7 @@ static struct packet *client_create_pd(pid_t pid, int handle, const struct packe
 		goto out;
 	}
 
-	DbgPrint("pid[%d] pkgname[%s] id[%s]\n", pid, pkgname, id);
+	DbgPrint("pid[%d] pkgname[%s]\n", pid, pkgname);
 
 	/*!
 	 * \NOTE:
@@ -5869,7 +5575,7 @@ static struct packet *client_destroy_pd(pid_t pid, int handle, const struct pack
 		goto out;
 	}
 
-	DbgPrint("pid[%d] pkgname[%s] id[%s]\n", pid, pkgname, id);
+	DbgPrint("pid[%d] pkgname[%s]\n", pid, pkgname);
 
 	/*!
 	 * \NOTE:
@@ -6382,7 +6088,6 @@ static struct packet *slave_faulted(pid_t pid, int handle, const struct packet *
 		ErrPrint("Instance(%s) is already destroyed\n", id);
 	} else {
 		ret = instance_destroy(inst);
-		DbgPrint("Destroy instance(%s) %d\n", id, ret);
 	}
 
 out:
@@ -6810,7 +6515,6 @@ static struct packet *slave_desc_updated(pid_t pid, int handle, const struct pac
 	} else {
 		switch (package_pd_type(instance_package(inst))) {
 		case PD_TYPE_SCRIPT:
-			DbgPrint("Script (%s)\n", id);
 			if (script_handler_is_loaded(instance_pd_script(inst))) {
 				(void)script_handler_parse_desc(pkgname, id,
 								descfile, 1);
@@ -6822,8 +6526,7 @@ static struct packet *slave_desc_updated(pid_t pid, int handle, const struct pac
 			instance_pd_updated(pkgname, id, descfile);
 			break;
 		default:
-			DbgPrint("Ignore updated DESC(%s - %s - %s)\n",
-							pkgname, id, descfile);
+			DbgPrint("Ignore updated DESC(%s)\n", pkgname);
 			break;
 		}
 	}
@@ -6857,7 +6560,6 @@ static struct packet *slave_deleted(pid_t pid, int handle, const struct packet *
 	} else if (package_is_fault(instance_package(inst))) {
 	} else {
 		ret = instance_destroyed(inst);
-		DbgPrint("Destroy instance %d\n", ret);
 	}
 
 out:
@@ -6907,7 +6609,7 @@ static struct packet *slave_acquire_buffer(pid_t pid, int handle, const struct p
 	/* TODO: */
 	inst = package_find_instance_by_id(pkgname, id);
 	if (!inst) {
-		DbgPrint("Package[%s] Id[%s] is not found\n", pkgname, id);
+		DbgPrint("Package[%s] instance is not found\n", pkgname);
 		ret = LB_STATUS_ERROR_INVALID;
 		id = "";
 		goto out;
@@ -6936,23 +6638,18 @@ static struct packet *slave_acquire_buffer(pid_t pid, int handle, const struct p
 			}
 
 			ret = buffer_handler_resize(info, w, h);
-			DbgPrint("Buffer resize returns %d\n", ret);
-
 			ret = buffer_handler_load(info);
 			if (ret == 0) {
 				instance_set_lb_size(inst, w, h);
 				instance_set_lb_info(inst, PRIORITY_NO_CHANGE, CONTENT_NO_CHANGE, TITLE_NO_CHANGE);
 				id = buffer_handler_id(info);
-				DbgPrint("Buffer handler ID: %s\n", id);
 			} else {
-				DbgPrint("Failed to load a buffer(%d)\n", ret);
+				ErrPrint("Failed to load a buffer(%d)\n", ret);
 			}
 		}
 	} else if (target == TYPE_PD) {
 		if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
 			struct buffer_info *info;
-
-			DbgPrint("Slave acquire buffer for PD\n");
 
 			info = instance_pd_buffer(inst);
 			if (!info) {
@@ -6971,15 +6668,12 @@ static struct packet *slave_acquire_buffer(pid_t pid, int handle, const struct p
 			}
 
 			ret = buffer_handler_resize(info, w, h);
-			DbgPrint("Buffer resize returns %d\n", ret);
-
 			ret = buffer_handler_load(info);
 			if (ret == 0) {
 				instance_set_pd_size(inst, w, h);
 				id = buffer_handler_id(info);
-				DbgPrint("Buffer handler ID: %s\n", id);
 			} else {
-				DbgPrint("Failed to load a buffer (%d)\n", ret);
+				ErrPrint("Failed to load a buffer (%d)\n", ret);
 			}
 
 			/*!
@@ -7035,7 +6729,7 @@ static struct packet *slave_resize_buffer(pid_t pid, int handle, const struct pa
 
 	inst = package_find_instance_by_id(pkgname, id);
 	if (!inst) {
-		DbgPrint("Instance is not found[%s] [%s]\n", pkgname, id);
+		DbgPrint("Instance is not found[%s]\n", pkgname);
 		ret = LB_STATUS_ERROR_NOT_EXIST;
 		id = "";
 		goto out;
@@ -7143,8 +6837,6 @@ static struct packet *slave_release_buffer(pid_t pid, int handle, const struct p
 	} else if (type == TYPE_PD) {
 		struct buffer_info *info;
 
-		DbgPrint("Slave release buffer for PD\n");
-
 		info = instance_pd_buffer(inst);
 		ret = buffer_handler_unload(info);
 
@@ -7195,7 +6887,7 @@ static struct packet *service_change_period(pid_t pid, int handle, const struct 
 			EINA_LIST_FOREACH(inst_list, l, inst) {
 				ret = instance_set_period(inst, period);
 				if (ret < 0)
-					DbgPrint("Failed to change the period of %s to (%lf)\n", instance_id(inst), period);
+					ErrPrint("Failed to change the period of %s to (%lf)\n", pkgname, period);
 			}
 		}
 	} else {
@@ -7208,7 +6900,7 @@ static struct packet *service_change_period(pid_t pid, int handle, const struct 
 			ret = instance_set_period(inst, period);
 	}
 
-	DbgPrint("Change the update period: %s(%s), %lf : %d\n", pkgname, id, period, ret);
+	DbgPrint("Change the update period: %s, %lf : %d\n", pkgname, period, ret);
 out:
 	result = packet_create_reply(packet, "i", ret);
 	if (!result)

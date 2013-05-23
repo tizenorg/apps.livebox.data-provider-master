@@ -478,7 +478,7 @@ HAPI int util_unlink_files(const char *folder)
 		snprintf(abspath, len - 1, "%s/%s", folder, entry->d_name);
 
 		if (unlink(abspath) < 0)
-			DbgPrint("unlink: %s - %s\n", abspath, strerror(errno));
+			DbgPrint("unlink: %s\n", strerror(errno));
 
 		free(abspath);
 	}

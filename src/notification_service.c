@@ -102,7 +102,7 @@ static inline struct packet *create_packet_from_deleted_list(int op_num, int *li
  */
 static void _handler_insert(struct tcb *tcb, struct packet *packet, void *data)
 {
-	int ret = 0;
+	int ret = 0, ret_p = 0;
 	int priv_id = 0;
 	struct packet *packet_reply = NULL;
 	struct packet *packet_service = NULL;
@@ -112,24 +112,32 @@ static void _handler_insert(struct tcb *tcb, struct packet *packet, void *data)
 	if (noti != NULL) {
 		if (notification_ipc_make_noti_from_packet(noti, packet) == NOTIFICATION_ERROR_NONE) {
 			ret = notification_noti_insert(noti);
-			if (ret != NOTIFICATION_ERROR_NONE) {
-				ErrPrint("failed to insert a notification\n");
-				notification_free(noti);
-				return ;
-			}
-
 			notification_get_id(noti, NULL, &priv_id);
 			DbgPrint("priv_id: [%d]\n", priv_id);
 			packet_reply = packet_create_reply(packet, "ii", ret, priv_id);
 			if (packet_reply) {
-				service_common_unicast_packet(tcb, packet_reply);
+				if ((ret_p = service_common_unicast_packet(tcb, packet_reply)) < 0) {
+					ErrPrint("failed to send reply packet: %d\n", ret_p);
+				}
 				packet_destroy(packet_reply);
+			} else {
+				ErrPrint("failed to create a reply packet\n");
+			}
+
+			if (ret != NOTIFICATION_ERROR_NONE) {
+				ErrPrint("failed to insert a notification: %d\n", ret);
+				notification_free(noti);
+				return ;
 			}
 
 			packet_service = notification_ipc_make_packet_from_noti(noti, "add_noti", 2);
 			if (packet_service != NULL) {
-				service_common_multicast_packet(tcb, packet_service, TCB_CLIENT_TYPE_SERVICE);
+				if ((ret_p = service_common_multicast_packet(tcb, packet_service, TCB_CLIENT_TYPE_SERVICE)) < 0) {
+					ErrPrint("failed to send a multicast packet: %d\n", ret_p);
+				}
 				packet_destroy(packet_service);
+			} else {
+				ErrPrint("failed to create a multicats packet\n");
 			}
 		} else {
 			ErrPrint("Failed to create the packet");
@@ -140,7 +148,7 @@ static void _handler_insert(struct tcb *tcb, struct packet *packet, void *data)
 
 static void _handler_update(struct tcb *tcb, struct packet *packet, void *data)
 {
-	int ret = 0;
+	int ret = 0, ret_p = 0;
 	int priv_id = 0;
 	struct packet *packet_reply = NULL;
 	struct packet *packet_service = NULL;
@@ -150,23 +158,30 @@ static void _handler_update(struct tcb *tcb, struct packet *packet, void *data)
 	if (noti != NULL) {
 		if (notification_ipc_make_noti_from_packet(noti, packet) == NOTIFICATION_ERROR_NONE) {
 			ret = notification_noti_update(noti);
-			if (ret != NOTIFICATION_ERROR_NONE) {
-				ErrPrint("failed to update a notification\n");
-				notification_free(noti);
-				return ;
-			}
 
 			notification_get_id(noti, NULL, &priv_id);
 			DbgPrint("priv_id: [%d]\n", priv_id);
 			packet_reply = packet_create_reply(packet, "ii", ret, priv_id);
 			if (packet_reply) {
-				service_common_unicast_packet(tcb, packet_reply);
+				if ((ret_p = service_common_unicast_packet(tcb, packet_reply)) < 0) {
+					ErrPrint("failed to send reply packet:%d\n", ret_p);
+				}
 				packet_destroy(packet_reply);
+			} else {
+				ErrPrint("failed to create a reply packet\n");
+			}
+
+			if (ret != NOTIFICATION_ERROR_NONE) {
+				ErrPrint("failed to update a notification:%d\n", ret);
+				notification_free(noti);
+				return ;
 			}
 
 			packet_service = notification_ipc_make_packet_from_noti(noti, "update_noti", 2);
 			if (packet_service != NULL) {
-				service_common_multicast_packet(tcb, packet_service, TCB_CLIENT_TYPE_SERVICE);
+				if ((ret_p = service_common_multicast_packet(tcb, packet_service, TCB_CLIENT_TYPE_SERVICE)) < 0) {
+					ErrPrint("failed to send a multicast packet: %d\n", ret_p);
+				}
 				packet_destroy(packet_service);
 			}
 		} else {
@@ -178,21 +193,27 @@ static void _handler_update(struct tcb *tcb, struct packet *packet, void *data)
 
 static void _handler_refresh(struct tcb *tcb, struct packet *packet, void *data)
 {
-	int ret = NOTIFICATION_ERROR_NONE;
+	int ret = 0;
 	struct packet *packet_reply = NULL;
 
 	packet_reply = packet_create_reply(packet, "i", ret);
 	if (packet_reply) {
-		service_common_unicast_packet(tcb, packet_reply);
+		if ((ret = service_common_unicast_packet(tcb, packet_reply)) < 0) {
+			ErrPrint("failed to send reply packet:%d\n", ret);
+		}
 		packet_destroy(packet_reply);
+	} else {
+		ErrPrint("failed to create a reply packet\n");
 	}
 
-	service_common_multicast_packet(tcb, packet, TCB_CLIENT_TYPE_SERVICE);
+	if ((ret = service_common_multicast_packet(tcb, packet, TCB_CLIENT_TYPE_SERVICE)) < 0) {
+		ErrPrint("failed to send a multicast packet:%d\n", ret);
+	}
 }
 
 static void _handler_delete_single(struct tcb *tcb, struct packet *packet, void *data)
 {
-	int ret = 0;
+	int ret = 0, ret_p = 0;
 	int priv_id = 0;
 	struct packet *packet_reply = NULL;
 	struct packet *packet_service = NULL;
@@ -206,13 +227,24 @@ static void _handler_delete_single(struct tcb *tcb, struct packet *packet, void 
 		DbgPrint("priv_id: [%d]\n", priv_id);
 		packet_reply = packet_create_reply(packet, "ii", ret, priv_id);
 		if (packet_reply) {
-			service_common_unicast_packet(tcb, packet_reply);
+			if ((ret_p = service_common_unicast_packet(tcb, packet_reply)) < 0) {
+				ErrPrint("failed to send reply packet:%d\n", ret_p);
+			}
 			packet_destroy(packet_reply);
+		} else {
+			ErrPrint("failed to create a reply packet\n");
+		}
+
+		if (ret != NOTIFICATION_ERROR_NONE) {
+			ErrPrint("failed to delete a notification:%d\n", ret);
+			return ;
 		}
 
 		packet_service = packet_create("del_noti_single", "ii", 1, priv_id);
 		if (packet_service != NULL) {
-			service_common_multicast_packet(tcb, packet_service, TCB_CLIENT_TYPE_SERVICE);
+			if ((ret_p = service_common_multicast_packet(tcb, packet_service, TCB_CLIENT_TYPE_SERVICE)) < 0) {
+				ErrPrint("failed to send a multicast packet: %d\n", ret_p);
+			}
 			packet_destroy(packet_service);
 		}
 	} else {
@@ -222,7 +254,7 @@ static void _handler_delete_single(struct tcb *tcb, struct packet *packet, void 
 
 static void _handler_delete_multiple(struct tcb *tcb, struct packet *packet, void *data)
 {
-	int ret = 0;
+	int ret = 0, ret_p = 0;
 	struct packet *packet_reply = NULL;
 	struct packet *packet_service = NULL;
 	char *pkgname = NULL;
@@ -239,8 +271,20 @@ static void _handler_delete_multiple(struct tcb *tcb, struct packet *packet, voi
 
 		packet_reply = packet_create_reply(packet, "ii", ret, num_deleted);
 		if (packet_reply) {
-			service_common_unicast_packet(tcb, packet_reply);
+			if ((ret_p = service_common_unicast_packet(tcb, packet_reply)) < 0) {
+				ErrPrint("failed to send reply packet:%d\n", ret_p);
+			}
 			packet_destroy(packet_reply);
+		} else {
+			ErrPrint("failed to create a reply packet\n");
+		}
+
+		if (ret != NOTIFICATION_ERROR_NONE) {
+			ErrPrint("failed to delete notifications:%d\n", ret);
+			if (list_deleted != NULL) {
+				free(list_deleted);
+			}
+			return ;
 		}
 
 		if (num_deleted > 0) {
@@ -248,8 +292,12 @@ static void _handler_delete_multiple(struct tcb *tcb, struct packet *packet, voi
 				packet_service = create_packet_from_deleted_list(num_deleted, list_deleted, 0);
 
 				if (packet_service) {
-					service_common_multicast_packet(tcb, packet_service, TCB_CLIENT_TYPE_SERVICE);
+					if ((ret_p = service_common_multicast_packet(tcb, packet_service, TCB_CLIENT_TYPE_SERVICE)) < 0) {
+						ErrPrint("failed to send a multicast packet: %d\n", ret_p);
+					}
 					packet_destroy(packet_service);
+				} else {
+					ErrPrint("failed to create a multicast packet\n");
 				}
 			} else {
 				int set = 0;
@@ -260,8 +308,12 @@ static void _handler_delete_multiple(struct tcb *tcb, struct packet *packet, voi
 							list_deleted, set * NOTIFICATION_DEL_PACKET_UNIT);
 
 					if (packet_service) {
-						service_common_multicast_packet(tcb, packet_service, TCB_CLIENT_TYPE_SERVICE);
+						if ((ret_p = service_common_multicast_packet(tcb, packet_service, TCB_CLIENT_TYPE_SERVICE)) < 0) {
+							ErrPrint("failed to send a multicast packet:%d\n", ret_p);
+						}
 						packet_destroy(packet_service);
+					} else {
+						ErrPrint("failed to create a multicast packet\n");
 					}
 				}
 			}
@@ -278,15 +330,19 @@ static void _handler_delete_multiple(struct tcb *tcb, struct packet *packet, voi
 
 static void _handler_service_register(struct tcb *tcb, struct packet *packet, void *data)
 {
+	int ret = 0;
 	struct packet *packet_reply;
-	int ret;
 
 	ret = tcb_client_type_set(tcb, TCB_CLIENT_TYPE_SERVICE);
 
 	packet_reply = packet_create_reply(packet, "i", ret);
 	if (packet_reply) {
-		service_common_unicast_packet(tcb, packet_reply);
+		if ((ret = service_common_unicast_packet(tcb, packet_reply)) < 0) {
+			ErrPrint("failed to send reply packet:%d\n", ret);
+		}
 		packet_destroy(packet_reply);
+	} else {
+		ErrPrint("failed to create a reply packet\n");
 	}
 }
 

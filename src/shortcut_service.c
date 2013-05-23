@@ -94,9 +94,8 @@ static int service_thread_main(struct tcb *tcb, struct packet *packet, void *dat
 {
 	const char *command;
 
-	DbgPrint("TCB: %p, Packet: %p\n", tcb, packet);
 	if (!packet) {
-		DbgPrint("TCB: %p is terminated\n", tcb);
+		DbgPrint("TCB: %p is terminated (NIL packet)\n", tcb);
 		return 0;
 	}
 
@@ -105,7 +104,6 @@ static int service_thread_main(struct tcb *tcb, struct packet *packet, void *dat
 		ErrPrint("Invalid command\n");
 		return -EINVAL;
 	}
-	DbgPrint("Command: %s, Packet type[%d]\n", command, packet_type(packet));
 
 	switch (packet_type(packet)) {
 	case PACKET_REQ:

@@ -70,7 +70,7 @@ static inline char *get_string(char *string)
  */
 static void _handler_insert_badge(struct tcb *tcb, struct packet *packet, void *data)
 {
-	int ret = 0;
+	int ret = 0, ret_p = 0;
 	struct packet *packet_reply = NULL;
 	struct packet *packet_service = NULL;
 	char *pkgname = NULL;
@@ -91,16 +91,26 @@ static void _handler_insert_badge(struct tcb *tcb, struct packet *packet, void *
 
 		packet_reply = packet_create_reply(packet, "i", ret);
 		if (packet_reply) {
-			service_common_unicast_packet(tcb, packet_reply);
+			if ((ret_p = service_common_unicast_packet(tcb, packet_reply)) < 0) {
+				ErrPrint("Failed to send a reply packet:%d", ret_p);
+			}
 			packet_destroy(packet_reply);
+		} else {
+			ErrPrint("Failed to create a reply packet");
 		}
 
 		if (ret == BADGE_ERROR_NONE) {
 			packet_service = packet_create("insert_badge", "is", ret, pkgname);
 			if (packet_service != NULL) {
-				service_common_multicast_packet(tcb, packet_service, TCB_CLIENT_TYPE_SERVICE);
+				if ((ret_p = service_common_multicast_packet(tcb, packet_service, TCB_CLIENT_TYPE_SERVICE)) < 0) {
+					ErrPrint("Failed to send a muticast packet:%d", ret_p);
+				}
 				packet_destroy(packet_service);
+			} else {
+				ErrPrint("Failed to create a multicast packet");
 			}
+		} else {
+			ErrPrint("Failed to insert a badge:%d", ret);
 		}
 	} else {
 		ErrPrint("Failed to get data from the packet");
@@ -109,7 +119,7 @@ static void _handler_insert_badge(struct tcb *tcb, struct packet *packet, void *
 
 static void _handler_delete_badge(struct tcb *tcb, struct packet *packet, void *data)
 {
-	int ret = 0;
+	int ret = 0, ret_p = 0;
 	struct packet *packet_reply = NULL;
 	struct packet *packet_service = NULL;
 	char *pkgname = NULL;
@@ -128,16 +138,26 @@ static void _handler_delete_badge(struct tcb *tcb, struct packet *packet, void *
 
 		packet_reply = packet_create_reply(packet, "i", ret);
 		if (packet_reply) {
-			service_common_unicast_packet(tcb, packet_reply);
+			if ((ret_p = service_common_unicast_packet(tcb, packet_reply)) < 0) {
+				ErrPrint("Failed to send a reply packet:%d", ret_p);
+			}
 			packet_destroy(packet_reply);
+		} else {
+			ErrPrint("Failed to create a reply packet");
 		}
 
 		if (ret == BADGE_ERROR_NONE) {
 			packet_service = packet_create("delete_badge", "is", ret, pkgname);
 			if (packet_service != NULL) {
-				service_common_multicast_packet(tcb, packet_service, TCB_CLIENT_TYPE_SERVICE);
+				if ((ret_p = service_common_multicast_packet(tcb, packet_service, TCB_CLIENT_TYPE_SERVICE)) < 0) {
+					ErrPrint("Failed to send a muticast packet:%d", ret_p);
+				}
 				packet_destroy(packet_service);
+			} else {
+				ErrPrint("Failed to create a multicast packet");
 			}
+		} else {
+			ErrPrint("Failed to delete a badge:%d", ret);
 		}
 	} else {
 		ErrPrint("Failed to get data from the packet");
@@ -146,7 +166,7 @@ static void _handler_delete_badge(struct tcb *tcb, struct packet *packet, void *
 
 static void _handler_set_badge_count(struct tcb *tcb, struct packet *packet, void *data)
 {
-	int ret = 0;
+	int ret = 0, ret_p = 0;
 	struct packet *packet_reply = NULL;
 	struct packet *packet_service = NULL;
 	char *pkgname = NULL;
@@ -166,16 +186,26 @@ static void _handler_set_badge_count(struct tcb *tcb, struct packet *packet, voi
 
 		packet_reply = packet_create_reply(packet, "i", ret);
 		if (packet_reply) {
-			service_common_unicast_packet(tcb, packet_reply);
+			if ((ret_p = service_common_unicast_packet(tcb, packet_reply)) < 0) {
+				ErrPrint("Failed to send a reply packet:%d", ret_p);
+			}
 			packet_destroy(packet_reply);
+		} else {
+			ErrPrint("Failed to create a reply packet");
 		}
 
 		if (ret == BADGE_ERROR_NONE) {
 			packet_service = packet_create("set_badge_count", "isi", ret, pkgname, count);
 			if (packet_service != NULL) {
-				service_common_multicast_packet(tcb, packet_service, TCB_CLIENT_TYPE_SERVICE);
+				if ((ret_p = service_common_multicast_packet(tcb, packet_service, TCB_CLIENT_TYPE_SERVICE)) < 0) {
+					ErrPrint("Failed to send a muticast packet:%d", ret_p);
+				}
 				packet_destroy(packet_service);
+			} else {
+				ErrPrint("Failed to create a multicast packet");
 			}
+		} else {
+			ErrPrint("Failed to set count of badge:%d", ret);
 		}
 	} else {
 		ErrPrint("Failed to get data from the packet");
@@ -184,7 +214,7 @@ static void _handler_set_badge_count(struct tcb *tcb, struct packet *packet, voi
 
 static void _handler_set_display_option(struct tcb *tcb, struct packet *packet, void *data)
 {
-	int ret = 0;
+	int ret = 0, ret_p = 0;
 	struct packet *packet_reply = NULL;
 	struct packet *packet_service = NULL;
 	char *pkgname = NULL;
@@ -204,16 +234,26 @@ static void _handler_set_display_option(struct tcb *tcb, struct packet *packet, 
 
 		packet_reply = packet_create_reply(packet, "i", ret);
 		if (packet_reply) {
-			service_common_unicast_packet(tcb, packet_reply);
+			if ((ret_p = service_common_unicast_packet(tcb, packet_reply)) < 0) {
+				ErrPrint("Failed to send a reply packet:%d", ret_p);
+			}
 			packet_destroy(packet_reply);
+		} else {
+			ErrPrint("Failed to create a reply packet");
 		}
 
 		if (ret == BADGE_ERROR_NONE) {
 			packet_service = packet_create("set_disp_option", "isi", ret, pkgname, is_display);
 			if (packet_service != NULL) {
-				service_common_multicast_packet(tcb, packet_service, TCB_CLIENT_TYPE_SERVICE);
+				if ((ret_p = service_common_multicast_packet(tcb, packet_service, TCB_CLIENT_TYPE_SERVICE)) < 0) {
+					ErrPrint("Failed to send a muticast packet:%d", ret_p);
+				}
 				packet_destroy(packet_service);
+			} else {
+				ErrPrint("Failed to create a multicast packet");
 			}
+		} else {
+			ErrPrint("Failed to set display option of badge:%d", ret);
 		}
 	} else {
 		ErrPrint("Failed to get data from the packet");
@@ -222,15 +262,22 @@ static void _handler_set_display_option(struct tcb *tcb, struct packet *packet, 
 
 static void _handler_service_register(struct tcb *tcb, struct packet *packet, void *data)
 {
+	int ret = 0;
 	struct packet *packet_reply;
-	int ret;
 
 	ret = tcb_client_type_set(tcb, TCB_CLIENT_TYPE_SERVICE);
+	if (ret < 0) {
+		ErrPrint("Failed to set the type of client:%d", ret);
+	}
 
 	packet_reply = packet_create_reply(packet, "i", ret);
 	if (packet_reply) {
-		service_common_unicast_packet(tcb, packet_reply);
+		if ((ret = service_common_unicast_packet(tcb, packet_reply)) < 0) {
+			ErrPrint("Failed to send a reply packet:%d", ret);
+		}
 		packet_destroy(packet_reply);
+	} else {
+		ErrPrint("Failed to create a reply packet");
 	}
 }
 
@@ -268,9 +315,8 @@ static int service_thread_main(struct tcb *tcb, struct packet *packet, void *dat
 		},
 	};
 
-	DbgPrint("TCB: %p, Packet: %p\n", tcb, packet);
 	if (!packet) {
-		DbgPrint("TCB: %p is terminated\n", tcb);
+		DbgPrint("TCB: %p is terminated (NIL packet)\n", tcb);
 		return 0;
 	}
 
@@ -279,13 +325,11 @@ static int service_thread_main(struct tcb *tcb, struct packet *packet, void *dat
 		ErrPrint("Invalid command\n");
 		return -EINVAL;
 	}
-	DbgPrint("Command: %s, Packet type[%d]\n", command, packet_type(packet));
+	DbgPrint("Command: [%s], Packet type[%d]\n", command, packet_type(packet));
 
 	switch (packet_type(packet)) {
 	case PACKET_REQ:
 		/* Need to send reply packet */
-		DbgPrint("REQ: Command: [%s]\n", command);
-
 		for (i = 0; service_req_table[i].cmd; i++) {
 			if (strcmp(service_req_table[i].cmd, command))
 				continue;
@@ -339,7 +383,7 @@ HAPI int badge_service_fini(void)
 		return LB_STATUS_ERROR_INVALID;
 
 	service_common_destroy(s_info.svc_ctx);
-	DbgPrint("Successfully Finalized\n");
+	DbgPrint("Successfully finalized\n");
 	return LB_STATUS_SUCCESS;
 }
 

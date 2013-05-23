@@ -174,7 +174,6 @@ static inline struct slave_node *create_slave_node(const char *name, int is_secu
 	xmonitor_add_event_callback(XMONITOR_RESUMED, xmonitor_resume_cb, slave);
 
 	s_info.slave_list = eina_list_append(s_info.slave_list, slave);
-	DbgPrint("slave data is created %p\n", slave);
 	return slave;
 }
 
@@ -201,12 +200,10 @@ static inline void destroy_slave_node(struct slave_node *slave)
 	struct event *event;
 	struct priv_data *priv;
 
-	if (slave->pid != (pid_t)-1) {
+	if (slave_pid(slave) != (pid_t)-1) {
 		ErrPrint("Slave is not deactivated\n");
 		return;
 	}
-
-	DbgPrint("Slave data is destroyed %p\n", slave);
 
 	xmonitor_del_event_callback(XMONITOR_PAUSED, xmonitor_pause_cb, slave);
 	xmonitor_del_event_callback(XMONITOR_RESUMED, xmonitor_resume_cb, slave);
@@ -385,16 +382,16 @@ static Eina_Bool activate_timer_cb(void *data)
 	slave_set_reactivate_instances(slave, 0);
 
 	slave->activate_timer = NULL;
-	if (slave->pid > 0) {
+	if (slave_pid(slave) > 0) {
 		int ret;
-		DbgPrint("Try to terminate PID: %d\n", slave->pid);
-		ret = aul_terminate_pid(slave->pid);
+		DbgPrint("Try to terminate PID: %d\n", slave_pid(slave));
+		ret = aul_terminate_pid(slave_pid(slave));
 		if (ret < 0)
-			ErrPrint("Terminate failed, pid %d\n", slave->pid);
+			ErrPrint("Terminate failed, pid %d (reason: %d)\n", slave_pid(slave), ret);
 	}
 
+	ErrPrint("Slave is not activated in %lf sec (slave: %s)\n", SLAVE_ACTIVATE_TIME, slave_name(slave));
 	slave = slave_deactivated(slave);
-	ErrPrint("Slave is not activated in %lf sec (slave: %p)\n", SLAVE_ACTIVATE_TIME, slave);
 	return ECORE_CALLBACK_CANCEL;
 }
 
@@ -410,11 +407,11 @@ HAPI int slave_activate(struct slave_node *slave)
 	 * So we can use this simple code for checking the slave's last state.
 	 * about it is alive? or not.
 	 */
-	if (slave->pid != (pid_t)-1)
+	if (slave_pid(slave) != (pid_t)-1)
 		return LB_STATUS_ERROR_ALREADY;
 
 	if (DEBUG_MODE) {
-		DbgPrint("Debug Mode enabled. name[%s] secured[%d] abi[%s]\n", slave->name, slave->secured, slave->abi);
+		DbgPrint("Debug Mode enabled. name[%s] secured[%d] abi[%s]\n", slave_name(slave), slave->secured, slave->abi);
 	} else {
 		bundle *param;
 		param = bundle_create();
@@ -423,21 +420,20 @@ HAPI int slave_activate(struct slave_node *slave)
 			return LB_STATUS_ERROR_FAULT;
 		}
 
-		bundle_add(param, BUNDLE_SLAVE_NAME, slave->name);
+		bundle_add(param, BUNDLE_SLAVE_NAME, slave_name(slave));
 		bundle_add(param, BUNDLE_SLAVE_SECURED, slave->secured ? "true" : "false");
 		bundle_add(param, BUNDLE_SLAVE_ABI, slave->abi);
 
-		DbgPrint("Launch the slave package: %s\n", slave->pkgname);
-		slave->pid = (pid_t)aul_launch_app(slave->pkgname, param);
+		slave->pid = (pid_t)aul_launch_app(slave_pkgname(slave), param);
 
 		bundle_free(param);
 
 		if (slave->pid < 0) {
-			ErrPrint("Failed to launch a new slave %s (%d)\n", slave->name, slave->pid);
+			ErrPrint("Failed to launch a new slave %s (%d)\n", slave_name(slave), slave->pid);
 			slave->pid = (pid_t)-1;
 			return LB_STATUS_ERROR_FAULT;
 		}
-		DbgPrint("Slave launched %d for %s\n", slave->pid, slave->name);
+		DbgPrint("Slave %s is launched with %d as %s\n", slave_pkgname(slave), slave->pid, slave_name(slave));
 
 		slave->activate_timer = ecore_timer_add(SLAVE_ACTIVATE_TIME, activate_timer_cb, slave);
 		if (!slave->activate_timer)
@@ -450,7 +446,7 @@ HAPI int slave_activate(struct slave_node *slave)
 	 * Increase the refcnt of a slave,
 	 * To prevent from making an orphan(slave).
 	 */
-	slave_ref(slave);
+	(void)slave_ref(slave);
 
 	return LB_STATUS_SUCCESS;
 }
@@ -498,7 +494,7 @@ HAPI int slave_activated(struct slave_node *slave)
 		slave_pause(slave);
 
 	if (slave->secured == 1) {
-		DbgPrint("Slave deactivation timer is added (%s - %lf)\n", slave->name, SLAVE_TTL);
+		DbgPrint("Slave deactivation timer is added (%s - %lf)\n", slave_name(slave), SLAVE_TTL);
 		slave->ttl_timer = ecore_timer_add(SLAVE_TTL, slave_ttl_cb, slave);
 		if (!slave->ttl_timer)
 			ErrPrint("Failed to create a TTL timer\n");
@@ -563,18 +559,17 @@ HAPI struct slave_node *slave_deactivate(struct slave_node *slave)
 		return slave;
 	}
 
-	DbgPrint("Deactivate a slave: %d\n", slave->pid);
 	/*!
 	 * \todo
 	 * check the return value of the aul_terminate_pid
 	 */
 	slave->state = SLAVE_REQUEST_TO_TERMINATE;
 
-	DbgPrint("Terminate PID: %d\n", slave->pid);
-	if (slave->pid > 0) {
+	if (slave_pid(slave) > 0) {
+		DbgPrint("Terminate slave: %d (%s)\n", slave_pid(slave), slave_name(slave));
 		ret = aul_terminate_pid(slave->pid);
 		if (ret < 0) {
-			ErrPrint("Terminate failed. pid %d (%d)\n", slave->pid, ret);
+			ErrPrint("Terminate slave(%s) failed. pid %d (%d)\n", slave_name(slave), slave_pid(slave), ret);
 			slave = slave_deactivated(slave);
 		}
 	}
@@ -645,11 +640,11 @@ HAPI struct slave_node *slave_deactivated_by_fault(struct slave_node *slave)
 
 	(void)fault_check_pkgs(slave);
 
-	if (slave->pid > 0) {
-		DbgPrint("Try to terminate PID: %d\n", slave->pid);
-		ret = aul_terminate_pid(slave->pid);
+	if (slave_pid(slave) > 0) {
+		DbgPrint("Try to terminate PID: %d\n", slave_pid(slave));
+		ret = aul_terminate_pid(slave_pid(slave));
 		if (ret < 0) {
-			ErrPrint("Terminate failed, pid %d\n", slave->pid);
+			ErrPrint("Terminate failed, pid %d\n", slave_pid(slave));
 		}
 	}
 
@@ -894,7 +889,7 @@ HAPI struct slave_node *slave_find_by_pid(pid_t pid)
 	struct slave_node *slave;
 
 	EINA_LIST_FOREACH(s_info.slave_list, l, slave) {
-		if (slave->pid == pid)
+		if (slave_pid(slave) == pid)
 			return slave;
 	}
 
@@ -907,7 +902,7 @@ HAPI struct slave_node *slave_find_by_name(const char *name)
 	struct slave_node *slave;
 
 	EINA_LIST_FOREACH(s_info.slave_list, l, slave) {
-		if (!strcmp(slave->name, name))
+		if (!strcmp(slave_name(slave), name))
 			return slave;
 	}
 
@@ -940,11 +935,12 @@ HAPI struct slave_node *slave_find_available(const char *abi, int secured, int n
 			continue;
 
 		if (slave->secured) {
-			DbgPrint("Found secured slave - has no instances (%s)\n", slave_name(slave));
-			if (slave->loaded_package == 0)
+			if (slave->loaded_package == 0) {
+				DbgPrint("Found secured slave - has no instances (%s)\n", slave_name(slave));
 				return slave;
+			}
 		} else if (slave->network == network) {
-			DbgPrint("slave[%s] %d (net: %d)\n", slave_name(slave), slave->loaded_package, slave->network);
+			DbgPrint("slave[%s] loaded_package[%d] net: [%d]\n", slave_name(slave), slave->loaded_package, slave->network);
 			if (!strcasecmp(abi, DEFAULT_ABI)) {
 				if (slave->loaded_package < SLAVE_MAX_LOAD)
 					return slave;
@@ -963,8 +959,8 @@ HAPI struct slave_node *slave_find_by_pkgname(const char *pkgname)
 	struct slave_node *slave;
 
 	EINA_LIST_FOREACH(s_info.slave_list, l, slave) {
-		if (!strcmp(slave->pkgname, pkgname)) {
-			if (slave->pid == (pid_t)-1) {
+		if (!strcmp(slave_pkgname(slave), pkgname)) {
+			if (slave_pid(slave) == (pid_t)-1) {
 				return slave;
 			}
 		}
@@ -1010,7 +1006,7 @@ HAPI void slave_unload_package(struct slave_node *slave)
 HAPI void slave_load_instance(struct slave_node *slave)
 {
 	slave->loaded_instance++;
-	DbgPrint("Instance: (%d)%d\n", slave->pid, slave->loaded_instance);
+	DbgPrint("Instance: (%d)%d\n", slave_pid(slave), slave->loaded_instance);
 }
 
 HAPI int const slave_loaded_instance(struct slave_node *slave)
@@ -1031,7 +1027,7 @@ HAPI struct slave_node *slave_unload_instance(struct slave_node *slave)
 	}
 
 	slave->loaded_instance--;
-	DbgPrint("Instance: (%d)%d\n", slave->pid, slave->loaded_instance);
+	DbgPrint("Instance: (%d)%d\n", slave_pid(slave), slave->loaded_instance);
 	if (slave->loaded_instance == 0 && slave_is_activated(slave)) {
 		slave_set_reactivation(slave, 0);
 		slave_set_reactivate_instances(slave, 0);
@@ -1067,7 +1063,7 @@ HAPI int slave_set_pid(struct slave_node *slave, pid_t pid)
 	if (!slave)
 		return LB_STATUS_ERROR_INVALID;
 
-	DbgPrint("Slave PID is updated to %d from %d\n", pid, slave->pid);
+	DbgPrint("Slave PID is updated to %d from %d\n", pid, slave_pid(slave));
 
 	slave->pid = pid;
 	return LB_STATUS_SUCCESS;

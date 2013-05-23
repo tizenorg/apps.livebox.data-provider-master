@@ -738,7 +738,7 @@ HAPI int buffer_handler_unload(struct buffer_info *info)
 	int ret;
 
 	if (!info) {
-		DbgPrint("buffer handler is nil\n");
+		DbgPrint("buffer handler is NIL\n");
 		return LB_STATUS_ERROR_INVALID;
 	}
 
@@ -775,7 +775,7 @@ HAPI int buffer_handler_destroy(struct buffer_info *info)
 	struct buffer *buffer;
 
 	if (!info) {
-		DbgPrint("Buffer is not created yet. info is nil\n");
+		DbgPrint("Buffer is not created yet. info is NIL\n");
 		return LB_STATUS_SUCCESS;
 	}
 
@@ -1071,7 +1071,7 @@ HAPI int buffer_handler_resize(struct buffer_info *info, int w, int h)
 	buffer_handler_update_size(info, w, h);
 
 	if (!info->is_loaded) {
-		DbgPrint("Not yet loaded, just update the size [%dx%d]\n", w, h);
+		DbgPrint("Not yet loaded\n");
 		return LB_STATUS_SUCCESS;
 	}
 
@@ -1124,7 +1124,7 @@ static inline int sync_for_pixmap(struct buffer *buffer)
 	}
 
 	if (buffer->type != BUFFER_TYPE_PIXMAP) {
-		DbgPrint("Invalid buffer\n");
+		ErrPrint("Invalid buffer\n");
 		return LB_STATUS_SUCCESS;
 	}
 
@@ -1280,8 +1280,6 @@ HAPI int buffer_handler_init(void)
 		s_info.err_base = 0;
 		return LB_STATUS_SUCCESS;
 	}
-
-	DbgPrint("Open: %s (driver: %s)", deviceName, driverName);
 
 	if (USE_SW_BACKEND) {
 		DbgPrint("Fallback to the S/W Backend\n");

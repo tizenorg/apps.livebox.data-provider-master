@@ -551,8 +551,6 @@ static void *server_main(void *data)
 				break;
 			}
 
-			DbgPrint("Event CH: %c\n", evt_ch);
-
 			CRITICAL_SECTION_BEGIN(&svc_ctx->packet_list_lock);
 			packet_info = eina_list_nth(svc_ctx->packet_list, 0);
 			svc_ctx->packet_list = eina_list_remove(svc_ctx->packet_list, packet_info);
@@ -772,8 +770,10 @@ HAPI struct service_context *tcb_svc_ctx(struct tcb *tcb)
 HAPI int service_common_unicast_packet(struct tcb *tcb, struct packet *packet)
 {
 	struct service_context *svc_ctx;
-	if (!tcb || !packet)
+	if (!tcb || !packet) {
+		DbgPrint("Invalid unicast: tcb[%p], packet[%p]\n", tcb, packet);
 		return -EINVAL;
+	}
 
 	svc_ctx = tcb->svc_ctx;
 
@@ -792,8 +792,10 @@ HAPI int service_common_multicast_packet(struct tcb *tcb, struct packet *packet,
 	struct service_context *svc_ctx;
 	int ret;
 
-	if (!tcb || !packet)
+	if (!tcb || !packet) {
+		DbgPrint("Invalid multicast: tcb[%p], packet[%p]\n", tcb, packet);
 		return -EINVAL;
+	}
 
 	svc_ctx = tcb->svc_ctx;
 

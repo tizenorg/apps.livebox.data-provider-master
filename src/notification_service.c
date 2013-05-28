@@ -213,6 +213,7 @@ static void _handler_refresh(struct tcb *tcb, struct packet *packet, void *data)
 
 static void _handler_delete_single(struct tcb *tcb, struct packet *packet, void *data)
 {
+	int num_changes = 0;
 	int ret = 0, ret_p = 0;
 	int priv_id = 0;
 	struct packet *packet_reply = NULL;
@@ -222,9 +223,9 @@ static void _handler_delete_single(struct tcb *tcb, struct packet *packet, void 
 	if (packet_get(packet, "si", &pkgname, &priv_id) == 2) {
 		pkgname = get_string(pkgname);
 
-		ret = notification_noti_delete_by_priv_id(pkgname, priv_id);
+		ret = notification_noti_delete_by_priv_id_get_changes(pkgname, priv_id, &num_changes);
 
-		DbgPrint("priv_id: [%d]\n", priv_id);
+		DbgPrint("priv_id: [%d] num_delete:%d\n", priv_id, num_changes);
 		packet_reply = packet_create_reply(packet, "ii", ret, priv_id);
 		if (packet_reply) {
 			if ((ret_p = service_common_unicast_packet(tcb, packet_reply)) < 0) {
@@ -235,8 +236,8 @@ static void _handler_delete_single(struct tcb *tcb, struct packet *packet, void 
 			ErrPrint("failed to create a reply packet\n");
 		}
 
-		if (ret != NOTIFICATION_ERROR_NONE) {
-			ErrPrint("failed to delete a notification:%d\n", ret);
+		if (ret != NOTIFICATION_ERROR_NONE && num_changes <= 0) {
+			ErrPrint("failed to delete a notification:%d %d\n", ret, num_changes);
 			return ;
 		}
 

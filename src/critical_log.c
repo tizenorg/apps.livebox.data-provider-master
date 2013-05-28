@@ -57,10 +57,10 @@ static inline void rotate_log(void)
 
 	s_info.file_id = (s_info.file_id + 1) % MAX_LOG_FILE;
 
-	namelen = strlen(s_info.filename) + strlen(SLAVE_LOG_PATH) + 20;
+	namelen = strlen(s_info.filename) + strlen(SLAVE_LOG_PATH) + 30;
 	filename = malloc(namelen);
 	if (filename) {
-		snprintf(filename, namelen, "%s/%d_%s", SLAVE_LOG_PATH, s_info.file_id, s_info.filename);
+		snprintf(filename, namelen, "%s/%d_%s.%d", SLAVE_LOG_PATH, s_info.file_id, s_info.filename, getpid());
 
 		if (s_info.fp)
 			fclose(s_info.fp);
@@ -81,18 +81,11 @@ HAPI int critical_log(const char *func, int line, const char *fmt, ...)
 {
 	va_list ap;
 	int ret;
-	struct timeval tv;
 
 	if (!s_info.fp)
 		return LB_STATUS_ERROR_IO;
 
-	if (gettimeofday(&tv, NULL) < 0) {
-		ErrPrint("gettimeofday: %s\n", strerror(errno));
-		tv.tv_sec = 0;
-		tv.tv_usec = 0;
-	}
-
-	fprintf(s_info.fp, "%d %lu.%lu [%s:%d] ", getpid(), tv.tv_sec, tv.tv_usec, util_basename((char *)func), line);
+	fprintf(s_info.fp, "%lf [%s:%d] ", util_timestamp(), util_basename((char *)func), line);
 
 	va_start(ap, fmt);
 	ret = vfprintf(s_info.fp, fmt, ap);
@@ -121,7 +114,7 @@ HAPI int critical_log_init(const char *name)
 		return LB_STATUS_ERROR_MEMORY;
 	}
 
-	namelen = strlen(name) + strlen(SLAVE_LOG_PATH) + 20;
+	namelen = strlen(name) + strlen(SLAVE_LOG_PATH) + 30;
 
 	filename = malloc(namelen);
 	if (!filename) {
@@ -131,7 +124,7 @@ HAPI int critical_log_init(const char *name)
 		return LB_STATUS_ERROR_MEMORY;
 	}
 
-	snprintf(filename, namelen, "%s/%d_%s", SLAVE_LOG_PATH, s_info.file_id, name);
+	snprintf(filename, namelen, "%s/%d_%s.%d", SLAVE_LOG_PATH, s_info.file_id, name, getpid());
 
 	s_info.fp = fopen(filename, "w+");
 	if (!s_info.fp) {

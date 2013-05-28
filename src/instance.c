@@ -2361,34 +2361,27 @@ HAPI int instance_signal_emit(struct inst_info *inst, const char *signal, const 
 	const char *id;
 	struct slave_node *slave;
 	struct packet *packet;
-	int ret;
+	struct pkg_info *pkg;
 
-	pkgname = package_name(instance_package(inst));
+	pkg = instance_package(inst);
+	pkgname = package_name(pkg);
 	id = instance_id(inst);
-	if (!pkgname || !id) {
-		ErrPrint("Invalid instance\n");
+	if (!pkgname || !id)
 		return LB_STATUS_ERROR_INVALID;
-	}
 
-	slave = package_slave(instance_package(inst));
-	if (!slave) {
-		ErrPrint("Slave is not valid\n");
+	slave = package_slave(pkg);
+	if (!slave)
 		return LB_STATUS_ERROR_INVALID;
-	}
 
 	packet = packet_create_noack("script", "ssssddddddi",
 			pkgname, id,
 			signal, part,
 			sx, sy, ex, ey,
 			x, y, down);
-	if (!packet) {
-		ErrPrint("Failed to create param\n");
+	if (!packet)
 		return LB_STATUS_ERROR_FAULT;
-	}
 
-	DbgPrint("Signal emit: %s(%s), %s(%s), %lf, %lf, %lf, %lf, %lfx%lf, %d\n", pkgname, id, signal, part, sx, sy, ex, ey, x, y, down);
-	ret = slave_rpc_request_only(slave, pkgname, packet, 0); 
-	return ret;
+	return slave_rpc_request_only(slave, pkgname, packet, 0); 
 }
 
 HAPI int instance_text_signal_emit(struct inst_info *inst, const char *emission, const char *source, double sx, double sy, double ex, double ey)
@@ -2910,38 +2903,34 @@ HAPI int instance_slave_close_pd(struct inst_info *inst, struct client_node *cli
 	const char *id;
 	struct packet *packet;
 	struct slave_node *slave;
-	struct pkg_info *info;
+	struct pkg_info *pkg;
 	int ret;
 
-	if (inst->pd.owner != client) {
-		ErrPrint("PD owner is not matched\n");
+	if (inst->pd.owner != client)
 		return LB_STATUS_ERROR_INVALID;
-	}
 
 	slave = package_slave(instance_package(inst));
 	if (!slave)
 		return LB_STATUS_ERROR_FAULT;
 
-	info = instance_package(inst);
-	if (!info)
+	pkg = instance_package(inst);
+	if (!pkg)
 		return LB_STATUS_ERROR_INVALID;
 
-	pkgname = package_name(info);
+	pkgname = package_name(pkg);
 	id = instance_id(inst);
 
 	if (!pkgname || !id)
 		return LB_STATUS_ERROR_INVALID;
 
 	packet = packet_create_noack("pd_hide", "ss", pkgname, id);
-	if (!packet) {
-		ErrPrint("Failed to create a packet\n");
+	if (!packet)
 		return LB_STATUS_ERROR_FAULT;
-	}
 
 	slave_thaw_ttl(slave);
 
 	ret = slave_rpc_request_only(slave, pkgname, packet, 0);
-	release_resource_for_closing_pd(info, inst, client);
+	release_resource_for_closing_pd(pkg, inst, client);
 	inst->pd.owner = NULL;
 	return ret;
 }

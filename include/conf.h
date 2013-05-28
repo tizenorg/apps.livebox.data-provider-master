@@ -86,6 +86,8 @@ struct conf {
 
 	double scale_width_factor;
 	double scale_height_factor;
+
+	double pd_request_timeout;
 };
 
 extern struct conf g_conf;
@@ -144,6 +146,8 @@ extern int conf_loader(void);
 
 #define SQLITE_FLUSH_MAX	g_conf.sqlite_flush_max
 #define DBFILE			g_conf.path.db
+
+#define PD_REQUEST_TIMEOUT	g_conf.pd_request_timeout
 
 #define SLAVE_MAX_LOAD		g_conf.slave_max_load
 #define DEFAULT_PING_TIME	g_conf.ping_time

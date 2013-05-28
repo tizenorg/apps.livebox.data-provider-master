@@ -87,6 +87,7 @@ HAPI struct conf g_conf = {
 
 	.scale_width_factor = 1.0f,
 	.scale_height_factor = 1.0f,
+	.pd_request_timeout = 5.0f,
 };
 
 static void conf_update_size(void)
@@ -331,6 +332,13 @@ static void slave_max_loader(char *buffer)
 	DbgPrint("Max load: %d\n", g_conf.slave_max_load);
 }
 
+static void pd_request_timeout_handler(char *buffer)
+{
+	if (sscanf(buffer, "%lf", &g_conf.pd_request_timeout) != 1)
+		ErrPrint("Failed to parse the request_timeout\n");
+	DbgPrint("Default PD request timeout: %lf\n", g_conf.pd_request_timeout);
+}
+
 HAPI int conf_loader(void)
 {
 	FILE *fp;
@@ -481,6 +489,10 @@ HAPI int conf_loader(void)
 		{
 			.name = "input",
 			.handler = input_path_handler,
+		},
+		{
+			.name = "pd_request_timeout",
+			.handler = pd_request_timeout_handler,
 		},
 		{
 			.name = NULL,

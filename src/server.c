@@ -5351,6 +5351,8 @@ out:
 
 static Eina_Bool lazy_pd_created_cb(void *data)
 {
+	(void)instance_del_data(data, "lazy,pd,open");
+
 	/*!
 	 * After unref instance first,
 	 * if the instance is not destroyed, try to notify the created PD event to the client.
@@ -5366,6 +5368,8 @@ static Eina_Bool lazy_pd_created_cb(void *data)
 
 static Eina_Bool lazy_pd_destroyed_cb(void *data)
 {
+	(void)instance_del_data(data, "lazy,pd,close");
+
 	if (instance_unref(data)) {
 		DbgPrint("Send PD Destroy event\n");
 		instance_client_pd_destroyed(data, LB_STATUS_SUCCESS);
@@ -5430,6 +5434,26 @@ out:
 	return NULL;
 }
 
+static Eina_Bool pd_open_monitor_cb(void *data)
+{
+	int ret;
+	ret = instance_client_pd_created(data, LB_STATUS_ERROR_TIMEOUT);
+	(void)instance_del_data(data, "pd,open,monitor");
+	(void)instance_unref(data);
+	ErrPrint("PD Open request is timed-out (%lf), ret: %d\n", PD_REQUEST_TIMEOUT, ret);
+	return ECORE_CALLBACK_CANCEL;
+}
+
+static Eina_Bool pd_close_monitor_cb(void *data)
+{
+	int ret;
+	ret = instance_client_pd_destroyed(data, LB_STATUS_ERROR_TIMEOUT);
+	(void)instance_del_data(data, "pd,close,monitor");
+	(void)instance_unref(data);
+	ErrPrint("PD Close request it not processed in %lf seconds\n", PD_REQUEST_TIMEOUT);
+	return ECORE_CALLBACK_CANCEL;
+}
+
 static struct packet *client_create_pd(pid_t pid, int handle, const struct packet *packet) /* pid, pkgname, filename, ret */
 {
 	struct client_node *client;
@@ -5471,10 +5495,37 @@ static struct packet *client_create_pd(pid_t pid, int handle, const struct packe
 		ret = LB_STATUS_ERROR_NO_SPACE;
 	else if (package_pd_type(instance_package(inst)) == PD_TYPE_BUFFER) {
 		instance_slave_set_pd_pos(inst, x, y);
+		/*!
+		 * \note
+		 * Send request to the slave.
+		 * The SLAVE must has to repsonse this via "release_buffer" method.
+		 */
 		ret = instance_slave_open_pd(inst, client);
-		ret = instance_signal_emit(inst,
-				"pd,show", util_uri_to_path(instance_id(inst)),
-				0.0, 0.0, 0.0, 0.0, x, y, 0);
+		if (ret == LB_STATUS_SUCCESS) {
+			ret = instance_signal_emit(inst,
+					"pd,show", util_uri_to_path(instance_id(inst)),
+					0.0, 0.0, 0.0, 0.0, x, y, 0);
+			if (ret != LB_STATUS_SUCCESS) {
+				int tmp_ret;
+
+				tmp_ret = instance_slave_close_pd(inst, client);
+				ErrPrint("Unable to send script event for openning PD [%s], %d\n", pkgname, tmp_ret);
+			} else {
+				Ecore_Timer *pd_open_monitor;
+
+				inst = instance_ref(inst);
+				pd_open_monitor = ecore_timer_add(PD_REQUEST_TIMEOUT, pd_open_monitor_cb, inst);
+				if (!pd_open_monitor) {
+					instance_unref(inst);
+					ErrPrint("Failed to create a timer for PD Open monitor\n");
+				} else {
+					(void)instance_set_data(inst, "pd,open,monitor", pd_open_monitor);
+				}
+			}
+		} else {
+			ErrPrint("Unable to send request for openning PD [%s]\n", pkgname);
+		}
+
 		/*!
 		 * \note
 		 * PD craeted event will be send by the acquire_buffer function.
@@ -5510,6 +5561,7 @@ static struct packet *client_create_pd(pid_t pid, int handle, const struct packe
 			 * Send the PD created event to the clients,
 			 */
 			if (ret == LB_STATUS_SUCCESS) {
+				Ecore_Timer *timer;
 				/*!
 				 * \note
 				 * But the created event has to be send afte return
@@ -5524,20 +5576,36 @@ static struct packet *client_create_pd(pid_t pid, int handle, const struct packe
 				 * Even if the timer callback is called, after the instance is destroyed.
 				 * lazy_pd_created_cb will decrease the instance refcnt first.
 				 * At that time, if the instance is released, the timer callback will do nothing.
+				 *
+				 * 13-05-28
+				 * I change my mind. There is no requirements to keep the timer handler.
+				 * But I just add it to the tagged-data of the instance.
+				 * Just reserve for future-use.
 				 */
-				if (!ecore_timer_add(DELAY_TIME, lazy_pd_created_cb, inst)) {
-					instance_unref(inst);
-					script_handler_unload(instance_pd_script(inst), 1);
-					instance_slave_close_pd(inst, client);
+				timer = ecore_timer_add(DELAY_TIME, lazy_pd_created_cb, inst);
+				if (!timer) {
+					struct inst_info *tmp_inst;
 
-					ErrPrint("Failed to add delayed timer\n");
+					tmp_inst = instance_unref(inst);
+					ErrPrint("Instance: %p (%s)\n", tmp_inst, pkgname);
+
+					ret = script_handler_unload(instance_pd_script(inst), 1);
+					ErrPrint("Unload script: %d\n", ret);
+
+					ret = instance_slave_close_pd(inst, client);
+					ErrPrint("Close PD %d\n", ret);
+
 					ret = LB_STATUS_ERROR_FAULT;
+				} else {
+					(void)instance_set_data(inst, "lazy,pd,open", timer);
 				}
 			} else {
-				instance_slave_close_pd(inst, client);
+				int tmp_ret;
+				tmp_ret = instance_slave_close_pd(inst, client);
+				ErrPrint("Unable to load script: %d, (close: %d)\n", ret, tmp_ret);
 			}
 		} else {
-			ErrPrint("Failed to request open PD to the slave\n");
+			ErrPrint("Unable open PD(%s): %d\n", pkgname, ret);
 		}
 	} else {
 		ErrPrint("Invalid PD TYPE\n");
@@ -5588,11 +5656,48 @@ static struct packet *client_destroy_pd(pid_t pid, int handle, const struct pack
 	else if (package_is_fault(instance_package(inst)))
 		ret = LB_STATUS_ERROR_FAULT;
 	else if (package_pd_type(instance_package(inst)) == PD_TYPE_BUFFER) {
+		Ecore_Timer *pd_monitor;
+
+		pd_monitor = instance_del_data(inst, "pd,open,monitor");
+		if (pd_monitor) {
+			ErrPrint("PD Open request is found. cancel it [%s]\n", pkgname);
+
+			/*!
+			 * \note
+			 * We should return negative value
+			 * Or we have to send "destroyed" event to the client.
+			 * If we didn't send destroyed event after return SUCCESS from here,
+			 * The client will permanently waiting destroyed event.
+			 * Because they understand that the destroy request is successfully processed.
+			 */
+			ret = LB_STATUS_ERROR_CANCEL;
+
+			(void)instance_client_pd_created(inst, ret);
+			instance_unref(inst);
+			ecore_timer_del(pd_monitor);
+			goto out;
+		}
+
 		ret = instance_signal_emit(inst,
 				"pd,hide", util_uri_to_path(instance_id(inst)),
 				0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0);
-		ret = instance_slave_close_pd(inst, client);
+		if (ret < 0)
+			ErrPrint("PD close signal emit failed: %d\n", ret);
 
+		ret = instance_slave_close_pd(inst, client);
+		if (ret < 0) {
+			ErrPrint("PD close request failed: %d\n", ret);
+		} else {
+			inst = instance_ref(inst);
+
+			pd_monitor = ecore_timer_add(PD_REQUEST_TIMEOUT, pd_close_monitor_cb, inst);
+			if (!pd_monitor) {
+				(void)instance_unref(inst);
+				ErrPrint("Failed to add pd close monitor\n");
+			} else {
+				(void)instance_set_data(inst, "pd,close,monitor", pd_monitor);
+			}
+		}
 		/*!
 		 * \note
 		 * release_buffer will be called by the slave after this.
@@ -5600,23 +5705,46 @@ static struct packet *client_destroy_pd(pid_t pid, int handle, const struct pack
 		 *
 		 * instance_client_pd_destroyed(inst);
 		 */
-
 	} else if (package_pd_type(instance_package(inst)) == PD_TYPE_SCRIPT) {
 		ret = script_handler_unload(instance_pd_script(inst), 1);
+		if (ret < 0)
+			ErrPrint("Unable to unload the script: %s, %d\n", pkgname, ret);
+
+		/*!
+		 * \note
+		 * Send request to the slave.
+		 * The SLAVE must has to repsonse this via "release_buffer" method.
+		 */
 		ret = instance_slave_close_pd(inst, client);
+		if (ret < 0)
+			ErrPrint("Unable to close the PD: %s, %d\n", pkgname, ret);
 
 		/*!
 		 * \note
 		 * Send the destroyed PD event to the client
 		 */
 		if (ret == LB_STATUS_SUCCESS) {
+			Ecore_Timer *timer;
+
 			inst = instance_ref(inst);
-			if (!ecore_timer_add(DELAY_TIME, lazy_pd_destroyed_cb, inst)) {
+
+			/*!
+			 * \note
+			 * 13-05-28
+			 * I change my mind. There is no requirements to keep the timer handler.
+			 * But I just add it to the tagged-data of the instance.
+			 * Just reserve for future-use.
+			 */
+			timer = ecore_timer_add(DELAY_TIME, lazy_pd_destroyed_cb, inst);
+			if (!timer) {
+				ErrPrint("Failed to create a timer: %s\n", pkgname);
 				instance_unref(inst);
 				/*!
 				 * How can we handle this?
 				 */
 				ret = LB_STATUS_ERROR_FAULT;
+			} else {
+				(void)instance_set_data(inst, "lazy,pd,close", timer);
 			}
 		}
 	} else {
@@ -6618,69 +6746,81 @@ static struct packet *slave_acquire_buffer(pid_t pid, int handle, const struct p
 	pkg = instance_package(inst);
 	id = "";
 	ret = LB_STATUS_ERROR_INVALID;
-	if (target == TYPE_LB) {
-		if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
-			struct buffer_info *info;
+	if (target == TYPE_LB && package_lb_type(pkg) == LB_TYPE_BUFFER) {
+		struct buffer_info *info;
+
+		info = instance_lb_buffer(inst);
+		if (!info) {
+			if (!instance_create_lb_buffer(inst)) {
+				ErrPrint("Failed to create a LB buffer\n");
+				ret = LB_STATUS_ERROR_FAULT;
+				goto out;
+			}
 
 			info = instance_lb_buffer(inst);
 			if (!info) {
-				if (!instance_create_lb_buffer(inst)) {
-					ErrPrint("Failed to create a LB buffer\n");
-				} else {
-					info = instance_lb_buffer(inst);
-					if (!info) {
-						ErrPrint("LB buffer is not valid\n");
-						ret = LB_STATUS_ERROR_INVALID;
-						id = "";
-						goto out;
-					}
-				}
-			}
-
-			ret = buffer_handler_resize(info, w, h);
-			ret = buffer_handler_load(info);
-			if (ret == 0) {
-				instance_set_lb_size(inst, w, h);
-				instance_set_lb_info(inst, PRIORITY_NO_CHANGE, CONTENT_NO_CHANGE, TITLE_NO_CHANGE);
-				id = buffer_handler_id(info);
-			} else {
-				ErrPrint("Failed to load a buffer(%d)\n", ret);
+				ErrPrint("LB buffer is not valid\n");
+				/*!
+				 * \NOTE
+				 * ret value should not be changed.
+				 */
+				goto out;
 			}
 		}
-	} else if (target == TYPE_PD) {
-		if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
-			struct buffer_info *info;
+
+		ret = buffer_handler_resize(info, w, h);
+		ret = buffer_handler_load(info);
+		if (ret == 0) {
+			instance_set_lb_size(inst, w, h);
+			instance_set_lb_info(inst, PRIORITY_NO_CHANGE, CONTENT_NO_CHANGE, TITLE_NO_CHANGE);
+			id = buffer_handler_id(info);
+		} else {
+			ErrPrint("Failed to load a buffer(%d)\n", ret);
+		}
+	} else if (target == TYPE_PD && package_pd_type(pkg) == PD_TYPE_BUFFER) {
+		struct buffer_info *info;
+		Ecore_Timer *pd_open_monitor;
+
+		pd_open_monitor = instance_del_data(inst, "pd,open,monitor");
+		if (!pd_open_monitor)
+			goto out;
+
+		ecore_timer_del(pd_open_monitor);
+
+		info = instance_pd_buffer(inst);
+		if (!info) {
+			if (!instance_create_pd_buffer(inst)) {
+				ErrPrint("Failed to create a PD buffer\n");
+				ret = LB_STATUS_ERROR_FAULT;
+				instance_client_pd_created(inst, ret);
+				goto out;
+			}
 
 			info = instance_pd_buffer(inst);
 			if (!info) {
-				if (!instance_create_pd_buffer(inst)) {
-					ErrPrint("Failed to create a PD buffer\n");
-				} else {
-					info = instance_pd_buffer(inst);
-					if (!info) {
-						ErrPrint("PD buffer is not valid\n");
-						ret = LB_STATUS_ERROR_INVALID;
-						id = "";
-						instance_client_pd_created(inst, ret);
-						goto out;
-					}
-				}
+				ErrPrint("PD buffer is not valid\n");
+				/*!
+				 * \NOTE
+				 * ret value should not be changed.
+				 */
+				instance_client_pd_created(inst, ret);
+				goto out;
 			}
-
-			ret = buffer_handler_resize(info, w, h);
-			ret = buffer_handler_load(info);
-			if (ret == 0) {
-				instance_set_pd_size(inst, w, h);
-				id = buffer_handler_id(info);
-			} else {
-				ErrPrint("Failed to load a buffer (%d)\n", ret);
-			}
-
-			/*!
-			 * Send the PD created event to the client
-			 */
-			instance_client_pd_created(inst, ret);
 		}
+
+		ret = buffer_handler_resize(info, w, h);
+		ret = buffer_handler_load(info);
+		if (ret == 0) {
+			instance_set_pd_size(inst, w, h);
+			id = buffer_handler_id(info);
+		} else {
+			ErrPrint("Failed to load a buffer (%d)\n", ret);
+		}
+
+		/*!
+		 * Send the PD created event to the client
+		 */
+		instance_client_pd_created(inst, ret);
 	}
 
 out:
@@ -6753,40 +6893,38 @@ static struct packet *slave_resize_buffer(pid_t pid, int handle, const struct pa
 	 * Reset "id", It will be re-used from here
 	 */
 	id = "";
-	if (type == TYPE_LB) {
-		if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
-			struct buffer_info *info;
+	if (type == TYPE_LB && package_lb_type(pkg) == LB_TYPE_BUFFER) {
+		struct buffer_info *info;
 
-			info = instance_lb_buffer(inst);
-			if (info) {
-				ret = buffer_handler_resize(info, w, h);
-				/*!
-				 * \note
-				 * id is resued for newly assigned ID
-				 */
-				if (!ret) {
-					id = buffer_handler_id(info);
-					instance_set_lb_size(inst, w, h);
-					instance_set_lb_info(inst, PRIORITY_NO_CHANGE, CONTENT_NO_CHANGE, TITLE_NO_CHANGE);
-				}
-			}
+		info = instance_lb_buffer(inst);
+		if (!info)
+			goto out;
+
+		ret = buffer_handler_resize(info, w, h);
+		/*!
+		 * \note
+		 * id is resued for newly assigned ID
+		 */
+		if (ret == LB_STATUS_SUCCESS) {
+			id = buffer_handler_id(info);
+			instance_set_lb_size(inst, w, h);
+			instance_set_lb_info(inst, PRIORITY_NO_CHANGE, CONTENT_NO_CHANGE, TITLE_NO_CHANGE);
 		}
-	} else if (type == TYPE_PD) {
-		if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
-			struct buffer_info *info;
+	} else if (type == TYPE_PD && package_pd_type(pkg) == PD_TYPE_BUFFER) {
+		struct buffer_info *info;
 
-			info = instance_pd_buffer(inst);
-			if (info) {
-				ret = buffer_handler_resize(info, w, h);
-				/*!
-				 * \note
-				 * id is resued for newly assigned ID
-				 */
-				if (!ret) {
-					id = buffer_handler_id(info);
-					instance_set_pd_size(inst, w, h);
-				}
-			}
+		info = instance_pd_buffer(inst);
+		if (!info)
+			goto out;
+
+		ret = buffer_handler_resize(info, w, h);
+		/*!
+		 * \note
+		 * id is resued for newly assigned ID
+		 */
+		if (ret == LB_STATUS_SUCCESS) {
+			id = buffer_handler_id(info);
+			instance_set_pd_size(inst, w, h);
 		}
 	}
 
@@ -6806,6 +6944,7 @@ static struct packet *slave_release_buffer(pid_t pid, int handle, const struct p
 	struct packet *result;
 	struct slave_node *slave;
 	struct inst_info *inst;
+	const struct pkg_info *pkg;
 	int ret;
 
 	slave = slave_find_by_pid(pid);
@@ -6828,14 +6967,46 @@ static struct packet *slave_release_buffer(pid_t pid, int handle, const struct p
 		goto out;
 	}
 
+	pkg = instance_package(inst);
+	if (!pkg) {
+		/*!
+		 * \note
+		 * THIS statement should not be entered.
+		 */
+		ErrPrint("PACKAGE INFORMATION IS NOT VALID\n");
+		ret = LB_STATUS_ERROR_FAULT;
+		goto out;
+	}
+
 	ret = LB_STATUS_ERROR_INVALID;
-	if (type == TYPE_LB) {
+	if (type == TYPE_LB && package_lb_type(pkg) == LB_TYPE_BUFFER) {
 		struct buffer_info *info;
 
 		info = instance_lb_buffer(inst);
 		ret = buffer_handler_unload(info);
-	} else if (type == TYPE_PD) {
+	} else if (type == TYPE_PD && package_pd_type(pkg) == PD_TYPE_BUFFER) {
 		struct buffer_info *info;
+		Ecore_Timer *pd_close_monitor;
+
+		pd_close_monitor = instance_del_data(inst, "pd,close,monitor");
+		if (!pd_close_monitor) {
+			ErrPrint("There is no requests to release pd buffer\n");
+			/*!
+			 * \note
+			 * In this case just keep going to release buffer,
+			 * Even if a user(client) doesn't wants to destroy the PD.
+			 *
+			 * If the slave tries to destroy PD buffer, it should be
+			 * released and reported to the client about its status.
+			 *
+			 * Even if the pd is destroyed by timeout handler,
+			 * instance_client_pd_destroyed function will be ignored
+			 * by pd.need_to_send_close_event flag.
+			 * which will be checked by instance_client_pd_destroyed function.
+			 */
+		} else {
+			ecore_timer_del(pd_close_monitor);
+		}
 
 		info = instance_pd_buffer(inst);
 		ret = buffer_handler_unload(info);

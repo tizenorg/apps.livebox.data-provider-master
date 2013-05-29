@@ -338,11 +338,6 @@ static inline int validate_request(const char *pkgname, const char *id, struct i
 		return LB_STATUS_ERROR_FAULT;
 	}
 
-	if (instance_state(inst) == INST_DESTROYED) {
-		ErrPrint("Package[%s] instance is already destroyed\n", pkgname);
-		return LB_STATUS_ERROR_INVALID;
-	}
-
 	if (out_inst)
 		*out_inst = inst;
 
@@ -5405,6 +5400,11 @@ static struct packet *slave_lb_update_begin(pid_t pid, int handle, const struct 
 	if (ret != LB_STATUS_SUCCESS)
 		goto out;
 
+	if (instance_state(inst) == INST_DESTROYED) {
+		ErrPrint("Package[%s] instance is already destroyed\n", pkgname);
+		goto out;
+	}
+
 	if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
 		ret = instance_lb_update_begin(inst, priority, content, title);
 		if (ret == LB_STATUS_SUCCESS)
@@ -5441,6 +5441,11 @@ static struct packet *slave_lb_update_end(pid_t pid, int handle, const struct pa
 	ret = validate_request(pkgname, id, &inst, &pkg);
 	if (ret != LB_STATUS_SUCCESS)
 		goto out;
+
+	if (instance_state(inst) == INST_DESTROYED) {
+		ErrPrint("Package[%s] instance is already destroyed\n", pkgname);
+		goto out;
+	}
 
 	if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
 		ret = instance_lb_update_end(inst);
@@ -5479,11 +5484,15 @@ static struct packet *slave_pd_update_begin(pid_t pid, int handle, const struct 
 	if (ret != LB_STATUS_SUCCESS)
 		goto out;
 
-	if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
-		(void)instance_pd_update_begin(inst);
-	} else {
-		ErrPrint("Invalid request[%s]\n", id);
+	if (instance_state(inst) == INST_DESTROYED) {
+		ErrPrint("Package[%s] instance is already destroyed\n", pkgname);
+		goto out;
 	}
+
+	if (package_pd_type(pkg) == PD_TYPE_BUFFER)
+		(void)instance_pd_update_begin(inst);
+	else
+		ErrPrint("Invalid request[%s]\n", id);
 
 out:
 	return NULL;
@@ -5511,8 +5520,12 @@ static struct packet *slave_access_status(pid_t pid, int handle, const struct pa
 	}
 
 	ret = validate_request(pkgname, id, &inst, NULL);
-	if (ret == LB_STATUS_SUCCESS)
-		(void)instance_forward_packet(inst, packet_ref((struct packet *)packet));
+	if (ret == LB_STATUS_SUCCESS) {
+		if (instance_state(inst) == INST_DESTROYED)
+			ErrPrint("Package[%s] instance is already destroyed\n", pkgname);
+		else
+			(void)instance_forward_packet(inst, packet_ref((struct packet *)packet));
+	}
 
 out:
 	return NULL;
@@ -5543,11 +5556,15 @@ static struct packet *slave_pd_update_end(pid_t pid, int handle, const struct pa
 	if (ret != LB_STATUS_SUCCESS)
 		goto out;
 
-	if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
-		(void)instance_pd_update_end(inst);
-	} else {
-		ErrPrint("Invalid request[%s]\n", id);
+	if (instance_state(inst) == INST_DESTROYED) {
+		ErrPrint("Package[%s] instance is already destroyed\n", pkgname);
+		goto out;
 	}
+
+	if (package_pd_type(pkg) == PD_TYPE_BUFFER)
+		(void)instance_pd_update_end(inst);
+	else
+		ErrPrint("Invalid request[%s]\n", id);
 
 out:
 	return NULL;
@@ -5638,6 +5655,11 @@ static struct packet *slave_updated(pid_t pid, int handle, const struct packet *
 	if (ret == LB_STATUS_SUCCESS) {
 		char *filename;
 
+		if (instance_state(inst) == INST_DESTROYED) {
+			ErrPrint("Package[%s] instance is already destroyed\n", pkgname);
+			goto out;
+		}
+
 		instance_set_lb_info(inst, priority, content_info, title);
 
 		switch (package_lb_type(instance_package(inst))) {
@@ -5691,8 +5713,12 @@ static struct packet *slave_hold_scroll(pid_t pid, int handle, const struct pack
 	}
 
 	ret = validate_request(pkgname, id, &inst, NULL);
-	if (ret == LB_STATUS_SUCCESS)
-		(void)instance_hold_scroll(inst, seize);
+	if (ret == LB_STATUS_SUCCESS) {
+		if (instance_state(inst) == INST_DESTROYED)
+			ErrPrint("Package[%s] instance is already destroyed\n", pkgname);
+		else
+			(void)instance_hold_scroll(inst, seize);
+	}
 
 out:
 	return NULL;
@@ -5722,6 +5748,11 @@ static struct packet *slave_desc_updated(pid_t pid, int handle, const struct pac
 	ret = validate_request(pkgname, id, &inst, NULL);
 	if (ret != LB_STATUS_SUCCESS)
 		goto out;
+
+	if (instance_state(inst) == INST_DESTROYED) {
+		ErrPrint("Package[%s] instance is already destroyed\n", pkgname);
+		goto out;
+	}
 
 	switch (package_pd_type(instance_package(inst))) {
 	case PD_TYPE_SCRIPT:
@@ -5812,13 +5843,18 @@ static struct packet *slave_acquire_buffer(pid_t pid, int handle, const struct p
 	}
 
 	ret = validate_request(pkgname, id, &inst, &pkg);
-	if (ret != LB_STATUS_SUCCESS) {
-		id = "";
+	id = "";
+
+	if (ret != LB_STATUS_SUCCESS)
+		goto out;
+
+	ret = LB_STATUS_ERROR_INVALID;
+
+	if (instance_state(inst) == INST_DESTROYED) {
+		ErrPrint("Package[%s] instance is already destroyed\n", pkgname);
 		goto out;
 	}
 
-	id = "";
-	ret = LB_STATUS_ERROR_INVALID;
 	if (target == TYPE_LB && package_lb_type(pkg) == LB_TYPE_BUFFER) {
 		struct buffer_info *info;
 
@@ -5941,17 +5977,21 @@ static struct packet *slave_resize_buffer(pid_t pid, int handle, const struct pa
 	}
 
 	ret = validate_request(pkgname, id, &inst, &pkg);
-	if (ret != LB_STATUS_SUCCESS) {
-		id = "";
+	id = "";
+	if (ret != LB_STATUS_SUCCESS)
 		goto out;
-	}
 
 	ret = LB_STATUS_ERROR_INVALID;
 	/*!
 	 * \note
 	 * Reset "id", It will be re-used from here
 	 */
-	id = "";
+
+	if (instance_state(inst) == INST_DESTROYED) {
+		ErrPrint("Package[%s] instance is already destroyed\n", pkgname);
+		goto out;
+	}
+
 	if (type == TYPE_LB && package_lb_type(pkg) == LB_TYPE_BUFFER) {
 		struct buffer_info *info;
 
@@ -6024,6 +6064,12 @@ static struct packet *slave_release_buffer(pid_t pid, int handle, const struct p
 		goto out;
 
 	ret = LB_STATUS_ERROR_INVALID;
+
+	if (instance_state(inst) == INST_DESTROYED) {
+		ErrPrint("Package[%s] instance is already destroyed\n", pkgname);
+		goto out;
+	}
+
 	if (type == TYPE_LB && package_lb_type(pkg) == LB_TYPE_BUFFER) {
 		struct buffer_info *info;
 
@@ -6108,8 +6154,15 @@ static struct packet *service_change_period(pid_t pid, int handle, const struct 
 		}
 	} else {
 		ret = validate_request(pkgname, id, &inst, NULL);
-		if (ret == LB_STATUS_SUCCESS)
+		if (ret == LB_STATUS_SUCCESS) {
+			if (instance_state(inst) == INST_DESTROYED) {
+				ErrPrint("Package[%s] instance is already destroyed\n", pkgname);
+				ret = LB_STATUS_ERROR_INVALID;
+				goto out;
+			}
+
 			ret = instance_set_period(inst, period);
+		}
 	}
 
 	DbgPrint("Change the update period: %s, %lf : %d\n", pkgname, period, ret);

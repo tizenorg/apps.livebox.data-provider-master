@@ -475,6 +475,7 @@ static inline void help(void)
 	printf("liveinfo - Livebox utility\n");
 	printf("------------------------------ [Option] ------------------------------\n");
 	printf("-b Batch mode\n");
+	printf("-x execute command\n");
 	printf("------------------------------ [Command list] ------------------------------\n");
 	printf("[32mcd [PATH] - Change directory[0m\n");
 	printf("[32mls [ | PATH] - List up content as a file[0m\n");
@@ -486,6 +487,7 @@ static inline void help(void)
 	printf("[32mx resize Pix w h - Resize the window[0m\n");
 	printf("[32mx map Pix - Show the window[0m\n");
 	printf("[32mx unmap Pix - Hide the window[0m\n");
+	printf("[32mx capture Pix outfile - Capture pixmap and save it to outfile[0m\n");
 	printf("[32msh [command] Execute shell command, [command] should be abspath[0m\n");
 	printf("[32mexit - [0m\n");
 	printf("[32mquit - [0m\n");
@@ -1675,6 +1677,7 @@ int main(int argc, char *argv[])
 		{ "batchmode", required_argument, 0, 'b' },
 		{ "help", no_argument, 0, 'h' },
 		{ "verbose", required_argument, 0, 'v' },
+		{ "execute", required_argument, 0, 'x' },
 		{ 0, 0, 0, 0 }
 	};
 	int option_index;
@@ -1712,6 +1715,13 @@ int main(int argc, char *argv[])
 			}
 
 			s_info.verbose = !strcmp(optarg, "true");
+			break;
+		case 'x':
+			if (!optarg || !*optarg) {
+				printf("Invalid argument\n");
+				help();
+				return -EINVAL;
+			}
 			break;
 		default:
 			break;

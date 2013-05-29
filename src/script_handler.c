@@ -222,7 +222,6 @@ int script_signal_emit(Evas *e, const char *part, const char *signal, double sx,
 {
 	Ecore_Evas *ee;
 	struct script_info *info;
-	int ret;
 
 	ee = ecore_evas_ecore_evas_get(e);
 	if (!ee) {
@@ -242,8 +241,7 @@ int script_signal_emit(Evas *e, const char *part, const char *signal, double sx,
 	if (!part || strlen(part) == 0)
 		part = "";
 
-	ret = instance_signal_emit(info->inst, signal, part, sx, sy, ex, ey, (double)info->x / (double)info->w, (double)info->y / (double)info->h, info->down);
-	return ret;
+	return instance_signal_emit(info->inst, signal, part, sx, sy, ex, ey, (double)info->x / (double)info->w, (double)info->y / (double)info->h, info->down);
 }
 
 static inline void flushing_cached_block(struct script_info *info)
@@ -296,7 +294,7 @@ HAPI int script_handler_load(struct script_info *info, int is_pd)
 		}
 		info->loaded = 1;
 		flushing_cached_block(info);
-		script_signal_emit(e, util_uri_to_path(instance_id(info->inst)),
+		script_signal_emit(e, instance_id(info->inst),
 				is_pd ? "pd,show" : "lb,show", 0.0f, 0.0f, 0.0f, 0.0f);
 	} else {
 		ErrPrint("Evas: (nil) %dx%d\n", info->w, info->h);
@@ -330,7 +328,7 @@ HAPI int script_handler_unload(struct script_info *info, int is_pd)
 
 	e = script_handler_evas(info);
 	if (e) {
-		script_signal_emit(e, util_uri_to_path(instance_id(info->inst)),
+		script_signal_emit(e, instance_id(info->inst),
 				is_pd ? "pd,hide" : "lb,hide", 0.0f, 0.0f, 0.0f, 0.0f);
 		if (info->port->unload(info->port_data, e) < 0)
 			ErrPrint("Failed to unload script object. but go ahead\n");

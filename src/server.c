@@ -316,6 +316,42 @@ out:
 	return result;
 }
 
+static inline int validate_request(const char *pkgname, const char *id, struct inst_info **out_inst, const struct pkg_info **out_pkg)
+{
+	struct inst_info *inst;
+	const struct pkg_info *pkg;
+
+	inst = package_find_instance_by_id(pkgname, id);
+	if (!inst) {
+		ErrPrint("Instance is not exists\n");
+		return LB_STATUS_ERROR_NOT_EXIST;
+	}
+
+	pkg = instance_package(inst);
+	if (!pkg) {
+		ErrPrint("System error - instance has no package?\n");
+		return LB_STATUS_ERROR_INVALID;
+	}
+
+	if (package_is_fault(pkg)) {
+		ErrPrint("Faulted package: %s\n", pkgname);
+		return LB_STATUS_ERROR_FAULT;
+	}
+
+	if (instance_state(inst) == INST_DESTROYED) {
+		ErrPrint("Package[%s] instance is already destroyed\n", pkgname);
+		return LB_STATUS_ERROR_INVALID;
+	}
+
+	if (out_inst)
+		*out_inst = inst;
+
+	if (out_pkg)
+		*out_pkg = pkg;
+
+	return LB_STATUS_SUCCESS;
+}
+
 /*!< pid, pkgname, filename, event, timestamp, x, y, ret */
 static struct packet *client_clicked(pid_t pid, int handle, const struct packet *packet)
 {
@@ -341,19 +377,13 @@ static struct packet *client_clicked(pid_t pid, int handle, const struct packet 
 		goto out;
 	}
 
-	DbgPrint("pid[%d] pkgname[%s]\n", pid, pkgname);
-
 	/*!
 	 * \NOTE:
 	 * Trust the package name which are sent by the client.
 	 * The package has to be a livebox package name.
 	 */
-	inst = package_find_instance_by_id(pkgname, id);
-	if (!inst)
-		ErrPrint("Instance is not exists\n");
-	else if (package_is_fault(instance_package(inst)))
-		ErrPrint("Fault package\n");
-	else
+	ret = validate_request(pkgname, id, &inst, NULL);
+	if (ret == LB_STATUS_SUCCESS)
 		(void)instance_clicked(inst, event, timestamp, x, y);
 
 out:
@@ -385,14 +415,8 @@ static struct packet *client_update_mode(pid_t pid, int handle, const struct pac
 		goto out;
 	}
 
-	inst = package_find_instance_by_id(pkgname, id);
-	if (!inst) {
-		ErrPrint("Instance is not exists\n");
-		ret = LB_STATUS_ERROR_NOT_EXIST;
-	} else if (package_is_fault(instance_package(inst))) {
-		ErrPrint("Fault package\n");
-		ret = LB_STATUS_ERROR_FAULT;
-	} else {
+	ret = validate_request(pkgname, id, &inst, NULL);
+	if (ret == LB_STATUS_SUCCESS) {
 		/*!
 		 * \note
 		 * Send change update mode request to a slave
@@ -445,12 +469,8 @@ static struct packet *client_text_signal(pid_t pid, int handle, const struct pac
 	 * Trust the package name which are sent by the client.
 	 * The package has to be a livebox package name.
 	 */
-	inst = package_find_instance_by_id(pkgname, id);
-	if (!inst)
-		ret = LB_STATUS_ERROR_NOT_EXIST;
-	else if (package_is_fault(instance_package(inst)))
-		ret = LB_STATUS_ERROR_FAULT;
-	else
+	ret = validate_request(pkgname, id, &inst, NULL);
+	if (ret == LB_STATUS_SUCCESS)
 		ret = instance_text_signal_emit(inst, emission, source, sx, sy, ex, ey);
 
 out:
@@ -512,12 +532,11 @@ static struct packet *client_delete(pid_t pid, int handle, const struct packet *
 	 * Trust the package name which are sent by the client.
 	 * The package has to be a livebox package name.
 	 */
-	inst = package_find_instance_by_id(pkgname, id);
-	if (!inst) {
-		ret = LB_STATUS_ERROR_NOT_EXIST;
-	} else if (package_is_fault(instance_package(inst))) {
-		ret = LB_STATUS_ERROR_FAULT;
-	} else if (instance_client(inst) != client) {
+	ret = validate_request(pkgname, id, &inst, NULL);
+	if (ret != LB_STATUS_SUCCESS)
+		goto out;
+
+	if (instance_client(inst) != client) {
 		if (instance_has_client(inst, client)) {
 			struct deleted_item *item;
 
@@ -595,16 +614,14 @@ static struct packet *client_resize(pid_t pid, int handle, const struct packet *
 	 * Trust the package name which are sent by the client.
 	 * The package has to be a livebox package name.
 	 */
-	inst = package_find_instance_by_id(pkgname, id);
-	if (!inst) {
-		ret = LB_STATUS_ERROR_NOT_EXIST;
-	} else if (package_is_fault(instance_package(inst))) {
-		ret = LB_STATUS_ERROR_FAULT;
-	} else if (instance_client(inst) != client) {
+	ret = validate_request(pkgname, id, &inst, NULL);
+	if (ret != LB_STATUS_SUCCESS)
+		goto out;
+
+	if (instance_client(inst) != client)
 		ret = LB_STATUS_ERROR_PERMISSION;
-	} else {
+	else
 		ret = instance_resize(inst, w, h);
-	}
 
 out:
 	result = packet_create_reply(packet, "i", ret);
@@ -712,23 +729,19 @@ static struct packet *client_change_visibility(pid_t pid, int handle, const stru
 		goto out;
 	}
 
-	DbgPrint("pid[%d] pkgname[%s] state[%d]\n", pid, pkgname, state);
-
 	/*!
 	 * \NOTE:
 	 * Trust the package name which are sent by the client.
 	 * The package has to be a livebox package name.
 	 */
-	inst = package_find_instance_by_id(pkgname, id);
-	if (!inst) {
-		ret = LB_STATUS_ERROR_NOT_EXIST;
-	} else if (package_is_fault(instance_package(inst))) {
-		ret = LB_STATUS_ERROR_FAULT;
-	} else if (instance_client(inst) != client) {
+	ret = validate_request(pkgname, id, &inst, NULL);
+	if (ret != LB_STATUS_SUCCESS)
+		goto out;
+
+	if (instance_client(inst) != client)
 		ret = LB_STATUS_ERROR_PERMISSION;
-	} else {
+	else
 		ret = instance_set_visible_state(inst, state);
-	}
 
 out:
 	/*! \note No reply packet */
@@ -766,16 +779,14 @@ static struct packet *client_set_period(pid_t pid, int handle, const struct pack
 	 * Trust the package name which are sent by the client.
 	 * The package has to be a livebox package name.
 	 */
-	inst = package_find_instance_by_id(pkgname, id);
-	if (!inst) {
-		ret = LB_STATUS_ERROR_NOT_EXIST;
-	} else if (package_is_fault(instance_package(inst))) {
-		ret = LB_STATUS_ERROR_FAULT;
-	} else if (instance_client(inst) != client) {
+	ret = validate_request(pkgname, id, &inst, NULL);
+	if (ret != LB_STATUS_SUCCESS)
+		goto out;
+
+	if (instance_client(inst) != client)
 		ret = LB_STATUS_ERROR_PERMISSION;
-	} else {
+	else
 		ret = instance_set_period(inst, period);
-	}
 
 out:
 	result = packet_create_reply(packet, "i", ret);
@@ -817,16 +828,14 @@ static struct packet *client_change_group(pid_t pid, int handle, const struct pa
 	 * Trust the package name which are sent by the client.
 	 * The package has to be a livebox package name.
 	 */
-	inst = package_find_instance_by_id(pkgname, id);
-	if (!inst) {
-		ret = LB_STATUS_ERROR_NOT_EXIST;
-	} else if (package_is_fault(instance_package(inst))) {
-		ret = LB_STATUS_ERROR_FAULT;
-	} else if (instance_client(inst) != client) {
+	ret = validate_request(pkgname, id, &inst, NULL);
+	if (ret != LB_STATUS_SUCCESS)
+		goto out;
+
+	if (instance_client(inst) != client)
 		ret = LB_STATUS_ERROR_PERMISSION;
-	} else {
+	else
 		ret = instance_change_group(inst, cluster, category);
-	}
 
 out:
 	result = packet_create_reply(packet, "i", ret);
@@ -862,34 +871,11 @@ static struct packet *client_pd_mouse_enter(pid_t pid, int handle, const struct 
 		goto out;
 	}
 
-	/*!
-	 * \NOTE:
-	 * Trust the package name which are sent by the client.
-	 * The package has to be a livebox package name.
-	 */
-	inst = package_find_instance_by_id(pkgname, id);
-	if (!inst) {
-		ErrPrint("Instance[%s] is not exists\n", id);
-		ret = LB_STATUS_ERROR_NOT_EXIST;
+	ret = validate_request(pkgname, id, &inst, &pkg);
+	if (ret != LB_STATUS_SUCCESS)
 		goto out;
-	}
 
-	pkg = instance_package(inst);
-	if (!pkg) {
-		ErrPrint("Package[%s] info is not found\n", pkgname);
-		ret = LB_STATUS_ERROR_FAULT;
-		goto out;
-	}
-
-	if (package_is_fault(pkg)) {
-		/*!
-		 * \note
-		 * If the package is registered as fault module,
-		 * slave has not load it, so we don't need to do anything at here!
-		 */
-		DbgPrint("Package[%s] is faulted\n", pkgname);
-		ret = LB_STATUS_ERROR_FAULT;
-	} else if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
+	if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
 		struct buffer_info *buffer;
 		struct slave_node *slave;
 
@@ -964,34 +950,11 @@ static struct packet *client_pd_mouse_leave(pid_t pid, int handle, const struct 
 		goto out;
 	}
 
-	/*!
-	 * \NOTE:
-	 * Trust the package name which are sent by the client.
-	 * The package has to be a livebox package name.
-	 */
-	inst = package_find_instance_by_id(pkgname, id);
-	if (!inst) {
-		ErrPrint("Instance[%s] is not exists\n", id);
-		ret = LB_STATUS_ERROR_NOT_EXIST;
+	ret = validate_request(pkgname, id, &inst, &pkg);
+	if (ret != LB_STATUS_SUCCESS)
 		goto out;
-	}
 
-	pkg = instance_package(inst);
-	if (!pkg) {
-		ErrPrint("Package[%s] info is not found\n", pkgname);
-		ret = LB_STATUS_ERROR_FAULT;
-		goto out;
-	}
-
-	if (package_is_fault(pkg)) {
-		/*!
-		 * \note
-		 * If the package is registered as fault module,
-		 * slave has not load it, so we don't need to do anything at here!
-		 */
-		DbgPrint("Package[%s] is faulted\n", pkgname);
-		ret = LB_STATUS_ERROR_FAULT;
-	} else if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
+	if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
 		struct buffer_info *buffer;
 		struct slave_node *slave;
 
@@ -1066,34 +1029,11 @@ static struct packet *client_pd_mouse_down(pid_t pid, int handle, const struct p
 		goto out;
 	}
 
-	/*!
-	 * \NOTE:
-	 * Trust the package name which are sent by the client.
-	 * The package has to be a livebox package name.
-	 */
-	inst = package_find_instance_by_id(pkgname, id);
-	if (!inst) {
-		ErrPrint("Instance[%s] is not exists\n", id);
-		ret = LB_STATUS_ERROR_NOT_EXIST;
+	ret = validate_request(pkgname, id, &inst, &pkg);
+	if (ret != LB_STATUS_SUCCESS)
 		goto out;
-	}
 
-	pkg = instance_package(inst);
-	if (!pkg) {
-		ErrPrint("Package[%s] info is not found\n", pkgname);
-		ret = LB_STATUS_ERROR_FAULT;
-		goto out;
-	}
-
-	if (package_is_fault(pkg)) {
-		/*!
-		 * \note
-		 * If the package is registered as fault module,
-		 * slave has not load it, so we don't need to do anything at here!
-		 */
-		DbgPrint("Package[%s] is faulted\n", pkgname);
-		ret = LB_STATUS_ERROR_FAULT;
-	} else if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
+	if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
 		struct buffer_info *buffer;
 		struct slave_node *slave;
 
@@ -1168,34 +1108,11 @@ static struct packet *client_pd_mouse_up(pid_t pid, int handle, const struct pac
 		goto out;
 	}
 
-	/*!
-	 * \NOTE:
-	 * Trust the package name which are sent by the client.
-	 * The package has to be a livebox package name.
-	 */
-	inst = package_find_instance_by_id(pkgname, id);
-	if (!inst) {
-		ErrPrint("Instance[%s] is not exists\n", id);
-		ret = LB_STATUS_ERROR_NOT_EXIST;
+	ret = validate_request(pkgname, id, &inst, &pkg);
+	if (ret != LB_STATUS_SUCCESS)
 		goto out;
-	}
 
-	pkg = instance_package(inst);
-	if (!pkg) {
-		ErrPrint("Package[%s] info is not exists\n", pkgname);
-		ret = LB_STATUS_ERROR_FAULT;
-		goto out;
-	}
-
-	if (package_is_fault(pkg)) {
-		/*!
-		 * \note
-		 * If the package is registered as fault module,
-		 * slave has not load it, so we don't need to do anything at here!
-		 */
-		DbgPrint("Package[%s] is faulted\n", pkgname);
-		ret = LB_STATUS_ERROR_FAULT;
-	} else if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
+	if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
 		struct buffer_info *buffer;
 		struct slave_node *slave;
 
@@ -1270,34 +1187,11 @@ static struct packet *client_pd_mouse_move(pid_t pid, int handle, const struct p
 		goto out;
 	}
 
-	/*!
-	 * \NOTE:
-	 * Trust the package name which are sent by the client.
-	 * The package has to be a livebox package name.
-	 */
-	inst = package_find_instance_by_id(pkgname, id);
-	if (!inst) {
-		ErrPrint("Instance[%s] is not exists\n", id);
-		ret = LB_STATUS_ERROR_NOT_EXIST;
+	ret = validate_request(pkgname, id, &inst, &pkg);
+	if (ret != LB_STATUS_SUCCESS)
 		goto out;
-	}
 
-	pkg = instance_package(inst);
-	if (!pkg) {
-		ErrPrint("Package[%s] info is not exists\n", pkgname);
-		ret = LB_STATUS_ERROR_FAULT;
-		goto out;
-	}
-
-	if (package_is_fault(pkg)) {
-		/*!
-		 * \note
-		 * If the package is registered as fault module,
-		 * slave has not load it, so we don't need to do anything at here!
-		 */
-		DbgPrint("Package[%s] is faulted\n", pkgname);
-		ret = LB_STATUS_ERROR_FAULT;
-	} else if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
+	if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
 		struct buffer_info *buffer;
 		struct slave_node *slave;
 
@@ -1372,34 +1266,11 @@ static struct packet *client_lb_mouse_move(pid_t pid, int handle, const struct p
 		goto out;
 	}
 
-	/*!
-	 * \NOTE:
-	 * Trust the package name which are sent by the client.
-	 * The package has to be a livebox package name.
-	 */
-	inst = package_find_instance_by_id(pkgname, id);
-	if (!inst) {
-		ErrPrint("Instance[%s] is not exists\n", id);
-		ret = LB_STATUS_ERROR_NOT_EXIST;
+	ret = validate_request(pkgname, id, &inst, &pkg);
+	if (ret != LB_STATUS_SUCCESS)
 		goto out;
-	}
 
-	pkg = instance_package(inst);
-	if (!pkg) {
-		ErrPrint("Package[%s] info is not exists\n", pkgname);
-		ret = LB_STATUS_ERROR_FAULT;
-		goto out;
-	}
-
-	if (package_is_fault(pkg)) {
-		/*!
-		 * \note
-		 * If the package is registered as fault module,
-		 * slave has not load it, so we don't need to do anything at here!
-		 */
-		DbgPrint("Package[%s] is faulted\n", pkgname);
-		ret = LB_STATUS_ERROR_FAULT;
-	} else if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
+	if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
 		struct buffer_info *buffer;
 		struct slave_node *slave;
 
@@ -1480,29 +1351,11 @@ static struct packet *client_lb_mouse_set(pid_t pid, int handle, const struct pa
 		goto out;
 	}
 
-	inst = package_find_instance_by_id(pkgname, id);
-	if (!inst) {
-		ErrPrint("Instance[%s] is not exists\n", id);
-		ret = LB_STATUS_ERROR_NOT_EXIST;
+	ret = validate_request(pkgname, id, &inst, &pkg);
+	if (ret != LB_STATUS_SUCCESS)
 		goto out;
-	}
 
-	pkg = instance_package(inst);
-	if (!pkg) {
-		ErrPrint("Package[%s] info is not exists\n", pkgname);
-		ret = LB_STATUS_ERROR_FAULT;
-		goto out;
-	}
-
-	if (package_is_fault(pkg)) {
-		/*!
-		 * \note
-		 * If the package is registered as fault module,
-		 * slave has not load it, so we don't need to do anything at here!
-		 */
-		DbgPrint("Package[%s] is faulted\n", pkgname);
-		ret = LB_STATUS_ERROR_FAULT;
-	} else if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
+	if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
 		if (event_is_activated()) {
 			if (event_deactivate() == 0)
 				instance_event_callback_del(inst, INSTANCE_EVENT_DESTROY, inst_del_cb);
@@ -1539,12 +1392,14 @@ static struct packet *client_lb_mouse_unset(pid_t pid, int handle, const struct 
 	int y;
 	struct inst_info *inst;
 	const struct pkg_info *pkg;
+
 	client = client_find_by_pid(pid);
 	if (!client) {
 		ErrPrint("Client %d is not exists\n", pid);
 		ret = LB_STATUS_ERROR_NOT_EXIST;
 		goto out;
 	}
+
 	ret = packet_get(packet, "ssdii", &pkgname, &id, &timestamp, &x, &y);
 	if (ret != 5) {
 		ErrPrint("Parameter is not matched\n");
@@ -1552,29 +1407,11 @@ static struct packet *client_lb_mouse_unset(pid_t pid, int handle, const struct 
 		goto out;
 	}
 
-	inst = package_find_instance_by_id(pkgname, id);
-	if (!inst) {
-		ErrPrint("Instance[%s] is not exists\n", id);
-		ret = LB_STATUS_ERROR_NOT_EXIST;
+	ret = validate_request(pkgname, id, &inst, &pkg);
+	if (ret != LB_STATUS_SUCCESS)
 		goto out;
-	}
 
-	pkg = instance_package(inst);
-	if (!pkg) {
-		ErrPrint("Package[%s] info is not exists\n", pkgname);
-		ret = LB_STATUS_ERROR_FAULT;
-		goto out;
-	}
-
-	if (package_is_fault(pkg)) {
-		/*!
-		 * \note
-		 * If the package is registered as fault module,
-		 * slave has not load it, so we don't need to do anything at here!
-		 */
-		DbgPrint("Package[%s] is faulted\n", pkgname);
-		ret = LB_STATUS_ERROR_FAULT;
-	} else if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
+	if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
 		ret = event_deactivate();
 		if (ret == 0)
 			instance_event_callback_del(inst, INSTANCE_EVENT_DESTROY, inst_del_cb);
@@ -1616,29 +1453,11 @@ static struct packet *client_pd_mouse_set(pid_t pid, int handle, const struct pa
 		goto out;
 	}
 
-	inst = package_find_instance_by_id(pkgname, id);
-	if (!inst) {
-		ErrPrint("Instance[%s] is not exists\n", id);
-		ret = LB_STATUS_ERROR_NOT_EXIST;
+	ret = validate_request(pkgname, id, &inst, &pkg);
+	if (ret != LB_STATUS_SUCCESS)
 		goto out;
-	}
 
-	pkg = instance_package(inst);
-	if (!pkg) {
-		ErrPrint("Package[%s] info is not exists\n", pkgname);
-		ret = LB_STATUS_ERROR_FAULT;
-		goto out;
-	}
-
-	if (package_is_fault(pkg)) {
-		/*!
-		 * \note
-		 * If the package is registered as fault module,
-		 * slave has not load it, so we don't need to do anything at here!
-		 */
-		DbgPrint("Package[%s] is faulted\n", pkgname);
-		ret = LB_STATUS_ERROR_FAULT;
-	} else if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
+	if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
 		if (event_is_activated()) {
 			if (event_deactivate() == 0)
 				instance_event_callback_del(inst, INSTANCE_EVENT_DESTROY, inst_del_cb);
@@ -1691,29 +1510,11 @@ static struct packet *client_pd_mouse_unset(pid_t pid, int handle, const struct 
 		goto out;
 	}
 
-	inst = package_find_instance_by_id(pkgname, id);
-	if (!inst) {
-		ErrPrint("Instance[%s] is not exists\n", id);
-		ret = LB_STATUS_ERROR_NOT_EXIST;
+	ret = validate_request(pkgname, id, &inst, &pkg);
+	if (ret != LB_STATUS_SUCCESS)
 		goto out;
-	}
 
-	pkg = instance_package(inst);
-	if (!pkg) {
-		ErrPrint("Package[%s] info is not exists\n", pkgname);
-		ret = LB_STATUS_ERROR_FAULT;
-		goto out;
-	}
-
-	if (package_is_fault(pkg)) {
-		/*!
-		 * \note
-		 * If the package is registered as fault module,
-		 * slave has not load it, so we don't need to do anything at here!
-		 */
-		DbgPrint("Package[%s] is faulted\n", pkgname);
-		ret = LB_STATUS_ERROR_FAULT;
-	} else if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
+	if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
 		ret = event_deactivate();
 		if (ret == 0)
 			instance_event_callback_del(inst, INSTANCE_EVENT_DESTROY, inst_del_cb);
@@ -1755,34 +1556,11 @@ static struct packet *client_lb_mouse_enter(pid_t pid, int handle, const struct 
 		goto out;
 	}
 
-	/*!
-	 * \NOTE:
-	 * Trust the package name which are sent by the client.
-	 * The package has to be a livebox package name.
-	 */
-	inst = package_find_instance_by_id(pkgname, id);
-	if (!inst) {
-		ErrPrint("Instance[%s] is not exists\n", id);
-		ret = LB_STATUS_ERROR_NOT_EXIST;
+	ret = validate_request(pkgname, id, &inst, &pkg);
+	if (ret != LB_STATUS_SUCCESS)
 		goto out;
-	}
 
-	pkg = instance_package(inst);
-	if (!pkg) {
-		ErrPrint("Package[%s] info is not exists\n", pkgname);
-		ret = LB_STATUS_ERROR_FAULT;
-		goto out;
-	}
-
-	if (package_is_fault(pkg)) {
-		/*!
-		 * \note
-		 * If the package is registered as fault module,
-		 * slave has not load it, so we don't need to do anything at here!
-		 */
-		DbgPrint("Package[%s] is faulted\n", pkgname);
-		ret = LB_STATUS_ERROR_FAULT;
-	} else if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
+	if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
 		struct buffer_info *buffer;
 		struct slave_node *slave;
 
@@ -1857,34 +1635,11 @@ static struct packet *client_lb_mouse_leave(pid_t pid, int handle, const struct 
 		goto out;
 	}
 
-	/*!
-	 * \NOTE:
-	 * Trust the package name which are sent by the client.
-	 * The package has to be a livebox package name.
-	 */
-	inst = package_find_instance_by_id(pkgname, id);
-	if (!inst) {
-		ErrPrint("Instance[%s] is not exists\n", id);
-		ret = LB_STATUS_ERROR_NOT_EXIST;
+	ret = validate_request(pkgname, id, &inst, &pkg);
+	if (ret != LB_STATUS_SUCCESS)
 		goto out;
-	}
 
-	pkg = instance_package(inst);
-	if (!pkg) {
-		ErrPrint("Package[%s] info is not exists\n", pkgname);
-		ret = LB_STATUS_ERROR_FAULT;
-		goto out;
-	}
-
-	if (package_is_fault(pkg)) {
-		/*!
-		 * \note
-		 * If the package is registered as fault module,
-		 * slave has not load it, so we don't need to do anything at here!
-		 */
-		DbgPrint("Package[%s] is faulted\n", pkgname);
-		ret = LB_STATUS_ERROR_FAULT;
-	} else if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
+	if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
 		struct buffer_info *buffer;
 		struct slave_node *slave;
 
@@ -1959,34 +1714,11 @@ static struct packet *client_lb_mouse_down(pid_t pid, int handle, const struct p
 		goto out;
 	}
 
-	/*!
-	 * \NOTE:
-	 * Trust the package name which are sent by the client.
-	 * The package has to be a livebox package name.
-	 */
-	inst = package_find_instance_by_id(pkgname, id);
-	if (!inst) {
-		ErrPrint("Instance[%s] is not exists\n", id);
-		ret = LB_STATUS_ERROR_NOT_EXIST;
+	ret = validate_request(pkgname, id, &inst, &pkg);
+	if (ret != LB_STATUS_SUCCESS)
 		goto out;
-	}
 
-	pkg = instance_package(inst);
-	if (!pkg) {
-		ErrPrint("Package[%s] info is not exists\n", pkgname);
-		ret = LB_STATUS_ERROR_FAULT;
-		goto out;
-	}
-
-	if (package_is_fault(pkg)) {
-		/*!
-		 * \note
-		 * If the package is registered as fault module,
-		 * slave has not load it, so we don't need to do anything at here!
-		 */
-		DbgPrint("Package[%s] is faulted\n", pkgname);
-		ret = LB_STATUS_ERROR_FAULT;
-	} else if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
+	if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
 		struct buffer_info *buffer;
 		struct slave_node *slave;
 
@@ -2061,34 +1793,11 @@ static struct packet *client_lb_mouse_up(pid_t pid, int handle, const struct pac
 		goto out;
 	}
 
-	/*!
-	 * \NOTE:
-	 * Trust the package name which are sent by the client.
-	 * The package has to be a livebox package name.
-	 */
-	inst = package_find_instance_by_id(pkgname, id);
-	if (!inst) {
-		ErrPrint("Instance[%s] is not exists\n", id);
-		ret = LB_STATUS_ERROR_NOT_EXIST;
+	ret = validate_request(pkgname, id, &inst, &pkg);
+	if (ret != LB_STATUS_SUCCESS)
 		goto out;
-	}
 
-	pkg = instance_package(inst);
-	if (!pkg) {
-		ErrPrint("Package[%s] info is not exists\n", pkgname);
-		ret = LB_STATUS_ERROR_FAULT;
-		goto out;
-	}
-
-	if (package_is_fault(pkg)) {
-		/*!
-		 * \note
-		 * If the package is registered as fault module,
-		 * slave has not load it, so we don't need to do anything at here!
-		 */
-		DbgPrint("Package[%s] is faulted\n", pkgname);
-		ret = LB_STATUS_ERROR_FAULT;
-	} else if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
+	if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
 		struct buffer_info *buffer;
 		struct slave_node *slave;
 
@@ -2164,34 +1873,11 @@ static struct packet *client_pd_access_action_up(pid_t pid, int handle, const st
 		goto out;
 	}
 
-	/*!
-	 * \NOTE:
-	 * Trust the package name which are sent by the client.
-	 * The package has to be a livebox package name.
-	 */
-	inst = package_find_instance_by_id(pkgname, id);
-	if (!inst) {
-		ErrPrint("Instance[%s] is not exists\n", id);
-		ret = LB_STATUS_ERROR_NOT_EXIST;
+	ret = validate_request(pkgname, id, &inst, &pkg);
+	if (ret != LB_STATUS_SUCCESS)
 		goto out;
-	}
 
-	pkg = instance_package(inst);
-	if (!pkg) {
-		ErrPrint("Package[%s] info is not found\n", pkgname);
-		ret = LB_STATUS_ERROR_FAULT;
-		goto out;
-	}
-
-	if (package_is_fault(pkg)) {
-		/*!
-		 * \note
-		 * If the package is registered as fault module,
-		 * slave has not load it, so we don't need to do anything at here!
-		 */
-		DbgPrint("Package[%s] is faulted\n", pkgname);
-		ret = LB_STATUS_ERROR_FAULT;
-	} else if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
+	if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
 		struct buffer_info *buffer;
 		struct slave_node *slave;
 
@@ -2288,34 +1974,11 @@ static struct packet *client_pd_access_action_down(pid_t pid, int handle, const 
 		goto out;
 	}
 
-	/*!
-	 * \NOTE:
-	 * Trust the package name which are sent by the client.
-	 * The package has to be a livebox package name.
-	 */
-	inst = package_find_instance_by_id(pkgname, id);
-	if (!inst) {
-		ErrPrint("Instance[%s] is not exists\n", id);
-		ret = LB_STATUS_ERROR_NOT_EXIST;
+	ret = validate_request(pkgname, id, &inst, &pkg);
+	if (ret != LB_STATUS_SUCCESS)
 		goto out;
-	}
 
-	pkg = instance_package(inst);
-	if (!pkg) {
-		ErrPrint("Package[%s] info is not found\n", pkgname);
-		ret = LB_STATUS_ERROR_FAULT;
-		goto out;
-	}
-
-	if (package_is_fault(pkg)) {
-		/*!
-		 * \note
-		 * If the package is registered as fault module,
-		 * slave has not load it, so we don't need to do anything at here!
-		 */
-		DbgPrint("Package[%s] is faulted\n", pkgname);
-		ret = LB_STATUS_ERROR_FAULT;
-	} else if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
+	if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
 		struct buffer_info *buffer;
 		struct slave_node *slave;
 
@@ -2412,34 +2075,11 @@ static struct packet *client_pd_access_scroll_down(pid_t pid, int handle, const 
 		goto out;
 	}
 
-	/*!
-	 * \NOTE:
-	 * Trust the package name which are sent by the client.
-	 * The package has to be a livebox package name.
-	 */
-	inst = package_find_instance_by_id(pkgname, id);
-	if (!inst) {
-		ErrPrint("Instance[%s] is not exists\n", id);
-		ret = LB_STATUS_ERROR_NOT_EXIST;
+	ret = validate_request(pkgname, id, &inst, &pkg);
+	if (ret != LB_STATUS_SUCCESS)
 		goto out;
-	}
 
-	pkg = instance_package(inst);
-	if (!pkg) {
-		ErrPrint("Package[%s] info is not found\n", pkgname);
-		ret = LB_STATUS_ERROR_FAULT;
-		goto out;
-	}
-
-	if (package_is_fault(pkg)) {
-		/*!
-		 * \note
-		 * If the package is registered as fault module,
-		 * slave has not load it, so we don't need to do anything at here!
-		 */
-		DbgPrint("Package[%s] is faulted\n", pkgname);
-		ret = LB_STATUS_ERROR_FAULT;
-	} else if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
+	if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
 		struct buffer_info *buffer;
 		struct slave_node *slave;
 
@@ -2536,34 +2176,11 @@ static struct packet *client_pd_access_scroll_move(pid_t pid, int handle, const 
 		goto out;
 	}
 
-	/*!
-	 * \NOTE:
-	 * Trust the package name which are sent by the client.
-	 * The package has to be a livebox package name.
-	 */
-	inst = package_find_instance_by_id(pkgname, id);
-	if (!inst) {
-		ErrPrint("Instance[%s] is not exists\n", id);
-		ret = LB_STATUS_ERROR_NOT_EXIST;
+	ret = validate_request(pkgname, id, &inst, &pkg);
+	if (ret != LB_STATUS_SUCCESS)
 		goto out;
-	}
 
-	pkg = instance_package(inst);
-	if (!pkg) {
-		ErrPrint("Package[%s] info is not found\n", pkgname);
-		ret = LB_STATUS_ERROR_FAULT;
-		goto out;
-	}
-
-	if (package_is_fault(pkg)) {
-		/*!
-		 * \note
-		 * If the package is registered as fault module,
-		 * slave has not load it, so we don't need to do anything at here!
-		 */
-		DbgPrint("Package[%s] is faulted\n", pkgname);
-		ret = LB_STATUS_ERROR_FAULT;
-	} else if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
+	if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
 		struct buffer_info *buffer;
 		struct slave_node *slave;
 
@@ -2660,34 +2277,11 @@ static struct packet *client_pd_access_scroll_up(pid_t pid, int handle, const st
 		goto out;
 	}
 
-	/*!
-	 * \NOTE:
-	 * Trust the package name which are sent by the client.
-	 * The package has to be a livebox package name.
-	 */
-	inst = package_find_instance_by_id(pkgname, id);
-	if (!inst) {
-		ErrPrint("Instance[%s] is not exists\n", id);
-		ret = LB_STATUS_ERROR_NOT_EXIST;
+	ret = validate_request(pkgname, id, &inst, &pkg);
+	if (ret != LB_STATUS_SUCCESS)
 		goto out;
-	}
 
-	pkg = instance_package(inst);
-	if (!pkg) {
-		ErrPrint("Package[%s] info is not found\n", pkgname);
-		ret = LB_STATUS_ERROR_FAULT;
-		goto out;
-	}
-
-	if (package_is_fault(pkg)) {
-		/*!
-		 * \note
-		 * If the package is registered as fault module,
-		 * slave has not load it, so we don't need to do anything at here!
-		 */
-		DbgPrint("Package[%s] is faulted\n", pkgname);
-		ret = LB_STATUS_ERROR_FAULT;
-	} else if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
+	if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
 		struct buffer_info *buffer;
 		struct slave_node *slave;
 
@@ -2784,24 +2378,11 @@ static struct packet *client_pd_access_unhighlight(pid_t pid, int handle, const 
 		goto out;
 	}
 
-	inst = package_find_instance_by_id(pkgname, id);
-	if (!inst) {
-		ErrPrint("Instance[%s] is not exists\n", id);
-		ret = LB_STATUS_ERROR_NOT_EXIST;
+	ret = validate_request(pkgname, id, &inst, &pkg);
+	if (ret != LB_STATUS_SUCCESS)
 		goto out;
-	}
 
-	pkg = instance_package(inst);
-	if (!pkg) {
-		ErrPrint("Package[%s] info is not found\n", pkgname);
-		ret = LB_STATUS_ERROR_FAULT;
-		goto out;
-	}
-
-	if (package_is_fault(pkg)) {
-		DbgPrint("Package[%s] is faulted\n", pkgname);
-		ret = LB_STATUS_ERROR_FAULT;
-	} else if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
+	if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
 		struct buffer_info *buffer;
 		struct slave_node *slave;
 
@@ -2897,34 +2478,11 @@ static struct packet *client_pd_access_hl(pid_t pid, int handle, const struct pa
 		goto out;
 	}
 
-	/*!
-	 * \NOTE:
-	 * Trust the package name which are sent by the client.
-	 * The package has to be a livebox package name.
-	 */
-	inst = package_find_instance_by_id(pkgname, id);
-	if (!inst) {
-		ErrPrint("Instance[%s] is not exists\n", id);
-		ret = LB_STATUS_ERROR_NOT_EXIST;
+	ret = validate_request(pkgname, id, &inst, &pkg);
+	if (ret != LB_STATUS_SUCCESS)
 		goto out;
-	}
 
-	pkg = instance_package(inst);
-	if (!pkg) {
-		ErrPrint("Package[%s] info is not found\n", pkgname);
-		ret = LB_STATUS_ERROR_FAULT;
-		goto out;
-	}
-
-	if (package_is_fault(pkg)) {
-		/*!
-		 * \note
-		 * If the package is registered as fault module,
-		 * slave has not load it, so we don't need to do anything at here!
-		 */
-		DbgPrint("Package[%s] is faulted\n", pkgname);
-		ret = LB_STATUS_ERROR_FAULT;
-	} else if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
+	if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
 		struct buffer_info *buffer;
 		struct slave_node *slave;
 
@@ -3021,34 +2579,11 @@ static struct packet *client_pd_access_hl_prev(pid_t pid, int handle, const stru
 		goto out;
 	}
 
-	/*!
-	 * \NOTE:
-	 * Trust the package name which are sent by the client.
-	 * The package has to be a livebox package name.
-	 */
-	inst = package_find_instance_by_id(pkgname, id);
-	if (!inst) {
-		ErrPrint("Instance[%s] is not exists\n", id);
-		ret = LB_STATUS_ERROR_NOT_EXIST;
+	ret = validate_request(pkgname, id, &inst, &pkg);
+	if (ret != LB_STATUS_SUCCESS)
 		goto out;
-	}
 
-	pkg = instance_package(inst);
-	if (!pkg) {
-		ErrPrint("Package[%s] info is not found\n", pkgname);
-		ret = LB_STATUS_ERROR_FAULT;
-		goto out;
-	}
-
-	if (package_is_fault(pkg)) {
-		/*!
-		 * \note
-		 * If the package is registered as fault module,
-		 * slave has not load it, so we don't need to do anything at here!
-		 */
-		DbgPrint("Package[%s] is faulted\n", pkgname);
-		ret = LB_STATUS_ERROR_FAULT;
-	} else if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
+	if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
 		struct buffer_info *buffer;
 		struct slave_node *slave;
 
@@ -3145,35 +2680,11 @@ static struct packet *client_pd_access_hl_next(pid_t pid, int handle, const stru
 		goto out;
 	}
 
-	DbgPrint("%s %s %lf %d %d\n", pkgname, id, timestamp, x, y);
-	/*!
-	 * \NOTE:
-	 * Trust the package name which are sent by the client.
-	 * The package has to be a livebox package name.
-	 */
-	inst = package_find_instance_by_id(pkgname, id);
-	if (!inst) {
-		ErrPrint("Instance[%s] is not exists\n", id);
-		ret = LB_STATUS_ERROR_NOT_EXIST;
+	ret = validate_request(pkgname, id, &inst, &pkg);
+	if (ret != LB_STATUS_SUCCESS)
 		goto out;
-	}
 
-	pkg = instance_package(inst);
-	if (!pkg) {
-		ErrPrint("Package[%s] info is not found\n", pkgname);
-		ret = LB_STATUS_ERROR_FAULT;
-		goto out;
-	}
-
-	if (package_is_fault(pkg)) {
-		/*!
-		 * \note
-		 * If the package is registered as fault module,
-		 * slave has not load it, so we don't need to do anything at here!
-		 */
-		DbgPrint("Package[%s] is faulted\n", pkgname);
-		ret = LB_STATUS_ERROR_FAULT;
-	} else if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
+	if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
 		struct buffer_info *buffer;
 		struct slave_node *slave;
 
@@ -3279,34 +2790,11 @@ static struct packet *client_pd_access_activate(pid_t pid, int handle, const str
 		goto out;
 	}
 
-	/*!
-	 * \NOTE:
-	 * Trust the package name which are sent by the client.
-	 * The package has to be a livebox package name.
-	 */
-	inst = package_find_instance_by_id(pkgname, id);
-	if (!inst) {
-		ErrPrint("Instance[%s] is not exists\n", id);
-		ret = LB_STATUS_ERROR_NOT_EXIST;
+	ret = validate_request(pkgname, id, &inst, &pkg);
+	if (ret != LB_STATUS_SUCCESS)
 		goto out;
-	}
 
-	pkg = instance_package(inst);
-	if (!pkg) {
-		ErrPrint("Package[%s] info is not found\n", pkgname);
-		ret = LB_STATUS_ERROR_FAULT;
-		goto out;
-	}
-
-	if (package_is_fault(pkg)) {
-		/*!
-		 * \note
-		 * If the package is registered as fault module,
-		 * slave has not load it, so we don't need to do anything at here!
-		 */
-		DbgPrint("Package[%s] is faulted\n", pkgname);
-		ret = LB_STATUS_ERROR_FAULT;
-	} else if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
+	if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
 		struct buffer_info *buffer;
 		struct slave_node *slave;
 
@@ -3402,34 +2890,11 @@ static struct packet *client_pd_key_down(pid_t pid, int handle, const struct pac
 		goto out;
 	}
 
-	/*!
-	 * \NOTE:
-	 * Trust the package name which are sent by the client.
-	 * The package has to be a livebox package name.
-	 */
-	inst = package_find_instance_by_id(pkgname, id);
-	if (!inst) {
-		ErrPrint("Instance[%s] is not exists\n", id);
-		ret = LB_STATUS_ERROR_NOT_EXIST;
+	ret = validate_request(pkgname, id, &inst, &pkg);
+	if (ret != LB_STATUS_SUCCESS)
 		goto out;
-	}
 
-	pkg = instance_package(inst);
-	if (!pkg) {
-		ErrPrint("Package[%s] info is not found\n", pkgname);
-		ret = LB_STATUS_ERROR_FAULT;
-		goto out;
-	}
-
-	if (package_is_fault(pkg)) {
-		/*!
-		 * \note
-		 * If the package is registered as fault module,
-		 * slave has not load it, so we don't need to do anything at here!
-		 */
-		DbgPrint("Package[%s] is faulted\n", pkgname);
-		ret = LB_STATUS_ERROR_FAULT;
-	} else if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
+	if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
 		struct buffer_info *buffer;
 		struct slave_node *slave;
 
@@ -3562,34 +3027,11 @@ static struct packet *client_pd_key_up(pid_t pid, int handle, const struct packe
 		goto out;
 	}
 
-	/*!
-	 * \NOTE:
-	 * Trust the package name which are sent by the client.
-	 * The package has to be a livebox package name.
-	 */
-	inst = package_find_instance_by_id(pkgname, id);
-	if (!inst) {
-		ErrPrint("Instance[%s] is not exists\n", id);
-		ret = LB_STATUS_ERROR_NOT_EXIST;
+	ret = validate_request(pkgname, id, &inst, &pkg);
+	if (ret != LB_STATUS_SUCCESS)
 		goto out;
-	}
 
-	pkg = instance_package(inst);
-	if (!pkg) {
-		ErrPrint("Package[%s] info is not found\n", pkgname);
-		ret = LB_STATUS_ERROR_FAULT;
-		goto out;
-	}
-
-	if (package_is_fault(pkg)) {
-		/*!
-		 * \note
-		 * If the package is registered as fault module,
-		 * slave has not load it, so we don't need to do anything at here!
-		 */
-		DbgPrint("Package[%s] is faulted\n", pkgname);
-		ret = LB_STATUS_ERROR_FAULT;
-	} else if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
+	if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
 		struct buffer_info *buffer;
 		struct slave_node *slave;
 
@@ -3667,34 +3109,11 @@ static struct packet *client_lb_access_hl(pid_t pid, int handle, const struct pa
 		goto out;
 	}
 
-	/*!
-	 * \NOTE:
-	 * Trust the package name which are sent by the client.
-	 * The package has to be a livebox package name.
-	 */
-	inst = package_find_instance_by_id(pkgname, id);
-	if (!inst) {
-		ErrPrint("Instance[%s] is not exists\n", id);
-		ret = LB_STATUS_ERROR_NOT_EXIST;
+	ret = validate_request(pkgname, id, &inst, &pkg);
+	if (ret != LB_STATUS_SUCCESS)
 		goto out;
-	}
 
-	pkg = instance_package(inst);
-	if (!pkg) {
-		ErrPrint("Package[%s] info is not exists\n", pkgname);
-		ret = LB_STATUS_ERROR_FAULT;
-		goto out;
-	}
-
-	if (package_is_fault(pkg)) {
-		/*!
-		 * \note
-		 * If the package is registered as fault module,
-		 * slave has not load it, so we don't need to do anything at here!
-		 */
-		DbgPrint("Package[%s] is faulted\n", pkgname);
-		ret = LB_STATUS_ERROR_FAULT;
-	} else if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
+	if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
 		struct buffer_info *buffer;
 		struct slave_node *slave;
 
@@ -3791,34 +3210,11 @@ static struct packet *client_lb_access_hl_prev(pid_t pid, int handle, const stru
 		goto out;
 	}
 
-	/*!
-	 * \NOTE:
-	 * Trust the package name which are sent by the client.
-	 * The package has to be a livebox package name.
-	 */
-	inst = package_find_instance_by_id(pkgname, id);
-	if (!inst) {
-		ErrPrint("Instance[%s] is not exists\n", id);
-		ret = LB_STATUS_ERROR_NOT_EXIST;
+	ret = validate_request(pkgname, id, &inst, &pkg);
+	if (ret != LB_STATUS_SUCCESS)
 		goto out;
-	}
 
-	pkg = instance_package(inst);
-	if (!pkg) {
-		ErrPrint("Package[%s] info is not exists\n", pkgname);
-		ret = LB_STATUS_ERROR_FAULT;
-		goto out;
-	}
-
-	if (package_is_fault(pkg)) {
-		/*!
-		 * \note
-		 * If the package is registered as fault module,
-		 * slave has not load it, so we don't need to do anything at here!
-		 */
-		DbgPrint("Package[%s] is faulted\n", pkgname);
-		ret = LB_STATUS_ERROR_FAULT;
-	} else if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
+	if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
 		struct buffer_info *buffer;
 		struct slave_node *slave;
 
@@ -3915,34 +3311,11 @@ static struct packet *client_lb_access_hl_next(pid_t pid, int handle, const stru
 		goto out;
 	}
 
-	/*!
-	 * \NOTE:
-	 * Trust the package name which are sent by the client.
-	 * The package has to be a livebox package name.
-	 */
-	inst = package_find_instance_by_id(pkgname, id);
-	if (!inst) {
-		ErrPrint("Instance[%s] is not exists\n", id);
-		ret = LB_STATUS_ERROR_NOT_EXIST;
+	ret = validate_request(pkgname, id, &inst, &pkg);
+	if (ret != LB_STATUS_SUCCESS)
 		goto out;
-	}
 
-	pkg = instance_package(inst);
-	if (!pkg) {
-		ErrPrint("Package[%s] info is not exists\n", pkgname);
-		ret = LB_STATUS_ERROR_FAULT;
-		goto out;
-	}
-
-	if (package_is_fault(pkg)) {
-		/*!
-		 * \note
-		 * If the package is registered as fault module,
-		 * slave has not load it, so we don't need to do anything at here!
-		 */
-		DbgPrint("Package[%s] is faulted\n", pkgname);
-		ret = LB_STATUS_ERROR_FAULT;
-	} else if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
+	if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
 		struct buffer_info *buffer;
 		struct slave_node *slave;
 
@@ -4039,23 +3412,11 @@ static struct packet *client_lb_access_action_up(pid_t pid, int handle, const st
 		goto out;
 	}
 
-	inst = package_find_instance_by_id(pkgname, id);
-	if (!inst) {
-		ErrPrint("Instance[%s] is not exists\n", id);
-		ret = LB_STATUS_ERROR_NOT_EXIST;
+	ret = validate_request(pkgname, id, &inst, &pkg);
+	if (ret != LB_STATUS_SUCCESS)
 		goto out;
-	}
 
-	pkg = instance_package(inst);
-	if (!pkg) {
-		ErrPrint("Package[%s] info is not exists\n", pkgname);
-		ret = LB_STATUS_ERROR_FAULT;
-		goto out;
-	}
-
-	if (package_is_fault(pkg)) {
-		ret = LB_STATUS_ERROR_FAULT;
-	} else if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
+	if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
 		struct buffer_info *buffer;
 		struct slave_node *slave;
 
@@ -4159,23 +3520,11 @@ static struct packet *client_lb_access_action_down(pid_t pid, int handle, const 
 		goto out;
 	}
 
-	inst = package_find_instance_by_id(pkgname, id);
-	if (!inst) {
-		ErrPrint("Instance[%s] is not exists\n", id);
-		ret = LB_STATUS_ERROR_NOT_EXIST;
+	ret = validate_request(pkgname, id, &inst, &pkg);
+	if (ret != LB_STATUS_SUCCESS)
 		goto out;
-	}
 
-	pkg = instance_package(inst);
-	if (!pkg) {
-		ErrPrint("Package[%s] info is not exists\n", pkgname);
-		ret = LB_STATUS_ERROR_FAULT;
-		goto out;
-	}
-
-	if (package_is_fault(pkg)) {
-		ret = LB_STATUS_ERROR_FAULT;
-	} else if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
+	if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
 		struct buffer_info *buffer;
 		struct slave_node *slave;
 
@@ -4279,34 +3628,11 @@ static struct packet *client_lb_access_unhighlight(pid_t pid, int handle, const 
 		goto out;
 	}
 
-	/*!
-	 * \NOTE:
-	 * Trust the package name which are sent by the client.
-	 * The package has to be a livebox package name.
-	 */
-	inst = package_find_instance_by_id(pkgname, id);
-	if (!inst) {
-		ErrPrint("Instance[%s] is not exists\n", id);
-		ret = LB_STATUS_ERROR_NOT_EXIST;
+	ret = validate_request(pkgname, id, &inst, &pkg);
+	if (ret != LB_STATUS_SUCCESS)
 		goto out;
-	}
 
-	pkg = instance_package(inst);
-	if (!pkg) {
-		ErrPrint("Package[%s] info is not exists\n", pkgname);
-		ret = LB_STATUS_ERROR_FAULT;
-		goto out;
-	}
-
-	if (package_is_fault(pkg)) {
-		/*!
-		 * \note
-		 * If the package is registered as fault module,
-		 * slave has not load it, so we don't need to do anything at here!
-		 */
-		DbgPrint("Package[%s] is faulted\n", pkgname);
-		ret = LB_STATUS_ERROR_FAULT;
-	} else if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
+	if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
 		struct buffer_info *buffer;
 		struct slave_node *slave;
 
@@ -4403,23 +3729,11 @@ static struct packet *client_lb_access_scroll_down(pid_t pid, int handle, const 
 		goto out;
 	}
 
-	inst = package_find_instance_by_id(pkgname, id);
-	if (!inst) {
-		ErrPrint("Instance[%s] is not exists\n", id);
-		ret = LB_STATUS_ERROR_NOT_EXIST;
+	ret = validate_request(pkgname, id, &inst, &pkg);
+	if (ret != LB_STATUS_SUCCESS)
 		goto out;
-	}
 
-	pkg = instance_package(inst);
-	if (!pkg) {
-		ErrPrint("Package[%s] info is not exists\n", pkgname);
-		ret = LB_STATUS_ERROR_FAULT;
-		goto out;
-	}
-
-	if (package_is_fault(pkg)) {
-		ret = LB_STATUS_ERROR_FAULT;
-	} else if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
+	if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
 		struct buffer_info *buffer;
 		struct slave_node *slave;
 
@@ -4523,23 +3837,11 @@ static struct packet *client_lb_access_scroll_move(pid_t pid, int handle, const 
 		goto out;
 	}
 
-	inst = package_find_instance_by_id(pkgname, id);
-	if (!inst) {
-		ErrPrint("Instance[%s] is not exists\n", id);
-		ret = LB_STATUS_ERROR_NOT_EXIST;
+	ret = validate_request(pkgname, id, &inst, &pkg);
+	if (ret != LB_STATUS_SUCCESS)
 		goto out;
-	}
 
-	pkg = instance_package(inst);
-	if (!pkg) {
-		ErrPrint("Package[%s] info is not exists\n", pkgname);
-		ret = LB_STATUS_ERROR_FAULT;
-		goto out;
-	}
-
-	if (package_is_fault(pkg)) {
-		ret = LB_STATUS_ERROR_FAULT;
-	} else if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
+	if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
 		struct buffer_info *buffer;
 		struct slave_node *slave;
 
@@ -4643,23 +3945,11 @@ static struct packet *client_lb_access_scroll_up(pid_t pid, int handle, const st
 		goto out;
 	}
 
-	inst = package_find_instance_by_id(pkgname, id);
-	if (!inst) {
-		ErrPrint("Instance[%s] is not exists\n", id);
-		ret = LB_STATUS_ERROR_NOT_EXIST;
+	ret = validate_request(pkgname, id, &inst, &pkg);
+	if (ret != LB_STATUS_SUCCESS)
 		goto out;
-	}
 
-	pkg = instance_package(inst);
-	if (!pkg) {
-		ErrPrint("Package[%s] info is not exists\n", pkgname);
-		ret = LB_STATUS_ERROR_FAULT;
-		goto out;
-	}
-
-	if (package_is_fault(pkg)) {
-		ret = LB_STATUS_ERROR_FAULT;
-	} else if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
+	if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
 		struct buffer_info *buffer;
 		struct slave_node *slave;
 
@@ -4763,34 +4053,11 @@ static struct packet *client_lb_access_activate(pid_t pid, int handle, const str
 		goto out;
 	}
 
-	/*!
-	 * \NOTE:
-	 * Trust the package name which are sent by the client.
-	 * The package has to be a livebox package name.
-	 */
-	inst = package_find_instance_by_id(pkgname, id);
-	if (!inst) {
-		ErrPrint("Instance[%s] is not exists\n", id);
-		ret = LB_STATUS_ERROR_NOT_EXIST;
+	ret = validate_request(pkgname, id, &inst, &pkg);
+	if (ret != LB_STATUS_SUCCESS)
 		goto out;
-	}
 
-	pkg = instance_package(inst);
-	if (!pkg) {
-		ErrPrint("Package[%s] info is not exists\n", pkgname);
-		ret = LB_STATUS_ERROR_INVALID;
-		goto out;
-	}
-
-	if (package_is_fault(pkg)) {
-		/*!
-		 * \note
-		 * If the package is registered as fault module,
-		 * slave has not load it, so we don't need to do anything at here!
-		 */
-		DbgPrint("Package[%s] is faulted\n", pkgname);
-		ret = LB_STATUS_ERROR_FAULT;
-	} else if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
+	if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
 		struct buffer_info *buffer;
 		struct slave_node *slave;
 
@@ -4888,34 +4155,11 @@ static struct packet *client_lb_key_down(pid_t pid, int handle, const struct pac
 		goto out;
 	}
 
-	/*!
-	 * \NOTE:
-	 * Trust the package name which are sent by the client.
-	 * The package has to be a livebox package name.
-	 */
-	inst = package_find_instance_by_id(pkgname, id);
-	if (!inst) {
-		ErrPrint("Instance[%s] is not exists\n", id);
-		ret = LB_STATUS_ERROR_NOT_EXIST;
+	ret = validate_request(pkgname, id, &inst, &pkg);
+	if (ret != LB_STATUS_SUCCESS)
 		goto out;
-	}
 
-	pkg = instance_package(inst);
-	if (!pkg) {
-		ErrPrint("Package[%s] info is not exists\n", pkgname);
-		ret = LB_STATUS_ERROR_FAULT;
-		goto out;
-	}
-
-	if (package_is_fault(pkg)) {
-		/*!
-		 * \note
-		 * If the package is registered as fault module,
-		 * slave has not load it, so we don't need to do anything at here!
-		 */
-		DbgPrint("Package[%s] is faulted\n", pkgname);
-		ret = LB_STATUS_ERROR_FAULT;
-	} else if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
+	if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
 		struct buffer_info *buffer;
 		struct slave_node *slave;
 
@@ -4993,34 +4237,11 @@ static struct packet *client_lb_key_up(pid_t pid, int handle, const struct packe
 		goto out;
 	}
 
-	/*!
-	 * \NOTE:
-	 * Trust the package name which are sent by the client.
-	 * The package has to be a livebox package name.
-	 */
-	inst = package_find_instance_by_id(pkgname, id);
-	if (!inst) {
-		ErrPrint("Instance[%s] is not exists\n", id);
-		ret = LB_STATUS_ERROR_NOT_EXIST;
+	ret = validate_request(pkgname, id, &inst, &pkg);
+	if (ret != LB_STATUS_SUCCESS)
 		goto out;
-	}
 
-	pkg = instance_package(inst);
-	if (!pkg) {
-		ErrPrint("Package[%s] info is not exists\n", pkgname);
-		ret = LB_STATUS_ERROR_FAULT;
-		goto out;
-	}
-
-	if (package_is_fault(pkg)) {
-		/*!
-		 * \note
-		 * If the package is registered as fault module,
-		 * slave has not load it, so we don't need to do anything at here!
-		 */
-		DbgPrint("Package[%s] is faulted\n", pkgname);
-		ret = LB_STATUS_ERROR_FAULT;
-	} else if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
+	if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
 		struct buffer_info *buffer;
 		struct slave_node *slave;
 
@@ -5103,18 +4324,10 @@ static struct packet *client_lb_acquire_pixmap(pid_t pid, int handle, const stru
 		goto out;
 	}
 
-	/*!
-	 * \NOTE:
-	 * Trust the package name which are sent by the client.
-	 * The package has to be a livebox package name.
-	 */
-	inst = package_find_instance_by_id(pkgname, id);
-	if (!inst) {
-		ErrPrint("Failed to find an instance (%s - %s)\n", pkgname, id);
+	ret = validate_request(pkgname, id, &inst, NULL);
+	if (ret != LB_STATUS_SUCCESS)
 		goto out;
-	}
 
-	DbgPrint("pid[%d] pkgname[%s]\n", pid, pkgname);
 	buffer = instance_lb_buffer(inst);
 	if (!buffer) {
 		ErrPrint("Unable to get LB buffer: %s\n", id);
@@ -5164,18 +4377,10 @@ static struct packet *client_lb_release_pixmap(pid_t pid, int handle, const stru
 		ErrPrint("Parameter is not matched\n");
 		goto out;
 	}
-	DbgPrint("pid[%d] pkgname[%s] Pixmap[0x%X]\n", pid, pkgname, pixmap);
 
-	/*!
-	 * \NOTE:
-	 * Trust the package name which are sent by the client.
-	 * The package has to be a livebox package name.
-	 */
-	inst = package_find_instance_by_id(pkgname, id);
-	if (!inst) {
-		ErrPrint("Failed to find an instance (%s - %s)\n", pkgname, id);
+	ret = validate_request(pkgname, id, &inst, NULL);
+	if (ret != LB_STATUS_SUCCESS)
 		goto out;
-	}
 
 	buf_ptr = buffer_handler_pixmap_find(pixmap);
 	if (!buf_ptr) {
@@ -5215,18 +4420,10 @@ static struct packet *client_pd_acquire_pixmap(pid_t pid, int handle, const stru
 		goto out;
 	}
 
-	/*!
-	 * \NOTE:
-	 * Trust the package name which are sent by the client.
-	 * The package has to be a livebox package name.
-	 */
-	inst = package_find_instance_by_id(pkgname, id);
-	if (!inst) {
-		ErrPrint("Failed to find an instance (%s - %s)\n", pkgname, id);
+	ret = validate_request(pkgname, id, &inst, NULL);
+	if (ret != LB_STATUS_SUCCESS)
 		goto out;
-	}
 
-	DbgPrint("pid[%d] pkgname[%s]\n", pid, pkgname);
 	buffer = instance_pd_buffer(inst);
 	if (!buffer) {
 		ErrPrint("Unable to get PD buffer (%s)\n", id);
@@ -5257,7 +4454,6 @@ static struct packet *client_pd_release_pixmap(pid_t pid, int handle, const stru
 	const char *pkgname;
 	const char *id;
 	struct client_node *client;
-	struct inst_info *inst;
 	int pixmap;
 	void *buf_ptr;
 	int ret;
@@ -5273,18 +4469,10 @@ static struct packet *client_pd_release_pixmap(pid_t pid, int handle, const stru
 		ErrPrint("Parameter is not matched\n");
 		goto out;
 	}
-	DbgPrint("pid[%d] pkgname[%s]\n", pid, pkgname);
 
-	/*!
-	 * \NOTE:
-	 * Trust the package name which are sent by the client.
-	 * The package has to be a livebox package name.
-	 */
-	inst = package_find_instance_by_id(pkgname, id);
-	if (!inst) {
-		ErrPrint("Failed to find an instance (%s - %s)\n", pkgname, id);
+	ret = validate_request(pkgname, id, NULL, NULL);
+	if (ret != LB_STATUS_SUCCESS)
 		goto out;
-	}
 
 	buf_ptr = buffer_handler_pixmap_find(pixmap);
 	if (!buf_ptr) {
@@ -5326,19 +4514,8 @@ static struct packet *client_pinup_changed(pid_t pid, int handle, const struct p
 		goto out;
 	}
 
-	DbgPrint("pid[%d] pkgname[%s] pinup[%d]\n", pid, pkgname, pinup);
-
-	/*!
-	 * \NOTE:
-	 * Trust the package name which are sent by the client.
-	 * The package has to be a livebox package name.
-	 */
-	inst = package_find_instance_by_id(pkgname, id);
-	if (!inst)
-		ret = LB_STATUS_ERROR_NOT_EXIST;
-	else if (package_is_fault(instance_package(inst)))
-		ret = LB_STATUS_ERROR_FAULT;
-	else
+	ret = validate_request(pkgname, id, &inst, NULL);
+	if (ret == LB_STATUS_SUCCESS)
 		ret = instance_set_pinup(inst, pinup);
 
 out:
@@ -5382,6 +4559,7 @@ static struct packet *client_pd_move(pid_t pid, int handle, const struct packet 
 {
 	struct client_node *client;
 	struct inst_info *inst;
+	const struct pkg_info *pkg;
 	const char *pkgname;
 	const char *id;
 	double x = 0.0f;
@@ -5402,19 +4580,14 @@ static struct packet *client_pd_move(pid_t pid, int handle, const struct packet 
 		goto out;
 	}
 
-	DbgPrint("pid[%d] pkgname[%s]\n", pid, pkgname);
+	ret = validate_request(pkgname, id, &inst, &pkg);
+	if (ret != LB_STATUS_SUCCESS)
+		goto out;
 
-	inst = package_find_instance_by_id(pkgname, id);
-	if (!inst)
-		ret = LB_STATUS_ERROR_NOT_EXIST;
-	else if (package_is_fault(instance_package(inst)))
-		ret = LB_STATUS_ERROR_FAULT;
-	else if (package_pd_type(instance_package(inst)) == PD_TYPE_BUFFER) {
+	if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
 		instance_slave_set_pd_pos(inst, x, y);
-		ret = instance_signal_emit(inst,
-				"pd,move", util_uri_to_path(instance_id(inst)),
-				0.0, 0.0, 0.0, 0.0, x, y, 0);
-	} else if (package_pd_type(instance_package(inst)) == PD_TYPE_SCRIPT) {
+		ret = instance_signal_emit(inst, "pd,move", instance_id(inst), 0.0, 0.0, 0.0, 0.0, x, y, 0);
+	} else if (package_pd_type(pkg) == PD_TYPE_SCRIPT) {
 		int ix;
 		int iy;
 
@@ -5422,9 +4595,7 @@ static struct packet *client_pd_move(pid_t pid, int handle, const struct packet 
 		ix = x * instance_pd_width(inst);
 		iy = y * instance_pd_height(inst);
 		script_handler_update_pointer(instance_pd_script(inst), ix, iy, 0);
-		ret = instance_signal_emit(inst,
-				"pd,move", util_uri_to_path(instance_id(inst)),
-				0.0, 0.0, 0.0, 0.0, x, y, 0);
+		ret = instance_signal_emit(inst, "pd,move", instance_id(inst), 0.0, 0.0, 0.0, 0.0, x, y, 0);
 	} else {
 		ErrPrint("Invalid PD type\n");
 		ret = LB_STATUS_ERROR_INVALID;
@@ -5479,19 +4650,11 @@ static struct packet *client_create_pd(pid_t pid, int handle, const struct packe
 		goto out;
 	}
 
-	DbgPrint("pid[%d] pkgname[%s]\n", pid, pkgname);
+	ret = validate_request(pkgname, id, &inst, NULL);
+	if (ret != LB_STATUS_SUCCESS)
+		goto out;
 
-	/*!
-	 * \NOTE:
-	 * Trust the package name which are sent by the client.
-	 * The package has to be a livebox package name.
-	 */
-	inst = package_find_instance_by_id(pkgname, id);
-	if (!inst)
-		ret = LB_STATUS_ERROR_NOT_EXIST;
-	else if (package_is_fault(instance_package(inst)))
-		ret = LB_STATUS_ERROR_FAULT;
-	else if (util_free_space(IMAGE_PATH) < MINIMUM_SPACE)
+	if (util_free_space(IMAGE_PATH) < MINIMUM_SPACE)
 		ret = LB_STATUS_ERROR_NO_SPACE;
 	else if (package_pd_type(instance_package(inst)) == PD_TYPE_BUFFER) {
 		instance_slave_set_pd_pos(inst, x, y);
@@ -5502,9 +4665,7 @@ static struct packet *client_create_pd(pid_t pid, int handle, const struct packe
 		 */
 		ret = instance_slave_open_pd(inst, client);
 		if (ret == LB_STATUS_SUCCESS) {
-			ret = instance_signal_emit(inst,
-					"pd,show", util_uri_to_path(instance_id(inst)),
-					0.0, 0.0, 0.0, 0.0, x, y, 0);
+			ret = instance_signal_emit(inst, "pd,show", instance_id(inst), 0.0, 0.0, 0.0, 0.0, x, y, 0);
 			if (ret != LB_STATUS_SUCCESS) {
 				int tmp_ret;
 
@@ -5628,6 +4789,7 @@ static struct packet *client_destroy_pd(pid_t pid, int handle, const struct pack
 	const char *id;
 	int ret;
 	struct inst_info *inst;
+	const struct pkg_info *pkg;
 
 	client = client_find_by_pid(pid);
 	if (!client) {
@@ -5643,19 +4805,11 @@ static struct packet *client_destroy_pd(pid_t pid, int handle, const struct pack
 		goto out;
 	}
 
-	DbgPrint("pid[%d] pkgname[%s]\n", pid, pkgname);
+	ret = validate_request(pkgname, id, &inst, &pkg);
+	if (ret != LB_STATUS_SUCCESS)
+		goto out;
 
-	/*!
-	 * \NOTE:
-	 * Trust the package name which are sent by the client.
-	 * The package has to be a livebox package name.
-	 */
-	inst = package_find_instance_by_id(pkgname, id);
-	if (!inst)
-		ret = LB_STATUS_ERROR_NOT_EXIST;
-	else if (package_is_fault(instance_package(inst)))
-		ret = LB_STATUS_ERROR_FAULT;
-	else if (package_pd_type(instance_package(inst)) == PD_TYPE_BUFFER) {
+	if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
 		Ecore_Timer *pd_monitor;
 
 		pd_monitor = instance_del_data(inst, "pd,open,monitor");
@@ -5678,9 +4832,7 @@ static struct packet *client_destroy_pd(pid_t pid, int handle, const struct pack
 			goto out;
 		}
 
-		ret = instance_signal_emit(inst,
-				"pd,hide", util_uri_to_path(instance_id(inst)),
-				0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0);
+		ret = instance_signal_emit(inst, "pd,hide", instance_id(inst), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0);
 		if (ret < 0)
 			ErrPrint("PD close signal emit failed: %d\n", ret);
 
@@ -5705,7 +4857,7 @@ static struct packet *client_destroy_pd(pid_t pid, int handle, const struct pack
 		 *
 		 * instance_client_pd_destroyed(inst);
 		 */
-	} else if (package_pd_type(instance_package(inst)) == PD_TYPE_SCRIPT) {
+	} else if (package_pd_type(pkg) == PD_TYPE_SCRIPT) {
 		ret = script_handler_unload(instance_pd_script(inst), 1);
 		if (ret < 0)
 			ErrPrint("Unable to unload the script: %s, %d\n", pkgname, ret);
@@ -5949,10 +5101,13 @@ static struct packet *client_update(pid_t pid, int handle, const struct packet *
 		goto out;
 	}
 
-	inst = package_find_instance_by_id(pkgname, id);
-	if (!inst) {
-	} else if (package_is_fault(instance_package(inst))) {
-	} else if (instance_client(inst) != client) {
+	ret = validate_request(pkgname, id, &inst, NULL);
+	if (ret != LB_STATUS_SUCCESS)
+		goto out;
+
+	if (instance_client(inst) != client) {
+		/* PERMISSIONS */
+		ErrPrint("Insufficient permissions [%s] - %d\n", pkgname, pid);
 	} else {
 		slave_rpc_request_update(pkgname, id, instance_cluster(inst), instance_category(inst));
 	}
@@ -6226,7 +5381,7 @@ static struct packet *slave_lb_update_begin(pid_t pid, int handle, const struct 
 {
 	struct slave_node *slave;
 	struct inst_info *inst;
-	struct pkg_info *pkg;
+	const struct pkg_info *pkg;
 	const char *pkgname;
 	const char *id;
 	double priority;
@@ -6246,21 +5401,11 @@ static struct packet *slave_lb_update_begin(pid_t pid, int handle, const struct 
 		goto out;
 	}
 
-	inst = package_find_instance_by_id(pkgname, id);
-	if (!inst) {
-		ErrPrint("Instance(%s) is not exists\n", id);
+	ret = validate_request(pkgname, id, &inst, &pkg);
+	if (ret != LB_STATUS_SUCCESS)
 		goto out;
-	} else if (instance_state(inst) == INST_DESTROYED) {
-		ErrPrint("Instance(%s) is already destroyed\n", id);
-		goto out;
-	}
 
-	pkg = instance_package(inst);
-	if (!pkg) {
-		ErrPrint("Invalid instance\n");
-	} else if (package_is_fault(pkg)) {
-		ErrPrint("Faulted instance %s.\n", id);
-	} else if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
+	if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
 		ret = instance_lb_update_begin(inst, priority, content, title);
 		if (ret == LB_STATUS_SUCCESS)
 			slave_freeze_ttl(slave);
@@ -6276,7 +5421,7 @@ static struct packet *slave_lb_update_end(pid_t pid, int handle, const struct pa
 {
 	struct slave_node *slave;
 	struct inst_info *inst;
-	struct pkg_info *pkg;
+	const struct pkg_info *pkg;
 	const char *pkgname;
 	const char *id;
 	int ret;
@@ -6293,21 +5438,11 @@ static struct packet *slave_lb_update_end(pid_t pid, int handle, const struct pa
 		goto out;
 	}
 
-	inst = package_find_instance_by_id(pkgname, id);
-	if (!inst) {
-		ErrPrint("Instance[%s] is not exists\n", id);
+	ret = validate_request(pkgname, id, &inst, &pkg);
+	if (ret != LB_STATUS_SUCCESS)
 		goto out;
-	} else if (instance_state(inst) == INST_DESTROYED) {
-		ErrPrint("Instance[%s] is already destroyed\n", id);
-		goto out;
-	}
 
-	pkg = instance_package(inst);
-	if (!pkg) {
-		ErrPrint("Invalid instance\n");
-	} else if (package_is_fault(pkg)) {
-		ErrPrint("Faulted instance %s\n", id);
-	} else if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
+	if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
 		ret = instance_lb_update_end(inst);
 		if (ret == LB_STATUS_SUCCESS)
 			slave_thaw_ttl(slave);
@@ -6322,7 +5457,7 @@ out:
 static struct packet *slave_pd_update_begin(pid_t pid, int handle, const struct packet *packet)
 {
 	struct slave_node *slave;
-	struct pkg_info *pkg;
+	const struct pkg_info *pkg;
 	struct inst_info *inst;
 	const char *pkgname;
 	const char *id;
@@ -6340,20 +5475,11 @@ static struct packet *slave_pd_update_begin(pid_t pid, int handle, const struct 
 		goto out;
 	}
 
-	inst = package_find_instance_by_id(pkgname, id);
-	if (!inst) {
-		ErrPrint("Instance[%s] is not exists\n", id);
+	ret = validate_request(pkgname, id, &inst, &pkg);
+	if (ret != LB_STATUS_SUCCESS)
 		goto out;
-	}
 
-	pkg = instance_package(inst);
-	if (!pkg) {
-		ErrPrint("Invalid package\n");
-	} else if (package_is_fault(pkg)) {
-		ErrPrint("Faulted instance %s\n", id);
-	} else if (instance_state(inst) == INST_DESTROYED) {
-		ErrPrint("Instance[%s] is already destroyed\n", id);
-	} else if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
+	if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
 		(void)instance_pd_update_begin(inst);
 	} else {
 		ErrPrint("Invalid request[%s]\n", id);
@@ -6366,7 +5492,6 @@ out:
 static struct packet *slave_access_status(pid_t pid, int handle, const struct packet *packet)
 {
 	struct slave_node *slave;
-	struct pkg_info *pkg;
 	struct inst_info *inst;
 	const char *pkgname;
 	const char *id;
@@ -6385,26 +5510,9 @@ static struct packet *slave_access_status(pid_t pid, int handle, const struct pa
 		goto out;
 	}
 
-	inst = package_find_instance_by_id(pkgname, id);
-	if (!inst) {
-		ErrPrint("Instance[%s] is not exists\n", id);
-		goto out;
-	}
-
-	pkg = instance_package(inst);
-	if (!pkg) {
-		ErrPrint("Invalid package\n");
-	} else if (package_is_fault(pkg)) {
-		ErrPrint("Faulted instance %s\n", id);
-	} else if (instance_state(inst) == INST_DESTROYED) {
-		ErrPrint("Instance[%s] is already destroyed\n", id);
-	} else {
-		/*!
-		 * \note
-		 * Forward packet to client
-		 */
+	ret = validate_request(pkgname, id, &inst, NULL);
+	if (ret == LB_STATUS_SUCCESS)
 		(void)instance_forward_packet(inst, packet_ref((struct packet *)packet));
-	}
 
 out:
 	return NULL;
@@ -6413,7 +5521,7 @@ out:
 static struct packet *slave_pd_update_end(pid_t pid, int handle, const struct packet *packet)
 {
 	struct slave_node *slave;
-	struct pkg_info *pkg;
+	const struct pkg_info *pkg;
 	struct inst_info *inst;
 	const char *pkgname;
 	const char *id;
@@ -6431,20 +5539,11 @@ static struct packet *slave_pd_update_end(pid_t pid, int handle, const struct pa
 		goto out;
 	}
 
-	inst = package_find_instance_by_id(pkgname, id);
-	if (!inst) {
-		ErrPrint("Instance[%s] is not exists\n", id);
+	ret = validate_request(pkgname, id, &inst, &pkg);
+	if (ret != LB_STATUS_SUCCESS)
 		goto out;
-	}
 
-	pkg = instance_package(inst);
-	if (!pkg) {
-		ErrPrint("Invalid package\n");
-	} else if (package_is_fault(pkg)) {
-		ErrPrint("Faulted instance %s\n", id);
-	} else if (instance_state(inst) == INST_DESTROYED) {
-		ErrPrint("Instance[%s] is already destroyed\n", id);
-	} else if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
+	if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
 		(void)instance_pd_update_end(inst);
 	} else {
 		ErrPrint("Invalid request[%s]\n", id);
@@ -6535,13 +5634,8 @@ static struct packet *slave_updated(pid_t pid, int handle, const struct packet *
 		goto out;
 	}
 
-	inst = package_find_instance_by_id(pkgname, id);
-	if (!inst) {
-	} else if (package_is_fault(instance_package(inst))) {
-		ErrPrint("Faulted instance cannot make any event.\n");
-	} else if (instance_state(inst) == INST_DESTROYED) {
-		ErrPrint("Instance is already destroyed\n");
-	} else {
+	ret = validate_request(pkgname, id, &inst, NULL);
+	if (ret == LB_STATUS_SUCCESS) {
 		char *filename;
 
 		instance_set_lb_info(inst, priority, content_info, title);
@@ -6551,12 +5645,10 @@ static struct packet *slave_updated(pid_t pid, int handle, const struct packet *
 			script_handler_resize(instance_lb_script(inst), w, h);
 			filename = util_get_file_kept_in_safe(id);
 			if (filename) {
-				(void)script_handler_parse_desc(pkgname, id,
-								filename, 0);
+				(void)script_handler_parse_desc(pkgname, id, filename, 0);
 				DbgFree(filename);
 			} else {
-				(void)script_handler_parse_desc(pkgname, id,
-							util_uri_to_path(id), 0);
+				(void)script_handler_parse_desc(pkgname, id, util_uri_to_path(id), 0);
 			}
 			break;
 		case LB_TYPE_BUFFER:
@@ -6598,16 +5690,9 @@ static struct packet *slave_hold_scroll(pid_t pid, int handle, const struct pack
 		goto out;
 	}
 
-	inst = package_find_instance_by_id(pkgname, id);
-	if (!inst) {
-		ErrPrint("No such instance(%s)\n", id);
-	} else if (package_is_fault(instance_package(inst))) {
-		ErrPrint("Faulted instance cannot seize the screen\n");
-	} else if (instance_state(inst) == INST_DESTROYED) {
-		ErrPrint("Instance(%s) is already destroyed\n", id);
-	} else {
+	ret = validate_request(pkgname, id, &inst, NULL);
+	if (ret == LB_STATUS_SUCCESS)
 		(void)instance_hold_scroll(inst, seize);
-	}
 
 out:
 	return NULL;
@@ -6634,29 +5719,24 @@ static struct packet *slave_desc_updated(pid_t pid, int handle, const struct pac
 		goto out;
 	}
 
-	inst = package_find_instance_by_id(pkgname, id);
-	if (!inst) {
-	} else if (package_is_fault(instance_package(inst))) {
-		ErrPrint("Faulted package cannot make event\n");
-	} else if (instance_state(inst) == INST_DESTROYED) {
-		ErrPrint("Instance is already destroyed\n");
-	} else {
-		switch (package_pd_type(instance_package(inst))) {
-		case PD_TYPE_SCRIPT:
-			if (script_handler_is_loaded(instance_pd_script(inst))) {
-				(void)script_handler_parse_desc(pkgname, id,
-								descfile, 1);
-			}
-			break;
-		case PD_TYPE_TEXT:
-			instance_set_pd_size(inst, 0, 0);
-		case PD_TYPE_BUFFER:
-			instance_pd_updated(pkgname, id, descfile);
-			break;
-		default:
-			DbgPrint("Ignore updated DESC(%s)\n", pkgname);
-			break;
+	ret = validate_request(pkgname, id, &inst, NULL);
+	if (ret != LB_STATUS_SUCCESS)
+		goto out;
+
+	switch (package_pd_type(instance_package(inst))) {
+	case PD_TYPE_SCRIPT:
+		if (script_handler_is_loaded(instance_pd_script(inst))) {
+			(void)script_handler_parse_desc(pkgname, id, descfile, 1);
 		}
+		break;
+	case PD_TYPE_TEXT:
+		instance_set_pd_size(inst, 0, 0);
+	case PD_TYPE_BUFFER:
+		instance_pd_updated(pkgname, id, descfile);
+		break;
+	default:
+		DbgPrint("Ignore updated DESC(%s)\n", pkgname);
+		break;
 	}
 
 out:
@@ -6683,12 +5763,9 @@ static struct packet *slave_deleted(pid_t pid, int handle, const struct packet *
 		goto out;
 	}
 
-	inst = package_find_instance_by_id(pkgname, id);
-	if (!inst) {
-	} else if (package_is_fault(instance_package(inst))) {
-	} else {
+	ret = validate_request(pkgname, id, &inst, NULL);
+	if (ret == LB_STATUS_SUCCESS)
 		ret = instance_destroyed(inst);
-	}
 
 out:
 	return NULL;
@@ -6734,16 +5811,12 @@ static struct packet *slave_acquire_buffer(pid_t pid, int handle, const struct p
 		goto out;
 	}
 
-	/* TODO: */
-	inst = package_find_instance_by_id(pkgname, id);
-	if (!inst) {
-		DbgPrint("Package[%s] instance is not found\n", pkgname);
-		ret = LB_STATUS_ERROR_INVALID;
+	ret = validate_request(pkgname, id, &inst, &pkg);
+	if (ret != LB_STATUS_SUCCESS) {
 		id = "";
 		goto out;
 	}
 
-	pkg = instance_package(inst);
 	id = "";
 	ret = LB_STATUS_ERROR_INVALID;
 	if (target == TYPE_LB && package_lb_type(pkg) == LB_TYPE_BUFFER) {
@@ -6852,13 +5925,6 @@ static struct packet *slave_resize_buffer(pid_t pid, int handle, const struct pa
 		goto out;
 	}
 
-	if (util_free_space(IMAGE_PATH) < MINIMUM_SPACE) {
-		ErrPrint("Not enough space\n");
-		ret = LB_STATUS_ERROR_NO_SPACE;
-		id = "";
-		goto out;
-	}
-
 	ret = packet_get(packet, "issii", &type, &pkgname, &id, &w, &h);
 	if (ret != 5) {
 		ErrPrint("Invalid argument\n");
@@ -6867,22 +5933,15 @@ static struct packet *slave_resize_buffer(pid_t pid, int handle, const struct pa
 		goto out;
 	}
 
-	inst = package_find_instance_by_id(pkgname, id);
-	if (!inst) {
-		DbgPrint("Instance is not found[%s]\n", pkgname);
-		ret = LB_STATUS_ERROR_NOT_EXIST;
+	if (util_free_space(IMAGE_PATH) < MINIMUM_SPACE) {
+		ErrPrint("Not enough space\n");
+		ret = LB_STATUS_ERROR_NO_SPACE;
 		id = "";
 		goto out;
 	}
 
-	pkg = instance_package(inst);
-	if (!pkg) {
-		/*!
-		 * \note
-		 * THIS statement should not be entered.
-		 */
-		ErrPrint("PACKAGE INFORMATION IS NOT VALID\n");
-		ret = LB_STATUS_ERROR_FAULT;
+	ret = validate_request(pkgname, id, &inst, &pkg);
+	if (ret != LB_STATUS_SUCCESS) {
 		id = "";
 		goto out;
 	}
@@ -6960,23 +6019,9 @@ static struct packet *slave_release_buffer(pid_t pid, int handle, const struct p
 		goto out;
 	}
 
-	inst = package_find_instance_by_id(pkgname, id);
-	if (!inst) {
-		ErrPrint("Instance is not found [%s - %s]\n", pkgname, id);
-		ret = LB_STATUS_ERROR_NOT_EXIST;
+	ret = validate_request(pkgname, id, &inst, &pkg);
+	if (ret != LB_STATUS_SUCCESS)
 		goto out;
-	}
-
-	pkg = instance_package(inst);
-	if (!pkg) {
-		/*!
-		 * \note
-		 * THIS statement should not be entered.
-		 */
-		ErrPrint("PACKAGE INFORMATION IS NOT VALID\n");
-		ret = LB_STATUS_ERROR_FAULT;
-		goto out;
-	}
 
 	ret = LB_STATUS_ERROR_INVALID;
 	if (type == TYPE_LB && package_lb_type(pkg) == LB_TYPE_BUFFER) {
@@ -7062,12 +6107,8 @@ static struct packet *service_change_period(pid_t pid, int handle, const struct 
 			}
 		}
 	} else {
-		inst = package_find_instance_by_id(pkgname, id);
-		if (!inst)
-			ret = LB_STATUS_ERROR_NOT_EXIST;
-		else if (package_is_fault(instance_package(inst)))
-			ret = LB_STATUS_ERROR_FAULT;
-		else
+		ret = validate_request(pkgname, id, &inst, NULL);
+		if (ret == LB_STATUS_SUCCESS)
 			ret = instance_set_period(inst, period);
 	}
 

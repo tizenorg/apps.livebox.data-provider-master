@@ -385,7 +385,6 @@ static int service_thread_main(struct tcb *tcb, struct packet *packet, void *dat
 		},
 	};
 
-	DbgPrint("TCB: %p, Packet: %p\n", tcb, packet);
 	if (!packet) {
 		DbgPrint("TCB: %p is terminated\n", tcb);
 		return 0;
@@ -396,12 +395,11 @@ static int service_thread_main(struct tcb *tcb, struct packet *packet, void *dat
 		ErrPrint("Invalid command\n");
 		return -EINVAL;
 	}
-	DbgPrint("Command: %s, Packet type[%d]\n", command, packet_type(packet));
 
 	switch (packet_type(packet)) {
 	case PACKET_REQ:
 		/* Need to send reply packet */
-		DbgPrint("REQ: Command: [%s]\n", command);
+		DbgPrint("%p REQ: Command: [%s]\n", tcb, command);
 
 		for (i = 0; service_req_table[i].cmd; i++) {
 			if (strcmp(service_req_table[i].cmd, command))

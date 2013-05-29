@@ -92,7 +92,7 @@ static Eina_Bool lazy_access_status_cb(void *data)
 	 * If instance_unref returns NULL,
 	 * The instance is destroyed. it means, we don't need to send event to the viewer
 	 */
-	free(cbdata);
+	DbgFree(cbdata);
 	return ECORE_CALLBACK_CANCEL;
 }
 
@@ -491,8 +491,8 @@ static Eina_Bool lazy_delete_cb(void *data)
 		instance_del_client(item->inst, item->client);
 	}
 
-	client_unref(item->client);
-	instance_unref(item->inst);
+	(void)client_unref(item->client);
+	(void)instance_unref(item->inst);
 	DbgFree(item);
 	return ECORE_CALLBACK_CANCEL;
 }
@@ -554,8 +554,8 @@ static struct packet *client_delete(pid_t pid, int handle, const struct packet *
 
 				if (!ecore_timer_add(DELAY_TIME, lazy_delete_cb, item)) {
 					ErrPrint("Failed to add a delayzed delete callback\n");
-					client_unref(client);
-					instance_unref(inst);
+					(void)client_unref(client);
+					(void)instance_unref(inst);
 					DbgFree(item);
 					ret = LB_STATUS_ERROR_FAULT;
 				} else {
@@ -1921,8 +1921,8 @@ static struct packet *client_pd_access_action_up(pid_t pid, int handle, const st
 				cbdata->status = ret;
 
 				if (!ecore_timer_add(DELAY_TIME, lazy_access_status_cb, cbdata)) {
-					instance_unref(cbdata->inst);
-					free(cbdata);
+					(void)instance_unref(cbdata->inst);
+					DbgFree(cbdata);
 					ret = LB_STATUS_ERROR_FAULT;
 				} else {
 					ret = LB_STATUS_SUCCESS;
@@ -2022,8 +2022,8 @@ static struct packet *client_pd_access_action_down(pid_t pid, int handle, const 
 				cbdata->status = ret;
 
 				if (!ecore_timer_add(DELAY_TIME, lazy_access_status_cb, cbdata)) {
-					instance_unref(cbdata->inst);
-					free(cbdata);
+					(void)instance_unref(cbdata->inst);
+					DbgFree(cbdata);
 					ret = LB_STATUS_ERROR_FAULT;
 				} else {
 					ret = LB_STATUS_SUCCESS;
@@ -2123,8 +2123,8 @@ static struct packet *client_pd_access_scroll_down(pid_t pid, int handle, const 
 				cbdata->status = ret;
 
 				if (!ecore_timer_add(DELAY_TIME, lazy_access_status_cb, cbdata)) {
-					instance_unref(cbdata->inst);
-					free(cbdata);
+					(void)instance_unref(cbdata->inst);
+					DbgFree(cbdata);
 					ret = LB_STATUS_ERROR_FAULT;
 				} else {
 					ret = LB_STATUS_SUCCESS;
@@ -2224,8 +2224,8 @@ static struct packet *client_pd_access_scroll_move(pid_t pid, int handle, const 
 				cbdata->status = ret;
 
 				if (!ecore_timer_add(DELAY_TIME, lazy_access_status_cb, cbdata)) {
-					instance_unref(cbdata->inst);
-					free(cbdata);
+					(void)instance_unref(cbdata->inst);
+					DbgFree(cbdata);
 					ret = LB_STATUS_ERROR_FAULT;
 				} else {
 					ret = LB_STATUS_SUCCESS;
@@ -2325,8 +2325,8 @@ static struct packet *client_pd_access_scroll_up(pid_t pid, int handle, const st
 				cbdata->status = ret;
 
 				if (!ecore_timer_add(DELAY_TIME, lazy_access_status_cb, cbdata)) {
-					instance_unref(cbdata->inst);
-					free(cbdata);
+					(void)instance_unref(cbdata->inst);
+					DbgFree(cbdata);
 					ret = LB_STATUS_ERROR_FAULT;
 				} else {
 					ret = LB_STATUS_SUCCESS;
@@ -2426,8 +2426,8 @@ static struct packet *client_pd_access_unhighlight(pid_t pid, int handle, const 
 				cbdata->status = ret;
 
 				if (!ecore_timer_add(DELAY_TIME, lazy_access_status_cb, cbdata)) {
-					instance_unref(cbdata->inst);
-					free(cbdata);
+					(void)instance_unref(cbdata->inst);
+					DbgFree(cbdata);
 					ret = LB_STATUS_ERROR_FAULT;
 				} else {
 					ret = LB_STATUS_SUCCESS;
@@ -2526,8 +2526,8 @@ static struct packet *client_pd_access_hl(pid_t pid, int handle, const struct pa
 				cbdata->status = ret;
 
 				if (!ecore_timer_add(DELAY_TIME, lazy_access_status_cb, cbdata)) {
-					instance_unref(cbdata->inst);
-					free(cbdata);
+					(void)instance_unref(cbdata->inst);
+					DbgFree(cbdata);
 					ret = LB_STATUS_ERROR_FAULT;
 				} else {
 					ret = LB_STATUS_SUCCESS;
@@ -2627,8 +2627,8 @@ static struct packet *client_pd_access_hl_prev(pid_t pid, int handle, const stru
 				cbdata->status = ret;
 
 				if (!ecore_timer_add(DELAY_TIME, lazy_access_status_cb, cbdata)) {
-					instance_unref(cbdata->inst);
-					free(cbdata);
+					(void)instance_unref(cbdata->inst);
+					DbgFree(cbdata);
 					ret = LB_STATUS_ERROR_FAULT;
 				} else {
 					ret = LB_STATUS_SUCCESS;
@@ -2734,8 +2734,8 @@ static struct packet *client_pd_access_hl_next(pid_t pid, int handle, const stru
 
 				if (!ecore_timer_add(DELAY_TIME, lazy_access_status_cb, cbdata)) {
 					DbgPrint("Failed to add timer\n");
-					instance_unref(cbdata->inst);
-					free(cbdata);
+					(void)instance_unref(cbdata->inst);
+					DbgFree(cbdata);
 					ret = LB_STATUS_ERROR_FAULT;
 				} else {
 					DbgPrint("Timer is added\n");
@@ -2838,8 +2838,8 @@ static struct packet *client_pd_access_activate(pid_t pid, int handle, const str
 				cbdata->status = ret;
 
 				if (!ecore_timer_add(DELAY_TIME, lazy_access_status_cb, cbdata)) {
-					instance_unref(cbdata->inst);
-					free(cbdata);
+					(void)instance_unref(cbdata->inst);
+					DbgFree(cbdata);
 					ret = LB_STATUS_ERROR_FAULT;
 				} else {
 					ret = LB_STATUS_SUCCESS;
@@ -3157,8 +3157,8 @@ static struct packet *client_lb_access_hl(pid_t pid, int handle, const struct pa
 				cbdata->status = ret;
 
 				if (!ecore_timer_add(DELAY_TIME, lazy_access_status_cb, cbdata)) {
-					instance_unref(cbdata->inst);
-					free(cbdata);
+					(void)instance_unref(cbdata->inst);
+					DbgFree(cbdata);
 					ret = LB_STATUS_ERROR_FAULT;
 				} else {
 					ret = LB_STATUS_SUCCESS;
@@ -3258,8 +3258,8 @@ static struct packet *client_lb_access_hl_prev(pid_t pid, int handle, const stru
 				cbdata->status = ret;
 
 				if (!ecore_timer_add(DELAY_TIME, lazy_access_status_cb, cbdata)) {
-					instance_unref(cbdata->inst);
-					free(cbdata);
+					(void)instance_unref(cbdata->inst);
+					DbgFree(cbdata);
 					ret = LB_STATUS_ERROR_FAULT;
 				} else {
 					ret = LB_STATUS_SUCCESS;
@@ -3359,8 +3359,8 @@ static struct packet *client_lb_access_hl_next(pid_t pid, int handle, const stru
 				cbdata->status = ret;
 
 				if (!ecore_timer_add(DELAY_TIME, lazy_access_status_cb, cbdata)) {
-					instance_unref(cbdata->inst);
-					free(cbdata);
+					(void)instance_unref(cbdata->inst);
+					DbgFree(cbdata);
 					ret = LB_STATUS_ERROR_FAULT;
 				} else {
 					ret = LB_STATUS_SUCCESS;
@@ -3467,8 +3467,8 @@ static struct packet *client_lb_access_action_up(pid_t pid, int handle, const st
 				cbdata->status = ret;
 
 				if (!ecore_timer_add(DELAY_TIME, lazy_access_status_cb, cbdata)) {
-					instance_unref(cbdata->inst);
-					free(cbdata);
+					(void)instance_unref(cbdata->inst);
+					DbgFree(cbdata);
 					ret = LB_STATUS_ERROR_FAULT;
 				} else {
 					ret = LB_STATUS_SUCCESS;
@@ -3575,8 +3575,8 @@ static struct packet *client_lb_access_action_down(pid_t pid, int handle, const 
 				cbdata->status = ret;
 
 				if (!ecore_timer_add(DELAY_TIME, lazy_access_status_cb, cbdata)) {
-					instance_unref(cbdata->inst);
-					free(cbdata);
+					(void)instance_unref(cbdata->inst);
+					DbgFree(cbdata);
 					ret = LB_STATUS_ERROR_FAULT;
 				} else {
 					ret = LB_STATUS_SUCCESS;
@@ -3676,8 +3676,8 @@ static struct packet *client_lb_access_unhighlight(pid_t pid, int handle, const 
 				cbdata->status = ret;
 
 				if (!ecore_timer_add(DELAY_TIME, lazy_access_status_cb, cbdata)) {
-					instance_unref(cbdata->inst);
-					free(cbdata);
+					(void)instance_unref(cbdata->inst);
+					DbgFree(cbdata);
 					ret = LB_STATUS_ERROR_FAULT;
 				} else {
 					ret = LB_STATUS_SUCCESS;
@@ -3784,8 +3784,8 @@ static struct packet *client_lb_access_scroll_down(pid_t pid, int handle, const 
 				cbdata->status = ret;
 
 				if (!ecore_timer_add(DELAY_TIME, lazy_access_status_cb, cbdata)) {
-					instance_unref(cbdata->inst);
-					free(cbdata);
+					(void)instance_unref(cbdata->inst);
+					DbgFree(cbdata);
 					ret = LB_STATUS_ERROR_FAULT;
 				} else {
 					ret = LB_STATUS_SUCCESS;
@@ -3892,8 +3892,8 @@ static struct packet *client_lb_access_scroll_move(pid_t pid, int handle, const 
 				cbdata->status = ret;
 
 				if (!ecore_timer_add(DELAY_TIME, lazy_access_status_cb, cbdata)) {
-					instance_unref(cbdata->inst);
-					free(cbdata);
+					(void)instance_unref(cbdata->inst);
+					DbgFree(cbdata);
 					ret = LB_STATUS_ERROR_FAULT;
 				} else {
 					ret = LB_STATUS_SUCCESS;
@@ -4000,8 +4000,8 @@ static struct packet *client_lb_access_scroll_up(pid_t pid, int handle, const st
 				cbdata->status = ret;
 
 				if (!ecore_timer_add(DELAY_TIME, lazy_access_status_cb, cbdata)) {
-					instance_unref(cbdata->inst);
-					free(cbdata);
+					(void)instance_unref(cbdata->inst);
+					DbgFree(cbdata);
 					ret = LB_STATUS_ERROR_FAULT;
 				} else {
 					ret = LB_STATUS_SUCCESS;
@@ -4103,8 +4103,8 @@ static struct packet *client_lb_access_activate(pid_t pid, int handle, const str
 				cbdata->status = ret;
 
 				if (!ecore_timer_add(DELAY_TIME, lazy_access_status_cb, cbdata)) {
-					instance_unref(cbdata->inst);
-					free(cbdata);
+					(void)instance_unref(cbdata->inst);
+					DbgFree(cbdata);
 					ret = LB_STATUS_ERROR_FAULT;
 				} else {
 					ret = LB_STATUS_SUCCESS;
@@ -4667,15 +4667,14 @@ static struct packet *client_create_pd(pid_t pid, int handle, const struct packe
 				tmp_ret = instance_slave_close_pd(inst, client);
 				ErrPrint("Unable to send script event for openning PD [%s], %d\n", pkgname, tmp_ret);
 			} else {
-				Ecore_Timer *pd_open_monitor;
+				Ecore_Timer *pd_monitor;
 
-				inst = instance_ref(inst);
-				pd_open_monitor = ecore_timer_add(PD_REQUEST_TIMEOUT, pd_open_monitor_cb, inst);
-				if (!pd_open_monitor) {
-					instance_unref(inst);
+				pd_monitor = ecore_timer_add(PD_REQUEST_TIMEOUT, pd_open_monitor_cb, instance_ref(inst));
+				if (!pd_monitor) {
+					(void)instance_unref(inst);
 					ErrPrint("Failed to create a timer for PD Open monitor\n");
 				} else {
-					(void)instance_set_data(inst, "pd,open,monitor", pd_open_monitor);
+					(void)instance_set_data(inst, "pd,open,monitor", pd_monitor);
 				}
 			}
 		} else {
@@ -4822,8 +4821,8 @@ static struct packet *client_destroy_pd(pid_t pid, int handle, const struct pack
 			ret = LB_STATUS_ERROR_CANCEL;
 
 			(void)instance_client_pd_created(inst, ret);
-			instance_unref(inst);
 			ecore_timer_del(pd_monitor);
+			(void)instance_unref(inst);
 			goto out;
 		}
 
@@ -4835,9 +4834,7 @@ static struct packet *client_destroy_pd(pid_t pid, int handle, const struct pack
 		if (ret < 0) {
 			ErrPrint("PD close request failed: %d\n", ret);
 		} else {
-			inst = instance_ref(inst);
-
-			pd_monitor = ecore_timer_add(PD_REQUEST_TIMEOUT, pd_close_monitor_cb, inst);
+			pd_monitor = ecore_timer_add(PD_REQUEST_TIMEOUT, pd_close_monitor_cb, instance_ref(inst));
 			if (!pd_monitor) {
 				(void)instance_unref(inst);
 				ErrPrint("Failed to add pd close monitor\n");
@@ -4885,7 +4882,7 @@ static struct packet *client_destroy_pd(pid_t pid, int handle, const struct pack
 			timer = ecore_timer_add(DELAY_TIME, lazy_pd_destroyed_cb, inst);
 			if (!timer) {
 				ErrPrint("Failed to create a timer: %s\n", pkgname);
-				instance_unref(inst);
+				(void)instance_unref(inst);
 				/*!
 				 * How can we handle this?
 				 */
@@ -5888,13 +5885,18 @@ static struct packet *slave_acquire_buffer(pid_t pid, int handle, const struct p
 		}
 	} else if (target == TYPE_PD && package_pd_type(pkg) == PD_TYPE_BUFFER) {
 		struct buffer_info *info;
-		Ecore_Timer *pd_open_monitor;
+		Ecore_Timer *pd_monitor;
 
-		pd_open_monitor = instance_del_data(inst, "pd,open,monitor");
-		if (!pd_open_monitor)
+		pd_monitor = instance_del_data(inst, "pd,open,monitor");
+		if (!pd_monitor)
 			goto out;
 
-		ecore_timer_del(pd_open_monitor);
+		ecore_timer_del(pd_monitor);
+		inst = instance_unref(inst);
+		if (!inst) {
+			ErrPrint("Instance refcnt is ZERO: %s\n", pkgname);
+			goto out;
+		}
 
 		info = instance_pd_buffer(inst);
 		if (!info) {
@@ -6065,11 +6067,6 @@ static struct packet *slave_release_buffer(pid_t pid, int handle, const struct p
 
 	ret = LB_STATUS_ERROR_INVALID;
 
-	if (instance_state(inst) == INST_DESTROYED) {
-		ErrPrint("Package[%s] instance is already destroyed\n", pkgname);
-		goto out;
-	}
-
 	if (type == TYPE_LB && package_lb_type(pkg) == LB_TYPE_BUFFER) {
 		struct buffer_info *info;
 
@@ -6077,10 +6074,10 @@ static struct packet *slave_release_buffer(pid_t pid, int handle, const struct p
 		ret = buffer_handler_unload(info);
 	} else if (type == TYPE_PD && package_pd_type(pkg) == PD_TYPE_BUFFER) {
 		struct buffer_info *info;
-		Ecore_Timer *pd_close_monitor;
+		Ecore_Timer *pd_monitor;
 
-		pd_close_monitor = instance_del_data(inst, "pd,close,monitor");
-		if (!pd_close_monitor) {
+		pd_monitor = instance_del_data(inst, "pd,close,monitor");
+		if (!pd_monitor) {
 			ErrPrint("There is no requests to release pd buffer\n");
 			/*!
 			 * \note
@@ -6096,7 +6093,13 @@ static struct packet *slave_release_buffer(pid_t pid, int handle, const struct p
 			 * which will be checked by instance_client_pd_destroyed function.
 			 */
 		} else {
-			ecore_timer_del(pd_close_monitor);
+			ecore_timer_del(pd_monitor);
+			inst = instance_unref(inst);
+			if (!inst) {
+				ErrPrint("Instance is released: %s\n", pkgname);
+				ret = LB_STATUS_ERROR_FAULT;
+				goto out;
+			}
 		}
 
 		info = instance_pd_buffer(inst);

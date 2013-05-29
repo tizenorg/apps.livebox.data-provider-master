@@ -108,7 +108,7 @@ static int service_thread_main(struct tcb *tcb, struct packet *packet, void *dat
 	switch (packet_type(packet)) {
 	case PACKET_REQ:
 		/* Need to send reply packet */
-		DbgPrint("REQ: Command: [%s]\n", command);
+		DbgPrint("%p REQ: Command: [%s]\n", tcb, command);
 		if (service_common_multicast_packet(tcb, packet, TCB_CLIENT_TYPE_SERVICE) < 0)
 			ErrPrint("Unable to send service request packet\n");
 		else
@@ -116,7 +116,7 @@ static int service_thread_main(struct tcb *tcb, struct packet *packet, void *dat
 		break;
 	case PACKET_REQ_NOACK:
 		/* Doesn't need to send reply packet */
-		DbgPrint("REQ_NOACK: Command: [%s]\n", command);
+		DbgPrint("%p REQ_NOACK: Command: [%s]\n", tcb, command);
 		if (!strcmp(command, "service_register")) {
 			tcb_client_type_set(tcb, TCB_CLIENT_TYPE_SERVICE);
 			break;
@@ -127,7 +127,7 @@ static int service_thread_main(struct tcb *tcb, struct packet *packet, void *dat
 		break;
 	case PACKET_ACK:
 		/* Okay, client(or app) send a reply packet to us. */
-		DbgPrint("ACK: Command: [%s]\n", command);
+		DbgPrint("%p ACK: Command: [%s]\n", tcb, command);
 		tcb = get_reply_context(packet_seq(packet));
 		if (!tcb) {
 			ErrPrint("There is no proper context\n");

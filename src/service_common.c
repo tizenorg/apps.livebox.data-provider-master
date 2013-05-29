@@ -121,7 +121,6 @@ static void *client_packet_pump_main(void *data)
 
 	ret = 0;
 	recv_state = RECV_INIT;
-	DbgPrint("Socket data pumping thread is activated\n");
 	/*!
 	 * \note
 	 * To escape from the switch statement, we use this ret value
@@ -266,7 +265,6 @@ static void *client_packet_pump_main(void *data)
 			packet_info->packet = packet;
 			packet_info->tcb = tcb;
 
-			DbgPrint("New packet is built\n");
 			CRITICAL_SECTION_BEGIN(&svc_ctx->packet_list_lock);
 			svc_ctx->packet_list = eina_list_append(svc_ctx->packet_list, packet_info);
 			CRITICAL_SECTION_END(&svc_ctx->packet_list_lock);
@@ -302,7 +300,6 @@ static void *client_packet_pump_main(void *data)
 	 * \note
 	 * Emit a signal to collect this TCB from the SERVER THREAD.
 	 */
-	DbgPrint("Emit a signal to destroy TCB[%p]\n", tcb);
 	if (write(svc_ctx->tcb_pipe[PIPE_WRITE], &tcb, sizeof(tcb)) != sizeof(tcb))
 		ErrPrint("Unable to write pipe: %s\n", strerror(errno));
 
@@ -509,18 +506,17 @@ static void *server_main(void *data)
 
 		if (FD_ISSET(svc_ctx->fd, &set)) {
 			client_fd = secure_socket_get_connection_handle(svc_ctx->fd);
-			DbgPrint("New client connection arrived (%d)\n", client_fd);
 			if (client_fd < 0) {
-				ErrPrint("Failed to establish the client connection\n");
+				ErrPrint("Failed to establish a new connection [%d]\n", svc_ctx->fd);
 				ret = -EFAULT;
 				break;
 			}
 
 			tcb = tcb_create(svc_ctx, client_fd);
-			if (!tcb)
+			if (!tcb) {
+				ErrPrint("Failed to create a new TCB: %d (%d)\n", client_fd, svc_ctx->fd);
 				secure_socket_destroy_handle(client_fd);
-			else
-				DbgPrint("Creating TCB[%p]\n", tcb);
+			}
 		} 
 
 		if (FD_ISSET(svc_ctx->tcb_pipe[PIPE_READ], &set)) {
@@ -536,7 +532,6 @@ static void *server_main(void *data)
 			 */
 			ret = svc_ctx->service_thread_main(tcb, NULL, svc_ctx->service_thread_data);
 
-			DbgPrint("Destroying TCB[%p]\n", tcb);
 			/*!
 			 * at this time, the client thread can access this tcb.
 			 * how can I protect this TCB from deletion without disturbing the server thread?

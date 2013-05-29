@@ -66,7 +66,6 @@ static int evt_cb(int handle, void *data)
 		return 0;
 	}
 
-	DbgPrint("This is not my favor: %d\n", handle);
 	return 0;
 }
 

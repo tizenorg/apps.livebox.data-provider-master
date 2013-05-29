@@ -1380,7 +1380,7 @@ HAPI int instance_state_reset(struct inst_info *inst)
 	}
 
 	if (inst->state == INST_DESTROYED)
-		return LB_STATUS_SUCCESS;
+		goto out;
 
 	lb_type = package_lb_type(inst->info);
 	pd_type = package_pd_type(inst->info);
@@ -1400,6 +1400,7 @@ HAPI int instance_state_reset(struct inst_info *inst)
 		buffer_handler_unload(inst->pd.canvas.buffer);
 	}
 
+out:
 	inst->state = INST_INIT;
 	inst->requested_state = INST_INIT;
 	return LB_STATUS_SUCCESS;

@@ -22,6 +22,8 @@
 #include <livebox-errno.h>
 #include <packet.h>
 
+#include <sys/smack.h>
+
 #include <badge.h>
 #include <badge_db.h>
 
@@ -29,8 +31,6 @@
 #include "debug.h"
 #include "util.h"
 #include "conf.h"
-
-#define BADGE_ADDR "/tmp/.badge.service"
 
 static struct info {
 	Eina_List *context_list;
@@ -367,10 +367,28 @@ HAPI int badge_service_init(void)
 		return LB_STATUS_ERROR_ALREADY;
 	}
 
-	s_info.svc_ctx = service_common_create(BADGE_ADDR, service_thread_main, NULL);
+	s_info.svc_ctx = service_common_create(BADGE_SOCKET, service_thread_main, NULL);
 	if (!s_info.svc_ctx) {
 		ErrPrint("Unable to activate service thread\n");
 		return LB_STATUS_ERROR_FAULT;
+	}
+
+	if (smack_fsetlabel(service_common_fd(s_info.svc_ctx), BADGE_SMACK_LABEL, SMACK_LABEL_IPOUT) != 0) {
+		if (errno != EOPNOTSUPP) {
+			ErrPrint("Unable to set SMACK label(%d)\n", errno);
+			service_common_destroy(s_info.svc_ctx);
+			s_info.svc_ctx = NULL;
+			return LB_STATUS_ERROR_FAULT;
+		}
+	}
+
+	if (smack_fsetlabel(service_common_fd(s_info.svc_ctx), BADGE_SMACK_LABEL, SMACK_LABEL_IPIN) != 0) {
+		if (errno != EOPNOTSUPP) {
+			ErrPrint("Unable to set SMACK label(%d)\n", errno);
+			service_common_destroy(s_info.svc_ctx);
+			s_info.svc_ctx = NULL;
+			return LB_STATUS_ERROR_FAULT;
+		}
 	}
 
 	DbgPrint("Successfully initiated\n");
@@ -383,6 +401,7 @@ HAPI int badge_service_fini(void)
 		return LB_STATUS_ERROR_INVALID;
 
 	service_common_destroy(s_info.svc_ctx);
+	s_info.svc_ctx = NULL;
 	DbgPrint("Successfully finalized\n");
 	return LB_STATUS_SUCCESS;
 }

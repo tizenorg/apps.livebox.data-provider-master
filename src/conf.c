@@ -517,7 +517,7 @@ HAPI int conf_loader(void)
 	do {
 		c = getc(fp);
 		if ((c == EOF) && (state == VALUE)) {
-			LOGD("[%s:%d] VALUE state EOF\n", __func__, __LINE__);
+			DbgPrint("[%s:%d] VALUE state EOF\n", __func__, __LINE__);
 			state = END;
 		}
 
@@ -662,7 +662,8 @@ HAPI int conf_loader(void)
 		linelen++;
 	 } while (c != EOF);
 
-	fclose(fp);
+	if (fclose(fp) != 0)
+		ErrPrint("fclose: %s\n", strerror(errno));
 	return LB_STATUS_SUCCESS;
 }
 

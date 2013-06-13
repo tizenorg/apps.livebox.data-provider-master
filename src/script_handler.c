@@ -396,6 +396,8 @@ HAPI struct script_info *script_handler_create(struct inst_info *inst, const cha
 HAPI int script_handler_destroy(struct script_info *info)
 {
 	struct block *block;
+	int ret;
+
 	if (!info || !info->port) {
 		ErrPrint("port is not valid\n");
 		return LB_STATUS_ERROR_INVALID;
@@ -406,8 +408,9 @@ HAPI int script_handler_destroy(struct script_info *info)
 		return LB_STATUS_ERROR_INVALID;
 	}
 
-	if (info->port->destroy(info->port_data) < 0)
-		ErrPrint("Failed to destroy port, but go ahead\n");
+	ret = info->port->destroy(info->port_data);
+	if (ret < 0)
+		ErrPrint("Failed to destroy port, but go ahead: %d\n", ret);
 
 	fb_destroy(info->fb);
 
@@ -863,7 +866,7 @@ HAPI int script_handler_parse_desc(const char *pkgname, const char *id, const ch
 		return LB_STATUS_ERROR_IO;
 	}
 
-	DbgPrint("Parsing %s\n", descfile);
+	DbgPrint("Start parsing %s\n", descfile);
 
 	state = UNKNOWN;
 	field_idx = 0;
@@ -884,7 +887,8 @@ HAPI int script_handler_parse_desc(const char *pkgname, const char *id, const ch
 
 			if (!isspace(ch) && ch != EOF) {
 				ErrPrint("%d: Syntax error: Desc is not started with '{' or space - (%c = 0x%x)\n", lineno, ch, ch);
-				fclose(fp);
+				if (fclose(fp) != 0)
+					ErrPrint("fclose: %s\n", strerror(errno));
 				return LB_STATUS_ERROR_INVALID;
 			}
 			break;
@@ -901,7 +905,8 @@ HAPI int script_handler_parse_desc(const char *pkgname, const char *id, const ch
 			block = calloc(1, sizeof(*block));
 			if (!block) {
 				ErrPrint("Heap: %s\n", strerror(errno));
-				fclose(fp);
+				if (fclose(fp) != 0)
+					ErrPrint("fclose: %s\n", strerror(errno));
 				return LB_STATUS_ERROR_MEMORY;
 			}
 
@@ -1209,14 +1214,16 @@ HAPI int script_handler_parse_desc(const char *pkgname, const char *id, const ch
 		goto errout;
 	}
 
-	fclose(fp);
+	if (fclose(fp) != 0)
+		ErrPrint("fclose: %s\n", strerror(errno));
 	return LB_STATUS_SUCCESS;
 
 errout:
 	ErrPrint("Parse error at %d file %s\n", lineno, util_basename(descfile));
 	if (block)
 		delete_block(block);
-	fclose(fp);
+	if (fclose(fp) != 0)
+		ErrPrint("fclose: %s\n", strerror(errno));
 	return LB_STATUS_ERROR_INVALID;
 }
 
@@ -1247,7 +1254,8 @@ HAPI int script_init(void)
 		path = malloc(pathlen);
 		if (!path) {
 			ErrPrint("Heap: %s %d\n", strerror(errno), pathlen);
-			closedir(dir);
+			if (closedir(dir) < 0)
+				ErrPrint("closedir: %s\n", strerror(errno));
 			return LB_STATUS_ERROR_MEMORY;
 		}
 
@@ -1257,7 +1265,8 @@ HAPI int script_init(void)
 		if (!item) {
 			ErrPrint("Heap: %s\n", strerror(errno));
 			DbgFree(path);
-			closedir(dir);
+			if (closedir(dir) < 0)
+				ErrPrint("closedir: %s\n", strerror(errno));
 			return LB_STATUS_ERROR_MEMORY;
 		}
 
@@ -1267,7 +1276,8 @@ HAPI int script_init(void)
 		if (!item->handle) {
 			ErrPrint("Error: %s\n", dlerror());
 			DbgFree(item);
-			closedir(dir);
+			if (closedir(dir) < 0)
+				ErrPrint("closedir: %s\n", strerror(errno));
 			return LB_STATUS_ERROR_FAULT;
 		}
 
@@ -1349,14 +1359,18 @@ HAPI int script_init(void)
 		s_info.script_port_list = eina_list_append(s_info.script_port_list, item);
 	}
 
-	closedir(dir);
+	if (closedir(dir) < 0)
+		ErrPrint("closedir: %s\n", strerror(errno));
+
 	return LB_STATUS_SUCCESS;
 
 errout:
 	ErrPrint("Error: %s\n", dlerror());
-	dlclose(item->handle);
+	if (dlclose(item->handle) != 0)
+		ErrPrint("dlclose: %s\n", strerror(errno));
 	DbgFree(item);
-	closedir(dir);
+	if (closedir(dir) < 0)
+		ErrPrint("closedir: %s\n", strerror(errno));
 	return LB_STATUS_ERROR_FAULT;
 }
 
@@ -1368,7 +1382,8 @@ HAPI int script_fini(void)
 	 */
 	EINA_LIST_FREE(s_info.script_port_list, item) {
 		item->fini();
-		dlclose(item->handle);
+		if (dlclose(item->handle) != 0)
+			ErrPrint("dlclose: %s\n", strerror(errno));
 		DbgFree(item);
 	}
 

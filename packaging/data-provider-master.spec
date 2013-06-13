@@ -1,6 +1,6 @@
 Name: data-provider-master
 Summary: Master service provider for liveboxes.
-Version: 0.23.5
+Version: 0.24.7
 Release: 1
 Group: HomeTF/Livebox
 License: Flora License
@@ -14,6 +14,7 @@ BuildRequires: pkgconfig(sqlite3)
 BuildRequires: pkgconfig(db-util)
 BuildRequires: pkgconfig(glib-2.0)
 BuildRequires: pkgconfig(gio-2.0)
+BuildRequires: pkgconfig(libsmack)
 BuildRequires: pkgconfig(bundle)
 BuildRequires: pkgconfig(ecore-x)
 BuildRequires: pkgconfig(ecore)
@@ -34,6 +35,7 @@ BuildRequires: pkgconfig(pkgmgr)
 BuildRequires: pkgconfig(livebox-service)
 BuildRequires: pkgconfig(notification)
 BuildRequires: pkgconfig(badge)
+BuildRequires: pkgconfig(security-server)
 
 %description
 Manage the 2nd stage livebox service provider and communicate with the viewer application.
@@ -60,7 +62,7 @@ mkdir -p %{buildroot}/%{_sysconfdir}/rc.d/rc3.d
 mkdir -p %{buildroot}/%{_libdir}/systemd/user/tizen-middleware.target.wants
 touch %{buildroot}/opt/dbspace/.livebox.db
 touch %{buildroot}/opt/dbspace/.livebox.db-journal
-ln -sf %{_sysconfdir}/rc.d/init.d/data-provider-master %{buildroot}/%{_sysconfdir}/rc.d/rc3.d/S99data-provider-master
+#ln -sf %{_sysconfdir}/rc.d/init.d/data-provider-master %{buildroot}/%{_sysconfdir}/rc.d/rc3.d/S99data-provider-master
 ln -sf %{_libdir}/systemd/user/data-provider-master.service %{buildroot}/%{_libdir}/systemd/user/tizen-middleware.target.wants/data-provider-master.service
 
 %pre
@@ -90,7 +92,7 @@ echo "%{_sysconfdir}/init.d/data-provider-master start"
 %manifest data-provider-master.manifest
 %defattr(-,root,root,-)
 %{_sysconfdir}/rc.d/init.d/data-provider-master
-%{_sysconfdir}/rc.d/rc3.d/S99data-provider-master
+#%{_sysconfdir}/rc.d/rc3.d/S99data-provider-master
 %{_bindir}/data-provider-master
 %{_bindir}/liveinfo
 %{_prefix}/etc/package-manager/parserlib/*
@@ -98,10 +100,7 @@ echo "%{_sysconfdir}/init.d/data-provider-master start"
 %{_libdir}/systemd/user/data-provider-master.service
 %{_libdir}/systemd/user/tizen-middleware.target.wants/data-provider-master.service
 %{_datarootdir}/license/*
-/opt/usr/share/live_magazine
-/opt/usr/share/live_magazine/log
-/opt/usr/share/live_magazine/reader
-/opt/usr/share/live_magazine/always
+/opt/usr/share/live_magazine/*
 /opt/dbspace/.livebox.db
 /opt/dbspace/.livebox.db-journal
 

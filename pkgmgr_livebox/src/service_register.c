@@ -32,9 +32,21 @@
 
 #include "dlist.h"
 
+#if !defined(SECURE_LOGD)
+#define SECURE_LOGD LOGD
+#endif
+
+#if !defined(SECURE_LOGE)
+#define SECURE_LOGE LOGE
+#endif
+
+#if !defined(SECURE_LOGW)
+#define SECURE_LOGW LOGW
+#endif
+
 #if !defined(FLOG)
-#define DbgPrint(format, arg...)	LOGD("[[32m%s/%s[0m:%d] " format, basename(__FILE__), __func__, __LINE__, ##arg)
-#define ErrPrint(format, arg...)	LOGE("[[32m%s/%s[0m:%d] " format, basename(__FILE__), __func__, __LINE__, ##arg)
+#define DbgPrint(format, arg...)	SECURE_LOGD("[[32m%s/%s[0m:%d] " format, basename(__FILE__), __func__, __LINE__, ##arg)
+#define ErrPrint(format, arg...)	SECURE_LOGE("[[32m%s/%s[0m:%d] " format, basename(__FILE__), __func__, __LINE__, ##arg)
 #endif
 /* End of a file */
 
@@ -43,12 +55,12 @@
  * DB Table schema
  *
  * pkgmap
- * +-------+-------+---------+
- * | appid | pkgid | prime   |
- * +-------+-------+---------+
- * |   -   |   -   |         |
- * +-------+-------+---------+
- * CREATE TABLE pkgmap ( pkgid TEXT PRIMARY KEY NOT NULL, appid TEXT, prime INTEGER )
+ * +-------+-------+-------+-------+
+ * | appid | pkgid | uiapp | prime |
+ * +-------+-------+-------+-------+
+ * |   -   |   -   |   -   |   -   |
+ * +-------+-------+-------+-------+
+ * CREATE TABLE pkgmap ( pkgid TEXT PRIMARY KEY NOT NULL, appid TEXT, uiapp TEXT, prime INTEGER )
  *
  *
  * provider
@@ -165,6 +177,7 @@ struct livebox {
 	xmlChar *script; /* Script engine */
 	xmlChar *content; /* Content information */
 	xmlChar *setup;
+	xmlChar *uiapp;	/* UI App Id */
 
 	int pinup; /* Is this support the pinup feature? */
 	int primary; /* Is this primary livebox? */
@@ -284,7 +297,7 @@ static inline int db_create_pkgmap(void)
 	char *err;
 	static const char *ddl;
 
-	ddl = "CREATE TABLE pkgmap ( pkgid TEXT PRIMARY KEY NOT NULL, appid TEXT, prime INTEGER )";
+	ddl = "CREATE TABLE pkgmap ( pkgid TEXT PRIMARY KEY NOT NULL, appid TEXT, uiapp TEXT, prime INTEGER )";
 	if (sqlite3_exec(s_info.handle, ddl, NULL, NULL, &err) != SQLITE_OK) {
 		ErrPrint("Failed to execute the DDL (%s)\n", err);
 		return -EIO;
@@ -296,13 +309,16 @@ static inline int db_create_pkgmap(void)
 	return 0;
 }
 
-static inline int db_insert_pkgmap(const char *appid, const char *pkgid, int primary)
+static inline int db_insert_pkgmap(const char *appid, const char *pkgid, const char *uiappid, int primary)
 {
 	int ret;
 	static const char *dml;
 	sqlite3_stmt *stmt;
 
-	dml = "INSERT INTO pkgmap ( appid, pkgid, prime ) VALUES (? ,?, ?)";
+	if (!uiappid)
+		uiappid = ""; /*!< Could we replace this with Main AppId of this package? */
+
+	dml = "INSERT INTO pkgmap ( appid, pkgid, uiapp, prime ) VALUES (? ,?, ?, ?)";
 	ret = sqlite3_prepare_v2(s_info.handle, dml, -1, &stmt, NULL);
 	if (ret != SQLITE_OK) {
 		DbgPrint("Error: %s\n", sqlite3_errmsg(s_info.handle));
@@ -323,7 +339,14 @@ static inline int db_insert_pkgmap(const char *appid, const char *pkgid, int pri
 		goto out;
 	}
 
-	ret = sqlite3_bind_int(stmt, 3, primary);
+	ret = sqlite3_bind_text(stmt, 3, uiappid, -1, SQLITE_TRANSIENT);
+	if (ret != SQLITE_OK) {
+		DbgPrint("Error: %s\n", sqlite3_errmsg(s_info.handle));
+		ret = -EIO;
+		goto out;
+	}
+
+	ret = sqlite3_bind_int(stmt, 4, primary);
 	if (ret != SQLITE_OK) {
 		DbgPrint("Error: %s\n", sqlite3_errmsg(s_info.handle));
 		ret = -EIO;
@@ -1657,6 +1680,22 @@ static inline void update_launch(struct livebox *livebox, xmlNodePtr node)
 	}
 }
 
+static inline void update_ui_appid(struct livebox *livebox, xmlNodePtr node)
+{
+	xmlChar *uiapp;
+	uiapp = xmlNodeGetContent(node);
+	if (!uiapp) {
+		DbgPrint("Has no valid ui-appid\n");
+		return;
+	}
+
+	livebox->uiapp = xmlStrdup(uiapp);
+	if (!livebox->uiapp) {
+		ErrPrint("Failed to duplicate string: %s\n", (char *)uiapp);
+		return;
+	}
+}
+
 static inline void update_setup(struct livebox *livebox, xmlNodePtr node)
 {
 	xmlChar *setup;
@@ -2135,7 +2174,7 @@ static inline int db_insert_livebox(struct livebox *livebox, const char *appid)
 	struct option *option;
 
 	begin_transaction();
-	ret = db_insert_pkgmap(appid, (char *)livebox->pkgid, livebox->primary);
+	ret = db_insert_pkgmap(appid, (char *)livebox->pkgid, (char *)livebox->uiapp, livebox->primary);
 	if (ret < 0)
 		goto errout;
 
@@ -2448,6 +2487,11 @@ static inline int do_install(xmlNodePtr node, const char *appid)
 
 		if (!xmlStrcasecmp(node->name, (const xmlChar *)"launch")) {
 			update_launch(livebox, node);
+			continue;
+		}
+
+		if (!xmlStrcasecmp(node->name, (const xmlChar *)"ui-appid")) {
+			update_ui_appid(livebox, node);
 			continue;
 		}
 	}

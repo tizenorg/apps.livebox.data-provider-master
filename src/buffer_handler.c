@@ -1250,7 +1250,8 @@ HAPI void buffer_handler_flush(struct buffer_info *info)
 		if (write(fd, info->buffer, size) != size)
 			ErrPrint("Write is not completed: %s\n", strerror(errno));
 
-		close(fd);
+		if (close(fd) < 0)
+			ErrPrint("close: %s\n", strerror(errno));
 	} else {
 		DbgPrint("Flush nothing\n");
 	}
@@ -1304,7 +1305,8 @@ HAPI int buffer_handler_init(void)
 	DbgPrint("DRM Magic: 0x%X\n", magic);
 	if (!DRI2Authenticate(ecore_x_display_get(), DefaultRootWindow(ecore_x_display_get()), (unsigned int)magic)) {
 		DbgPrint("Failed to do authenticate for DRI2\n");
-		close(s_info.fd);
+		if (close(s_info.fd) < 0)
+			ErrPrint("close: %s\n", strerror(errno));
 		s_info.fd = -1;
 		s_info.evt_base = 0;
 		s_info.err_base = 0;
@@ -1314,7 +1316,8 @@ HAPI int buffer_handler_init(void)
 	s_info.slp_bufmgr = tbm_bufmgr_init(s_info.fd);
 	if (!s_info.slp_bufmgr) {
 		DbgPrint("Failed to init bufmgr\n");
-		close(s_info.fd);
+		if (close(s_info.fd) < 0)
+			ErrPrint("close: %s\n", strerror(errno));
 		s_info.fd = -1;
 		s_info.evt_base = 0;
 		s_info.err_base = 0;
@@ -1327,7 +1330,8 @@ HAPI int buffer_handler_init(void)
 HAPI int buffer_handler_fini(void)
 {
 	if (s_info.fd >= 0) {
-		close(s_info.fd);
+		if (close(s_info.fd) < 0)
+			ErrPrint("close: %s\n", strerror(errno));
 		s_info.fd = -1;
 	}
 

@@ -58,8 +58,10 @@ HAPI void liveinfo_fini(void)
 	struct liveinfo *info;
 
 	EINA_LIST_FREE(s_info.info_list, info) {
-		fclose(info->fp);
-		unlink(info->fifo_name);
+		if (fclose(info->fp) != 0)
+			ErrPrint("fclose: %s\n", strerror(errno));
+		if (unlink(info->fifo_name) < 0)
+			ErrPrint("unlink: %s\n", strerror(errno));
 		DbgFree(info);
 	}
 }
@@ -105,7 +107,8 @@ HAPI struct liveinfo *liveinfo_create(pid_t pid, int handle)
 	snprintf(info->fifo_name, sizeof(info->fifo_name), "/tmp/.live_info.%lf", util_timestamp());
 	if (mkfifo(info->fifo_name, 0644) < 0) {
 		ErrPrint("mkfifo: %s\n", strerror(errno));
-		unlink(info->fifo_name);
+		if (unlink(info->fifo_name) < 0)
+			ErrPrint("unlink: %s\n", strerror(errno));
 		DbgFree(info);
 		return NULL;
 	}
@@ -134,7 +137,8 @@ HAPI int liveinfo_open_fifo(struct liveinfo *info)
 HAPI void liveinfo_close_fifo(struct liveinfo *info)
 {
 	if (info->fp) {
-		fclose(info->fp);
+		if (fclose(info->fp) != 0)
+			ErrPrint("fclose: %s\n", strerror(errno));
 		info->fp = NULL;
 	}
 }
@@ -143,7 +147,8 @@ HAPI void liveinfo_destroy(struct liveinfo *info)
 {
 	s_info.info_list = eina_list_remove(s_info.info_list, info);
 	liveinfo_close_fifo(info);
-	unlink(info->fifo_name);
+	if (unlink(info->fifo_name) < 0)
+		ErrPrint("unlink: %s\n", strerror(errno));
 	DbgFree(info);
 }
 

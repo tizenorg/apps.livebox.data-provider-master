@@ -820,7 +820,8 @@ HAPI struct parser *parser_load(const char *pkgname)
 		linelen++;
 	 } while (c != EOF);
 
-	fclose(fp);
+	if (fclose(fp) != 0)
+		ErrPrint("fclose: %s\n", strerror(errno));
 
 	s_list = eina_list_append(s_list, item);
 	return item;

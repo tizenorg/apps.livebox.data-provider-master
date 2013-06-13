@@ -25,7 +25,9 @@
 
 #include <packet.h>
 #include <livebox-errno.h>
+#include <ail.h>
 
+#include "critical_log.h"
 #include "debug.h"
 #include "util.h"
 #include "parser.h"
@@ -279,6 +281,11 @@ static int slave_resumed_cb(struct slave_node *slave, void *data)
 
 static inline void destroy_package(struct pkg_info *info)
 {
+	struct context_info *ctx_info;
+	EINA_LIST_FREE(info->ctx_list, ctx_info) {
+		/* This items will be deleted from group_del_livebox */
+	}
+
 	group_del_livebox(info->pkgname);
 	package_clear_fault(info);
 
@@ -541,6 +548,11 @@ HAPI void package_add_ctx_info(struct pkg_info *pkginfo, struct context_info *in
 	pkginfo->ctx_list = eina_list_append(pkginfo->ctx_list, info);
 }
 
+HAPI void package_del_ctx_info(struct pkg_info *pkginfo, struct context_info *info)
+{
+	pkginfo->ctx_list = eina_list_remove(pkginfo->ctx_list, info);
+}
+
 HAPI char *package_lb_pkgname(const char *pkgname)
 {
 	char *lb_pkgname;
@@ -633,11 +645,11 @@ HAPI int package_dump_fault_info(struct pkg_info *info)
 	if (!info->fault_info)
 		return LB_STATUS_ERROR_NOT_EXIST;
 
-	ErrPrint("=============\n");
-	ErrPrint("faulted at %lf\n", info->fault_info->timestamp);
-	ErrPrint("Package: %s\n", info->pkgname);
-	ErrPrint("Function: %s\n", info->fault_info->function);
-	ErrPrint("InstanceID: %s\n", info->fault_info->filename);
+	CRITICAL_LOG("=============\n");
+	CRITICAL_LOG("faulted at %lf\n", info->fault_info->timestamp);
+	CRITICAL_LOG("Package: %s\n", info->pkgname);
+	CRITICAL_LOG("Function: %s\n", info->fault_info->function);
+	CRITICAL_LOG("InstanceID: %s\n", info->fault_info->filename);
 	return LB_STATUS_SUCCESS;
 }
 
@@ -1361,11 +1373,28 @@ HAPI int package_init(void)
 
 HAPI int package_fini(void)
 {
+	Eina_List *p_l;
+	Eina_List *p_n;
+	Eina_List *i_l;
+	Eina_List *i_n;
+	struct pkg_info *info;
+	struct inst_info *inst;
+
 	pkgmgr_del_event_callback(PKGMGR_EVENT_INSTALL, install_cb, NULL);
 	pkgmgr_del_event_callback(PKGMGR_EVENT_UNINSTALL, uninstall_cb, NULL);
 	pkgmgr_del_event_callback(PKGMGR_EVENT_UPDATE, update_cb, NULL);
 	pkgmgr_fini();
 	client_global_event_handler_del(CLIENT_GLOBAL_EVENT_CREATE, client_created_cb, NULL);
+
+	EINA_LIST_FOREACH_SAFE(s_info.pkg_list, p_l, p_n, info) {
+		EINA_LIST_FOREACH_SAFE(info->inst_list, i_l, i_n, inst) {
+			instance_state_reset(inst);
+			instance_destroy(inst);
+		}
+
+		package_destroy(info);
+	}
+
 	return 0;
 }
 
@@ -1473,6 +1502,26 @@ HAPI const Eina_List *package_list(void)
 HAPI int const package_fault_count(struct pkg_info *info)
 {
 	return info ? info->fault_count : 0;
+}
+
+HAPI int package_is_enabled(const char *appid)
+{
+	ail_appinfo_h ai;
+	bool enabled;
+	int ret;
+
+	ret = ail_get_appinfo(appid, &ai);
+	if (ret != AIL_ERROR_OK) {
+		ErrPrint("Unable to get appinfo: %d\n", ret);
+		return 0;
+	}
+
+	if (ail_appinfo_get_bool(ai, AIL_PROP_X_SLP_ENABLED_BOOL, &enabled) != AIL_ERROR_OK)
+		enabled = false;
+
+	ail_destroy_appinfo(ai);
+
+	return enabled == true;
 }
 
 /* End of a file */

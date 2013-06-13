@@ -55,8 +55,9 @@ static int evt_cb(int handle, void *data)
 	client = client_find_by_rpc_handle(handle);
 	if (client) {
 		if (client_pid(client) != (pid_t)-1)
-			client_deactivated_by_fault(client);
+			client = client_deactivated_by_fault(client);
 
+		DbgPrint("Client pointer: %p (0 means deleted)\n", client);
 		return 0;
 	}
 

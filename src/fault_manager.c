@@ -83,7 +83,8 @@ static char *check_log_file(struct slave_node *slave)
 	}
 
 	ptr = fgets(pkgname, sizeof(pkgname), fp);
-	fclose(fp);
+	if (fclose(fp) != 0)
+		ErrPrint("fclose: %s\n", strerror(errno));
 	if (ptr != pkgname) {
 		ErrPrint("Invalid log\n");
 		return NULL;

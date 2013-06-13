@@ -62,7 +62,7 @@ extern int client_count(void);
  * \note
  * For dead signal handler
  */
-extern int client_deactivated_by_fault(struct client_node *client);
+extern struct client_node *client_deactivated_by_fault(struct client_node *client);
 extern void client_reset_fault(struct client_node *client);
 extern const int const client_is_faulted(const struct client_node *client);
 

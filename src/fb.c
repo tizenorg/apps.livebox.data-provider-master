@@ -115,14 +115,14 @@ static void sw_render_post_cb(void *data, Evas *e, void *event_info)
 
         internal_ee = ecore_evas_ecore_evas_get(e);
         if (!internal_ee) {
-		LOGD("Failed to get ecore evas\n");
+		ErrPrint("Failed to get ecore evas\n");
                 return;
         }
 
         // Get a pointer of a buffer of the virtual canvas
         canvas = (void*)ecore_evas_buffer_pixels_get(internal_ee);
         if (!canvas) {
-		LOGD("Failed to get pixel canvas\n");
+		ErrPrint("Failed to get pixel canvas\n");
                 return;
         }
 

@@ -123,7 +123,7 @@ static int slave_async_cb(pid_t pid, int handle, const struct packet *packet, vo
 	struct command *command = data;
 
 	if (!command) {
-		ErrPrint("Packet is NIL\n");
+		ErrPrint("Command is NIL\n");
 		return LB_STATUS_SUCCESS;
 	}
 
@@ -135,7 +135,6 @@ static int slave_async_cb(pid_t pid, int handle, const struct packet *packet, vo
 		ErrPrint("Slave is not activated (accidently dead)\n");
 		if (command->ret_cb)
 			command->ret_cb(command->slave, packet, command->cbdata);
-
 		goto out;
 	}
 
@@ -144,7 +143,14 @@ static int slave_async_cb(pid_t pid, int handle, const struct packet *packet, vo
 		if (command->ret_cb)
 			command->ret_cb(command->slave, packet, command->cbdata);
 
+		/*
+		 * \NOTE
+		 * Slave will be deactivated from dead monitor if it lost its connections.
+		 * So we don't need to care it again from here.
+
 		command->slave = slave_deactivated_by_fault(command->slave);
+
+		 */
 		goto out;
 	}
 

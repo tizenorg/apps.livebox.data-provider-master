@@ -22,13 +22,14 @@
 #include <packet.h>
 
 #include <Eina.h>
+#include <sys/smack.h>
+
+#include <security-server.h>
 
 #include "service_common.h"
 #include "debug.h"
 #include "util.h"
 #include "conf.h"
-
-#define SHORTCUT_ADDR	"/tmp/.shortcut.service"
 
 static struct info {
 	Eina_List *context_list;
@@ -162,10 +163,28 @@ HAPI int shortcut_service_init(void)
 		return LB_STATUS_ERROR_ALREADY;
 	}
 
-	s_info.svc_ctx = service_common_create(SHORTCUT_ADDR, service_thread_main, NULL);
+	s_info.svc_ctx = service_common_create(SHORTCUT_SOCKET, service_thread_main, NULL);
 	if (!s_info.svc_ctx) {
 		ErrPrint("Unable to activate service thread\n");
 		return LB_STATUS_ERROR_FAULT;
+	}
+
+	if (smack_fsetlabel(service_common_fd(s_info.svc_ctx), SHORTCUT_SMACK_LABEL, SMACK_LABEL_IPOUT) != 0) {
+		if (errno != EOPNOTSUPP) {
+			ErrPrint("Unable to set SMACK label(%d)\n", errno);
+			service_common_destroy(s_info.svc_ctx);
+			s_info.svc_ctx = NULL;
+			return LB_STATUS_ERROR_FAULT;
+		}
+	}
+
+	if (smack_fsetlabel(service_common_fd(s_info.svc_ctx), SHORTCUT_SMACK_LABEL, SMACK_LABEL_IPIN) != 0) {
+		if (errno != EOPNOTSUPP) {
+			ErrPrint("Unable to set SMACK label(%d)\n", errno);
+			service_common_destroy(s_info.svc_ctx);
+			s_info.svc_ctx = NULL;
+			return LB_STATUS_ERROR_FAULT;
+		}
 	}
 
 	DbgPrint("Successfully initiated\n");
@@ -178,6 +197,7 @@ HAPI int shortcut_service_fini(void)
 		return LB_STATUS_ERROR_INVALID;
 
 	service_common_destroy(s_info.svc_ctx);
+	s_info.svc_ctx = NULL;
 	DbgPrint("Successfully Finalized\n");
 	return LB_STATUS_SUCCESS;
 }

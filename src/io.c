@@ -208,7 +208,8 @@ static inline int load_abi_table(void)
 		}
 	}
 
-	fclose(fp);
+	if (fclose(fp) != 0)
+		ErrPrint("fclose: %s\n", strerror(errno));
 	return LB_STATUS_SUCCESS;
 }
 
@@ -700,12 +701,14 @@ HAPI int io_crawling_liveboxes(int (*cb)(const char *pkgname, int prime, void *d
 				continue;
 
 			if (cb(ent->d_name, -1, data) < 0) {
-				closedir(dir);
+				if (closedir(dir) < 0)
+					ErrPrint("closedir: %s\n", strerror(errno));
 				return LB_STATUS_ERROR_CANCEL;
 			}
 		}
 
-		closedir(dir);
+		if (closedir(dir) < 0)
+			ErrPrint("closedir: %s\n", strerror(errno));
 	}
 
 	return LB_STATUS_SUCCESS;

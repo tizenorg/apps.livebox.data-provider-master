@@ -3031,16 +3031,20 @@ HAPI void *instance_client_list(struct inst_info *inst)
 	return inst->client_list;
 }
 
-HAPI void instance_init(void)
+HAPI int instance_init(void)
 {
 	if (!strcasecmp(PROVIDER_METHOD, "shm"))
 		s_info.env_buf_type = BUFFER_TYPE_SHM;
 	else if (!strcasecmp(PROVIDER_METHOD, "pixmap"))
 		s_info.env_buf_type = BUFFER_TYPE_PIXMAP;
+	/* Default method is BUFFER_TYPE_FILE */
+
+	return LB_STATUS_SUCCESS;
 }
 
-HAPI void instance_fini(void)
+HAPI int instance_fini(void)
 {
+	return LB_STATUS_SUCCESS;
 }
 
 static inline struct tag_item *find_tag_item(struct inst_info *inst, const char *tag)

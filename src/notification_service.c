@@ -21,6 +21,8 @@
 #include <livebox-errno.h>
 #include <packet.h>
 
+#include <sys/smack.h>
+
 #include <notification_ipc.h>
 #include <notification_noti.h>
 #include <notification_error.h>
@@ -29,10 +31,6 @@
 #include "debug.h"
 #include "util.h"
 #include "conf.h"
-
-#ifndef NOTIFICATION_ADDR
-#define NOTIFICATION_ADDR "/tmp/.notification.service"
-#endif
 
 #ifndef NOTIFICATION_DEL_PACKET_UNIT
 #define NOTIFICATION_DEL_PACKET_UNIT 10
@@ -438,10 +436,28 @@ HAPI int notification_service_init(void)
 		return LB_STATUS_ERROR_ALREADY;
 	}
 
-	s_info.svc_ctx = service_common_create(NOTIFICATION_ADDR, service_thread_main, NULL);
+	s_info.svc_ctx = service_common_create(NOTIFICATION_SOCKET, service_thread_main, NULL);
 	if (!s_info.svc_ctx) {
 		ErrPrint("Unable to activate service thread\n");
 		return LB_STATUS_ERROR_FAULT;
+	}
+
+	if (smack_fsetlabel(service_common_fd(s_info.svc_ctx), NOTIFICATION_SMACK_LABEL, SMACK_LABEL_IPOUT) != 0) {
+		if (errno != EOPNOTSUPP) {
+			ErrPrint("Unable to set SMACK label(%d)\n", errno);
+			service_common_destroy(s_info.svc_ctx);
+			s_info.svc_ctx = NULL;
+			return LB_STATUS_ERROR_FAULT;
+		}
+	}
+
+	if (smack_fsetlabel(service_common_fd(s_info.svc_ctx), NOTIFICATION_SMACK_LABEL, SMACK_LABEL_IPIN) != 0) {
+		if (errno != EOPNOTSUPP) {
+			ErrPrint("Unable to set SMACK label(%d)\n", errno);
+			service_common_destroy(s_info.svc_ctx);
+			s_info.svc_ctx = NULL;
+			return LB_STATUS_ERROR_FAULT;
+		}
 	}
 
 	DbgPrint("Successfully initiated\n");
@@ -454,6 +470,7 @@ HAPI int notification_service_fini(void)
 		return LB_STATUS_ERROR_INVALID;
 
 	service_common_destroy(s_info.svc_ctx);
+	s_info.svc_ctx = NULL;
 	DbgPrint("Successfully Finalized\n");
 	return LB_STATUS_SUCCESS;
 }

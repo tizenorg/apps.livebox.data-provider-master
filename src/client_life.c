@@ -370,17 +370,17 @@ HAPI int client_count(void)
 	return eina_list_count(s_info.client_list);
 }
 
-HAPI int client_deactivated_by_fault(struct client_node *client)
+HAPI struct client_node *client_deactivated_by_fault(struct client_node *client)
 {
 	if (!client || client->faulted)
-		return 0;
+		return client;
 
 	ErrPrint("Client[%p] is faulted(%d), pid(%d)\n", client, client->refcnt, client->pid);
 	client->faulted = 1;
 	client->pid = (pid_t)-1;
 
 	invoke_deactivated_cb(client);
-	(void)client_destroy(client);
+	client = client_destroy(client);
 	/*!
 	 * \todo
 	 * Who invokes this function has to care the reference counter of a client
@@ -388,7 +388,7 @@ HAPI int client_deactivated_by_fault(struct client_node *client)
 	 * client->pid = (pid_t)-1;
 	 * slave_unref(client)
 	 */
-	return 0;
+	return client;
 }
 
 HAPI const int const client_is_faulted(const struct client_node *client)

@@ -74,10 +74,12 @@ static inline void touch_paused_file(void)
 {
 	int fd;
 	fd = creat(PAUSED_FILE, 0644);
-	if (fd >= 0)
-		close(fd);
-	else
+	if (fd >= 0) {
+		if (close(fd) < 0)
+			ErrPrint("close: %s\n", strerror(errno));
+	} else {
 		ErrPrint("Create .live.paused: %s\n", strerror(errno));
+	}
 }
 
 static inline void remove_paused_file(void)

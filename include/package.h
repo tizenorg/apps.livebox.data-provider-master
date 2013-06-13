@@ -99,6 +99,7 @@ extern void package_set_pd_height(struct pkg_info *info, int height);
 extern void package_set_pd_width(struct pkg_info *info, int width);
 extern int package_set_abi(struct pkg_info *info, const char *abi);
 extern void package_add_ctx_info(struct pkg_info *pkginfo, struct context_info *info);
+extern void package_del_ctx_info(struct pkg_info *pkginfo, struct context_info *info);
 
 /*!
  * \brief
@@ -123,5 +124,7 @@ extern int const package_fault_count(struct pkg_info *info);
 
 extern int package_init(void);
 extern int package_fini(void);
+
+extern int package_is_enabled(const char *appid);
 
 /* End of a file */

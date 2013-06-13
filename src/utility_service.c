@@ -23,15 +23,22 @@
 #include <livebox-errno.h>
 #include <packet.h>
 
+#include <sys/smack.h>
+
+#include "critical_log.h"
 #include "service_common.h"
 #include "utility_service.h"
 #include "debug.h"
 #include "util.h"
 #include "conf.h"
 
-#define UTILITY_ADDR	"/tmp/.utility.service"
+#ifndef SVC_PKG
 #define SVC_PKG		"org.tizen.data-provider-slave.icon"
+#endif
+
+#ifndef LAUNCH_TIMEOUT
 #define LAUNCH_TIMEOUT	10.0f
+#endif
 
 static struct info {
 	Eina_List *pending_list;
@@ -39,18 +46,20 @@ static struct info {
 	struct service_context *svc_ctx;
 
 	struct tcb *svc_daemon;
-	pid_t svc_pid;
+	int svc_daemon_is_launched;
 
 	struct service_event_item *launch_timer; 
+	struct service_event_item *delay_launcher;
 } s_info = {
 	.pending_list = NULL,
 	.context_list = NULL, /*!< \WARN: This is only used for SERVICE THREAD */
 	.svc_ctx = NULL, /*!< \WARN: This is only used for MAIN THREAD */
 
 	.svc_daemon = NULL,
-	.svc_pid = -1,
+	.svc_daemon_is_launched = 0,
 
 	.launch_timer = NULL,
+	.delay_launcher = NULL,
 };
 
 struct pending_item {
@@ -62,6 +71,8 @@ struct context {
 	struct tcb *tcb;
 	double seq;
 };
+
+static int lazy_launcher_cb(struct service_context *svc_ctx, void *data);
 
 static inline int put_reply_tcb(struct tcb *tcb, double seq)
 {
@@ -172,7 +183,49 @@ static int launch_timeout_cb(struct service_context *svc_ctx, void *data)
 	}
 
 	s_info.launch_timer = NULL;
+	s_info.svc_daemon_is_launched = 0;
 	return -ECANCELED; /* Delete this timer */
+}
+
+static inline int launch_svc(struct service_context *svc_ctx)
+{
+	pid_t pid;
+	int ret = LB_STATUS_SUCCESS;
+
+	pid = aul_launch_app(SVC_PKG, NULL);
+	if (pid > 0) {
+		s_info.svc_daemon_is_launched = 1;
+		s_info.launch_timer = service_common_add_timer(svc_ctx, LAUNCH_TIMEOUT, launch_timeout_cb, NULL);
+		if (!s_info.launch_timer)
+			ErrPrint("Unable to create launch timer\n");
+	} else if (pid == AUL_R_ETIMEOUT || pid == AUL_R_ECOMM) {
+		s_info.svc_daemon_is_launched = 1;
+		CRITICAL_LOG("SVC launch failed with timeout(%d), But waiting response\n", pid);
+		s_info.launch_timer = service_common_add_timer(svc_ctx, LAUNCH_TIMEOUT, launch_timeout_cb, NULL);
+		if (!s_info.launch_timer)
+			ErrPrint("Unable to create launch timer\n");
+	} else if (pid == AUL_R_ETERMINATING) {
+		/* Need time to launch app again */
+		ErrPrint("Terminating now, try to launch this after few sec later\n");
+		s_info.svc_daemon_is_launched = 1;
+		s_info.delay_launcher = service_common_add_timer(svc_ctx, LAUNCH_TIMEOUT, lazy_launcher_cb, NULL);
+		if (!s_info.delay_launcher) {
+			ErrPrint("Unable to add delay launcher\n");
+			ret = LB_STATUS_ERROR_FAULT;
+		}
+	} else {
+		ErrPrint("Failed to launch an app: %s(%d)\n", SVC_PKG, pid);
+		ret = LB_STATUS_ERROR_FAULT;
+	}
+
+	return ret;
+}
+
+static int lazy_launcher_cb(struct service_context *svc_ctx, void *data)
+{
+	s_info.svc_daemon_is_launched = launch_svc(svc_ctx) == LB_STATUS_SUCCESS;
+	s_info.delay_launcher = NULL;
+	return -ECANCELED;
 }
 
 static int service_thread_main(struct tcb *tcb, struct packet *packet, void *data)
@@ -186,7 +239,7 @@ static int service_thread_main(struct tcb *tcb, struct packet *packet, void *dat
 
 		if (tcb == s_info.svc_daemon) {
 			s_info.svc_daemon = NULL;
-			s_info.svc_pid = -1;
+			s_info.svc_daemon_is_launched = 0;
 		}
 
 		return 0;
@@ -200,20 +253,13 @@ static int service_thread_main(struct tcb *tcb, struct packet *packet, void *dat
 
 	switch (packet_type(packet)) {
 	case PACKET_REQ:
-		if (s_info.svc_pid < 0) {
-			s_info.svc_pid = aul_launch_app(SVC_PKG, NULL);
-			if (s_info.svc_pid > 0) {
-				s_info.launch_timer = service_common_add_timer(tcb_svc_ctx(tcb), LAUNCH_TIMEOUT, launch_timeout_cb, NULL);
-				if (!s_info.launch_timer)
-					ErrPrint("Unable to create launch timer\n");
-			}
+		if (!s_info.svc_daemon_is_launched) {
+			ret = launch_svc(tcb_svc_ctx(tcb));
+			if (ret != LB_STATUS_SUCCESS)
+				goto reply_out;
 		}
 
-		if (s_info.svc_pid < 0) {
-			ErrPrint("Failed to launch an app: %s(%d)\n", SVC_PKG, s_info.svc_pid);
-			ret = LB_STATUS_ERROR_FAULT;
-			goto reply_out;
-		} else if (!s_info.svc_daemon) {
+		if (!s_info.svc_daemon) {
 			ret = put_pended_request(tcb, packet);
 			if (ret < 0)
 				goto reply_out;
@@ -228,6 +274,11 @@ static int service_thread_main(struct tcb *tcb, struct packet *packet, void *dat
 		break;
 	case PACKET_REQ_NOACK:
 		if (!strcmp(cmd, "service_register")) {
+			if (!s_info.svc_daemon_is_launched) {
+				ErrPrint("Service daemon is not launched. but something tries to register a service\n");
+				return LB_STATUS_ERROR_INVALID;
+			}
+
 			if (s_info.svc_daemon) {
 				ErrPrint("Service daemon is already prepared\n");
 				return LB_STATUS_ERROR_INVALID;
@@ -275,10 +326,28 @@ int utility_service_init(void)
 		return LB_STATUS_ERROR_ALREADY;
 	}
 
-	s_info.svc_ctx = service_common_create(UTILITY_ADDR, service_thread_main, NULL);
+	s_info.svc_ctx = service_common_create(UTILITY_SOCKET, service_thread_main, NULL);
 	if (!s_info.svc_ctx) {
 		ErrPrint("Unable to activate service thread\n");
 		return LB_STATUS_ERROR_FAULT;
+	}
+
+	if (smack_fsetlabel(service_common_fd(s_info.svc_ctx), UTILITY_SMACK_LABEL, SMACK_LABEL_IPOUT) != 0) {
+		if (errno != EOPNOTSUPP) {
+			ErrPrint("Unable to set SMACK label(%d)\n", errno);
+			service_common_destroy(s_info.svc_ctx);
+			s_info.svc_ctx = NULL;
+			return LB_STATUS_ERROR_FAULT;
+		}
+	}
+
+	if (smack_fsetlabel(service_common_fd(s_info.svc_ctx), UTILITY_SMACK_LABEL, SMACK_LABEL_IPIN) != 0) {
+		if (errno != EOPNOTSUPP) {
+			ErrPrint("Unable to set SMACK label(%d)\n", errno);
+			service_common_destroy(s_info.svc_ctx);
+			s_info.svc_ctx = NULL;
+			return LB_STATUS_ERROR_FAULT;
+		}
 	}
 
 	DbgPrint("Successfully initiated\n");
@@ -291,6 +360,7 @@ int utility_service_fini(void)
 		return LB_STATUS_ERROR_INVALID;
 
 	service_common_destroy(s_info.svc_ctx);
+	s_info.svc_ctx = NULL;
 	DbgPrint("Successfully Finalized\n");
 	return LB_STATUS_SUCCESS;
 }

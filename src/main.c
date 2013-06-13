@@ -132,8 +132,11 @@ static inline int app_terminate(void)
 {
 	int ret;
 
-	ret = script_fini();
-	DbgPrint("script: %d\n", ret);
+	ret = server_fini();
+	DbgPrint("Finalize server: %d\n", ret);
+
+	ret = dead_fini();
+	DbgPrint("dead signal handler finalized: %d\n", ret);
 
 	ret = utility_service_fini();
 	DbgPrint("utility: %d\n", ret);
@@ -153,23 +156,21 @@ static inline int app_terminate(void)
 	ret = setting_fini();
 	DbgPrint("Finalize setting : %d\n", ret);
 
+	ret = instance_fini();
+	DbgPrint("Finalizing instances: %d\n", ret);
+
+	ret = package_fini();
+	DbgPrint("Finalize package info: %d\n", ret);
+
+	ret = script_fini();
+	DbgPrint("script: %d\n", ret);
+
 	ret = buffer_handler_fini();
 	DbgPrint("buffer handler: %d\n", ret);
 
 	xmonitor_fini();
 
-	instance_fini();
-
-	ret = package_fini();
-	DbgPrint("Finalize package info: %d\n", ret);
-
 	client_fini();
-
-	ret = server_fini();
-	DbgPrint("Finalize dbus: %d\n", ret);
-
-	ret = dead_fini();
-	DbgPrint("dead signal handler finalized: %d\n", ret);
 
 	ret = io_fini();
 	DbgPrint("IO finalized: %d\n", ret);
@@ -209,8 +210,22 @@ static Eina_Bool signal_cb(void *data, Ecore_Fd_Handler *handler)
 			ErrPrint("stop.provider: %s\n", strerror(errno));
 
 		vconf_set_bool(VCONFKEY_MASTER_STARTED, 0);
-		exit(0);
-		//ecore_main_loop_quit();
+		//exit(0);
+		ecore_main_loop_quit();
+	} else if (fdsi.ssi_signo == SIGUSR1) {
+		/*!
+		 * Turn off auto-reactivation
+		 * Terminate all slaves
+		 */
+		CRITICAL_LOG("USRS1, Deactivate ALL\n");
+		slave_deactivate_all(0, 1);
+	} else if (fdsi.ssi_signo == SIGUSR2) {
+		/*!
+		 * Turn on auto-reactivation
+		 * Launch all slaves again
+		 */
+		CRITICAL_LOG("USR2, Activate ALL\n");
+		slave_activate_all();
 	} else {
 		CRITICAL_LOG("Unknown SIG[%d] received\n", fdsi.ssi_signo);
 	}
@@ -256,6 +271,14 @@ int main(int argc, char *argv[])
 	sigemptyset(&mask);
 
 	ret = sigaddset(&mask, SIGTERM);
+	if (ret < 0)
+		CRITICAL_LOG("Failed to do sigemptyset: %s\n", strerror(errno));
+
+	ret = sigaddset(&mask, SIGUSR1);
+	if (ret < 0)
+		CRITICAL_LOG("Failed to do sigemptyset: %s\n", strerror(errno));
+
+	ret = sigaddset(&mask, SIGUSR2);
 	if (ret < 0)
 		CRITICAL_LOG("Failed to do sigemptyset: %s\n", strerror(errno));
 
@@ -309,8 +332,8 @@ int main(int argc, char *argv[])
 
 	app_terminate();
 
-	ecore_evas_shutdown();
 	evas_shutdown();
+	ecore_evas_shutdown();
 
 	ecore_x_shutdown();
 

@@ -229,8 +229,8 @@ extern int instance_del_client(struct inst_info *inst, struct client_node *clien
 extern int instance_has_client(struct inst_info *inst, struct client_node *client);
 extern void *instance_client_list(struct inst_info *inst);
 
-extern void instance_init(void);
-extern void instance_fini(void);
+extern int instance_init(void);
+extern int instance_fini(void);
 
 extern int instance_event_callback_add(struct inst_info *inst, enum instance_event type, int (*event_cb)(struct inst_info *inst, void *data), void *data);
 extern int instance_event_callback_del(struct inst_info *inst, enum instance_event type, int (*event_cb)(struct inst_info *inst, void *data));

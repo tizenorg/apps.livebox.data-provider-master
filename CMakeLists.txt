@@ -30,6 +30,7 @@ pkg_check_modules(pkg REQUIRED
 	livebox-service
 	notification
 	badge
+	libsmack
 )
 
 SET(PACKAGE "${PROJECT_NAME}")
@@ -47,6 +48,16 @@ ADD_DEFINITIONS("-DINFO_SOCKET=\"/opt/usr/share/live_magazine/.live.socket\"")
 ADD_DEFINITIONS("-DCLIENT_SOCKET=\"/opt/usr/share/live_magazine/.client.socket\"")
 ADD_DEFINITIONS("-DSLAVE_SOCKET=\"/opt/usr/share/live_magazine/.slave.socket\"")
 ADD_DEFINITIONS("-DSERVICE_SOCKET=\"/opt/usr/share/live_magazine/.service.socket\"")
+
+ADD_DEFINITIONS("-DBADGE_SOCKET=\"/tmp/.badge.service\"")
+ADD_DEFINITIONS("-DSHORTCUT_SOCKET=\"/tmp/.shortcut.service\"")
+ADD_DEFINITIONS("-DNOTIFICATION_SOCKET=\"/tmp/.notification.service\"")
+ADD_DEFINITIONS("-DUTILITY_SOCKET=\"/tmp/.utility.service\"")
+
+ADD_DEFINITIONS("-DUTILITY_SMACK_LABEL=\"data-provider-master::utility\"")
+ADD_DEFINITIONS("-DSHORTCUT_SMACK_LABEL=\"data-provider-master::shortcut\"")
+ADD_DEFINITIONS("-DNOTIFICATION_SMACK_LABEL=\"data-provider-master::notification\"")
+ADD_DEFINITIONS("-DBADGE_SMACK_LABEL=\"data-provider-master::badge\"")
 
 ADD_DEFINITIONS("-DNDEBUG")
 #ADD_DEFINITIONS("-DFLOG")

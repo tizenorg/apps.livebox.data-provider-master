@@ -3121,4 +3121,9 @@ HAPI void *instance_get_data(struct inst_info *inst, const char *tag)
 	return item->data;
 }
 
+HAPI const struct client_node *instance_pd_owner(struct inst_info *inst)
+{
+	return inst->pd.owner;
+}
+
 /* End of a file */

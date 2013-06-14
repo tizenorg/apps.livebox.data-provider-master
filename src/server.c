@@ -4713,6 +4713,8 @@ static struct packet *client_create_pd(pid_t pid, int handle, const struct packe
 
 	if (util_free_space(IMAGE_PATH) < MINIMUM_SPACE) {
 		ret = LB_STATUS_ERROR_NO_SPACE;
+	} else if (instance_pd_owner(inst)) {
+		ret = LB_STATUS_ERROR_ALREADY;
 	} else if (package_pd_type(instance_package(inst)) == PD_TYPE_BUFFER) {
 		lazy_pd_destroyed_cb(inst);
 		
@@ -4890,7 +4892,9 @@ static struct packet *client_destroy_pd(pid_t pid, int handle, const struct pack
 	if (ret != LB_STATUS_SUCCESS)
 		goto out;
 
-	if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
+	if (instance_pd_owner(inst) != client) {
+		ret = instance_pd_owner(inst) == NULL ? LB_STATUS_ERROR_ALREADY : LB_STATUS_ERROR_PERMISSION;
+	} else if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
 		int resize_aborted = 0;
 
 		pd_monitor = instance_del_data(inst, "pd,open,monitor");
@@ -4924,6 +4928,11 @@ static struct packet *client_destroy_pd(pid_t pid, int handle, const struct pack
 
 			ecore_timer_del(pd_monitor);
 			(void)instance_unref(inst);
+			goto out;
+		}
+
+		if (instance_get_data(inst, "lazy,pd,close") || instance_get_data(inst, "pd,close,monitor")) {
+			ret = LB_STATUS_ERROR_ALREADY;
 			goto out;
 		}
 

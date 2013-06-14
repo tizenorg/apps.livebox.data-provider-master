@@ -221,6 +221,8 @@ extern int instance_client_pd_created(struct inst_info *inst, int status);
 extern int instance_send_access_status(struct inst_info *inst, int status);
 extern int instance_forward_packet(struct inst_info *inst, struct packet *packet);
 
+extern const struct client_node *instance_pd_owner(struct inst_info *inst);
+
 /*!
  * Multiple viewer
  */

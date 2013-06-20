@@ -4711,9 +4711,7 @@ static struct packet *client_create_pd(pid_t pid, int handle, const struct packe
 	if (ret != LB_STATUS_SUCCESS)
 		goto out;
 
-	if (util_free_space(IMAGE_PATH) < MINIMUM_SPACE) {
-		ret = LB_STATUS_ERROR_NO_SPACE;
-	} else if (instance_pd_owner(inst)) {
+	if (instance_pd_owner(inst)) {
 		ret = LB_STATUS_ERROR_ALREADY;
 	} else if (package_pd_type(instance_package(inst)) == PD_TYPE_BUFFER) {
 		lazy_pd_destroyed_cb(inst);
@@ -5978,13 +5976,6 @@ static struct packet *slave_acquire_buffer(pid_t pid, int handle, const struct p
 		goto out;
 	}
 
-	if (util_free_space(IMAGE_PATH) < MINIMUM_SPACE) {
-		ErrPrint("Not enough space\n");
-		ret = LB_STATUS_ERROR_NO_SPACE;
-		id = "";
-		goto out;
-	}
-
 	ret = validate_request(pkgname, id, &inst, &pkg);
 	id = "";
 
@@ -6120,13 +6111,6 @@ static struct packet *slave_resize_buffer(pid_t pid, int handle, const struct pa
 	if (ret != 5) {
 		ErrPrint("Invalid argument\n");
 		ret = LB_STATUS_ERROR_INVALID;
-		id = "";
-		goto out;
-	}
-
-	if (util_free_space(IMAGE_PATH) < MINIMUM_SPACE) {
-		ErrPrint("Not enough space\n");
-		ret = LB_STATUS_ERROR_NO_SPACE;
 		id = "";
 		goto out;
 	}
@@ -6359,6 +6343,7 @@ out:
 
 static struct packet *service_update(pid_t pid, int handle, const struct packet *packet)
 {
+	Eina_List *inst_list;
 	struct pkg_info *pkg;
 	struct packet *result;
 	const char *pkgname;
@@ -6393,6 +6378,31 @@ static struct packet *service_update(pid_t pid, int handle, const struct packet 
 		ret = LB_STATUS_ERROR_FAULT;
 		DbgFree(lb_pkgname);
 		goto out;
+	}
+
+	inst_list = package_instance_list(pkg);
+	if (!eina_list_count(inst_list)) {
+		ret = LB_STATUS_ERROR_NOT_EXIST;
+		DbgFree(lb_pkgname);
+		goto out;
+	}
+
+	if (id && strlen(id)) {
+		Eina_List *l;
+		struct inst_info *inst;
+
+		ret = LB_STATUS_ERROR_NOT_EXIST;
+		EINA_LIST_FOREACH(inst_list, l, inst) {
+			if (!strcmp(instance_id(inst), id)) {
+				ret = LB_STATUS_SUCCESS;
+				break;
+			}
+		}
+
+		if (ret == LB_STATUS_ERROR_NOT_EXIST) {
+			DbgFree(lb_pkgname);
+			goto out;
+		}
 	}
 
 	/*!

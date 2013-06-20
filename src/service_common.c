@@ -813,13 +813,10 @@ HAPI struct service_context *tcb_svc_ctx(struct tcb *tcb)
  */
 HAPI int service_common_unicast_packet(struct tcb *tcb, struct packet *packet)
 {
-	struct service_context *svc_ctx;
 	if (!tcb || !packet) {
 		DbgPrint("Invalid unicast: tcb[%p], packet[%p]\n", tcb, packet);
 		return -EINVAL;
 	}
-
-	svc_ctx = tcb->svc_ctx;
 
 	DbgPrint("Unicast packet\n");
 	return secure_socket_send(tcb->fd, (void *)packet_data(packet), packet_size(packet));

@@ -26,6 +26,7 @@
 
 #include <badge.h>
 #include <badge_db.h>
+#include <security-server.h>
 
 #include "service_common.h"
 #include "debug.h"
@@ -45,9 +46,11 @@ struct context {
 	double seq;
 };
 
-struct noti_service {
+struct badge_service {
 	const char *cmd;
 	void (*handler)(struct tcb *tcb, struct packet *packet, void *data);
+	const char *rule;
+	const char *access;
 };
 
 /*!
@@ -281,6 +284,22 @@ static void _handler_service_register(struct tcb *tcb, struct packet *packet, vo
 	}
 }
 
+static int _is_valid_permission(int fd, struct badge_service *service)
+{
+	int ret;
+
+	if (service->rule != NULL && service->access != NULL) {
+		ret = security_server_check_privilege_by_sockfd(fd, service->rule, service->access);
+		if (ret == SECURITY_SERVER_API_ERROR_ACCESS_DENIED) {
+			ErrPrint("SMACK:Access denied\n");
+
+			return 0;
+		}
+	}
+
+	return 1;
+}
+
 /*!
  * SERVICE THREAD
  */
@@ -288,30 +307,42 @@ static int service_thread_main(struct tcb *tcb, struct packet *packet, void *dat
 {
 	int i = 0;
 	const char *command;
-	static struct noti_service service_req_table[] = {
+	static struct badge_service service_req_table[] = {
 		{
 			.cmd = "insert_badge",
 			.handler = _handler_insert_badge,
+			.rule = "data-provider-master::badge.client",
+			.access = "w",
 		},
 		{
 			.cmd = "delete_badge",
 			.handler = _handler_delete_badge,
+			.rule = "data-provider-master::badge.client",
+			.access = "w",
 		},
 		{
 			.cmd = "set_badge_count",
 			.handler = _handler_set_badge_count,
+			.rule = "data-provider-master::badge.client",
+			.access = "w",
 		},
 		{
 			.cmd = "set_disp_option",
 			.handler = _handler_set_display_option,
+			.rule = "data-provider-master::badge.client",
+			.access = "w",
 		},
 		{
 			.cmd = "service_register",
 			.handler = _handler_service_register,
+			.rule = NULL,
+			.access = NULL,
 		},
 		{
 			.cmd = NULL,
 			.handler = NULL,
+			.rule = NULL,
+			.access = NULL,
 		},
 	};
 
@@ -334,6 +365,7 @@ static int service_thread_main(struct tcb *tcb, struct packet *packet, void *dat
 			if (strcmp(service_req_table[i].cmd, command))
 				continue;
 
+			_is_valid_permission(tcb_fd(tcb), &(service_req_table[i]));
 			service_req_table[i].handler(tcb, packet, data);
 			break;
 		}

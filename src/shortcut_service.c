@@ -94,6 +94,7 @@ static inline struct tcb *get_reply_context(double seq)
 static int service_thread_main(struct tcb *tcb, struct packet *packet, void *data)
 {
 	const char *command;
+	int ret;
 
 	if (!packet) {
 		DbgPrint("TCB: %p is terminated (NIL packet)\n", tcb);
@@ -108,8 +109,21 @@ static int service_thread_main(struct tcb *tcb, struct packet *packet, void *dat
 
 	switch (packet_type(packet)) {
 	case PACKET_REQ:
+
 		/* Need to send reply packet */
 		DbgPrint("%p REQ: Command: [%s]\n", tcb, command);
+		if (!strcmp(command, "add_livebox")) {
+			ret = security_server_check_privilege_by_sockfd(tcb_fd(tcb), "data-provider-master::shortcut.livebox", "w");
+			if (ret == SECURITY_SERVER_API_ERROR_ACCESS_DENIED) {
+				ErrPrint("SMACK:Access denied\n");
+			}
+		} else if (!strcmp(command, "add_shortcut")) {
+			ret = security_server_check_privilege_by_sockfd(tcb_fd(tcb), "data-provider-master::shortcut.shortcut", "w");
+			if (ret == SECURITY_SERVER_API_ERROR_ACCESS_DENIED) {
+				ErrPrint("SMACK:Access denied\n");
+			}
+		}
+
 		if (service_common_multicast_packet(tcb, packet, TCB_CLIENT_TYPE_SERVICE) < 0)
 			ErrPrint("Unable to send service request packet\n");
 		else

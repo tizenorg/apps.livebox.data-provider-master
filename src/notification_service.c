@@ -22,6 +22,7 @@
 #include <packet.h>
 
 #include <sys/smack.h>
+#include <security-server.h>
 
 #include <notification_ipc.h>
 #include <notification_noti.h>
@@ -35,6 +36,7 @@
 #ifndef NOTIFICATION_DEL_PACKET_UNIT
 #define NOTIFICATION_DEL_PACKET_UNIT 10
 #endif
+#define ENABLE_NS_ACCESS_CONTROL 0
 
 static struct info {
 	Eina_List *context_list;
@@ -52,6 +54,8 @@ struct context {
 struct noti_service {
 	const char *cmd;
 	void (*handler)(struct tcb *tcb, struct packet *packet, void *data);
+	const char *rule;
+	const char *access;
 };
 
 /*!
@@ -345,6 +349,21 @@ static void _handler_service_register(struct tcb *tcb, struct packet *packet, vo
 	}
 }
 
+static int _is_valid_permission(int fd, struct noti_service *service)
+{
+	int ret;
+
+	if (service->rule != NULL && service->access != NULL) {
+		ret = security_server_check_privilege_by_sockfd(fd, service->rule, service->access);
+		if (ret == SECURITY_SERVER_API_ERROR_ACCESS_DENIED) {
+			ErrPrint("SMACK:Access denied\n");
+			return 0;
+		}
+	}
+
+	return 1;
+}
+
 /*!
  * SERVICE THREAD
  */
@@ -356,30 +375,44 @@ static int service_thread_main(struct tcb *tcb, struct packet *packet, void *dat
 		{
 			.cmd = "add_noti",
 			.handler = _handler_insert,
+			.rule = "data-provider-master::notification.client",
+			.access = "w",
 		},
 		{
 			.cmd = "update_noti",
 			.handler = _handler_update,
+			.rule = "data-provider-master::notification.client",
+			.access = "w",
 		},
 		{
 			.cmd = "refresh_noti",
 			.handler = _handler_refresh,
+			.rule = "data-provider-master::notification.client",
+			.access = "w",
 		},
 		{
 			.cmd = "del_noti_single",
 			.handler = _handler_delete_single,
+			.rule = "data-provider-master::notification.client",
+			.access = "w",
 		},
 		{
 			.cmd = "del_noti_multiple",
 			.handler = _handler_delete_multiple,
+			.rule = "data-provider-master::notification.client",
+			.access = "w",
 		},
 		{
 			.cmd = "service_register",
 			.handler = _handler_service_register,
+			.rule = NULL,
+			.access = NULL,
 		},
 		{
 			.cmd = NULL,
 			.handler = NULL,
+			.rule = NULL,
+			.access = NULL,
 		},
 	};
 
@@ -403,7 +436,14 @@ static int service_thread_main(struct tcb *tcb, struct packet *packet, void *dat
 			if (strcmp(service_req_table[i].cmd, command))
 				continue;
 
+#if ENABLE_NS_ACCESS_CONTROL
+			if (_is_valid_permission(tcb_fd(tcb), &(service_req_table[i])) == 1) {
+				service_req_table[i].handler(tcb, packet, data);
+			}
+#else
+			_is_valid_permission(tcb_fd(tcb), &(service_req_table[i]));
 			service_req_table[i].handler(tcb, packet, data);
+#endif
 			break;
 		}
 

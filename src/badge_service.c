@@ -41,6 +41,8 @@ static struct info {
 	.svc_ctx = NULL, /*!< \WARN: This is only used for MAIN THREAD */
 };
 
+#define ENABLE_BS_ACCESS_CONTROL 0
+
 struct context {
 	struct tcb *tcb;
 	double seq;
@@ -292,7 +294,6 @@ static int _is_valid_permission(int fd, struct badge_service *service)
 		ret = security_server_check_privilege_by_sockfd(fd, service->rule, service->access);
 		if (ret == SECURITY_SERVER_API_ERROR_ACCESS_DENIED) {
 			ErrPrint("SMACK:Access denied\n");
-
 			return 0;
 		}
 	}
@@ -365,8 +366,14 @@ static int service_thread_main(struct tcb *tcb, struct packet *packet, void *dat
 			if (strcmp(service_req_table[i].cmd, command))
 				continue;
 
+#if ENABLE_BS_ACCESS_CONTROL
+			if (_is_valid_permission(tcb_fd(tcb), &(service_req_table[i])) == 1) {
+				service_req_table[i].handler(tcb, packet, data);
+			}
+#else
 			_is_valid_permission(tcb_fd(tcb), &(service_req_table[i]));
 			service_req_table[i].handler(tcb, packet, data);
+#endif
 			break;
 		}
 

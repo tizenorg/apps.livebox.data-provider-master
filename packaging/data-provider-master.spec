@@ -1,6 +1,6 @@
 Name: data-provider-master
 Summary: Master service provider for liveboxes.
-Version: 0.24.11
+Version: 0.24.12
 Release: 1
 Group: HomeTF/Livebox
 License: Flora License
@@ -104,5 +104,6 @@ echo "%{_sysconfdir}/init.d/data-provider-master start"
 /opt/usr/share/live_magazine/*
 /opt/dbspace/.livebox.db
 /opt/dbspace/.livebox.db-journal
+/opt/etc/smack/accesses.d/*
 
 # End of a file

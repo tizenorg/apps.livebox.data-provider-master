@@ -1,0 +1,3 @@
+data-provider-master system::homedir arwxt
+data-provider-master data-provider-master::share rwx
+data-provider-master system::vconf rwx

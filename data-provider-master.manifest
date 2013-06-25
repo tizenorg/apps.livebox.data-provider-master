@@ -7,6 +7,14 @@
 			<label name="data-provider-master::db" />
 			<label name="data-provider-master::data" />
 			<label name="data-provider-master::share" />
+			<label name="data-provider-master::shortcut" />
+			<label name="data-provider-master::shortcut.shortcut" />
+			<label name="data-provider-master::shortcut.livebox" />
+			<label name="data-provider-master::badge" />
+			<label name="data-provider-master::badge.client" />
+			<label name="data-provider-master::notification" />
+			<label name="data-provider-master::notification.client" />
+			<label name="data-provider-master::utility" />
 		</provide>
 		<request>
 			<smack request="sys-assert::core" type="rwxat" />

@@ -37,6 +37,7 @@ BuildRequires: pkgconfig(notification)
 BuildRequires: pkgconfig(badge)
 BuildRequires: pkgconfig(security-server)
 Requires(post): sys-assert
+Requires(post): dbus
 
 %description
 Manage the 2nd stage livebox service provider and communicate with the viewer application.

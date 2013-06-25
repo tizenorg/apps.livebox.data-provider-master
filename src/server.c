@@ -7073,14 +7073,6 @@ static struct method s_service_table[] = {
 
 static struct method s_slave_table[] = {
 	{
-		.cmd = "hello",
-		.handler = slave_hello, /* slave_name, ret */
-	},
-	{
-		.cmd = "ping",
-		.handler = slave_ping, /* slave_name, ret */
-	},
-	{
 		.cmd = "call",
 		.handler = slave_call, /* slave_name, pkgname, filename, function, ret */
 	},
@@ -7141,6 +7133,15 @@ static struct method s_slave_table[] = {
 	{
 		.cmd = "access_status",
 		.handler = slave_access_status,
+	},
+
+	{
+		.cmd = "hello",
+		.handler = slave_hello, /* slave_name, ret */
+	},
+	{
+		.cmd = "ping",
+		.handler = slave_ping, /* slave_name, ret */
 	},
 
 	{

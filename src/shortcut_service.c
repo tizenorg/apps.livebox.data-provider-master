@@ -112,12 +112,12 @@ static int service_thread_main(struct tcb *tcb, struct packet *packet, void *dat
 
 		/* Need to send reply packet */
 		DbgPrint("%p REQ: Command: [%s]\n", tcb, command);
-		if (!strcmp(command, "add_livebox")) {
+		if (!strcmp(command, "add_livebox") || !strcmp(command, "rm_livebox")) {
 			ret = security_server_check_privilege_by_sockfd(tcb_fd(tcb), "data-provider-master::shortcut.livebox", "w");
 			if (ret == SECURITY_SERVER_API_ERROR_ACCESS_DENIED) {
 				ErrPrint("SMACK:Access denied\n");
 			}
-		} else if (!strcmp(command, "add_shortcut")) {
+		} else if (!strcmp(command, "add_shortcut") || !strcmp(command, "rm_shortcut")) {
 			ret = security_server_check_privilege_by_sockfd(tcb_fd(tcb), "data-provider-master::shortcut.shortcut", "w");
 			if (ret == SECURITY_SERVER_API_ERROR_ACCESS_DENIED) {
 				ErrPrint("SMACK:Access denied\n");

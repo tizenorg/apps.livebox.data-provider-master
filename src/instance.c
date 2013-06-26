@@ -169,16 +169,13 @@ static inline void timer_thaw(struct inst_info *inst)
 	pending = ecore_timer_pending_get(inst->update_timer);
 	delay = util_time_delay_for_compensation(period) - pending;
 	ecore_timer_delay(inst->update_timer, delay);
-	DbgPrint("Compensated: %lf\n", delay);
 
 	if (inst->sleep_at == 0.0f)
 		return;
 
 	sleep_time = util_timestamp() - inst->sleep_at;
-	if (sleep_time > pending) {
-		DbgPrint("Update time elapsed\n");
+	if (sleep_time > pending)
 		(void)update_timer_cb(inst);
-	}
 
 	inst->sleep_at = 0.0f;
 }
@@ -206,7 +203,7 @@ static int viewer_deactivated_cb(struct client_node *client, void *data)
 
 	DbgPrint("%d is deleted from the list of viewer of %s(%s)\n", client_pid(client), package_name(instance_package(inst)), instance_id(inst));
 	if (!eina_list_data_find(inst->client_list, client)) {
-		DbgPrint("Not found\n");
+		ErrPrint("Not found\n");
 		return LB_STATUS_ERROR_NOT_EXIST;
 	}
 
@@ -312,8 +309,6 @@ static inline void instance_send_resized_event(struct inst_info *inst, int is_pd
 		id = buffer_handler_id(inst->lb.canvas.buffer);
 	else
 		id = "";
-
-	DbgPrint("Size is changed to %dx%d (%s) %s\n", w, h, id, is_pd ? "pd" : "lb");
 
 	packet = packet_create_noack("size_changed", "sssiiii", pkgname, inst->id, id, is_pd, w, h, status);
 	if (packet)
@@ -674,7 +669,6 @@ static Eina_Bool update_timer_cb(void *data)
 {
 	struct inst_info *inst = (struct inst_info *)data;
 
-	DbgPrint("Update instance %s (%s) %s/%s\n", package_name(inst->info), inst->id, inst->cluster, inst->category);
 	slave_rpc_request_update(package_name(inst->info), inst->id, inst->cluster, inst->category);
 	return ECORE_CALLBACK_RENEW;
 }
@@ -709,14 +703,12 @@ static inline int fork_package(struct inst_info *inst, const char *pkgname)
 
 	if (package_secured(info)) {
 		if (inst->lb.period > 0.0f) {
-			DbgPrint("Register the update timer for secured livebox [%s]\n", package_name(info));
 			inst->update_timer = util_timer_add(inst->lb.period, update_timer_cb, inst);
 			if (!inst->update_timer)
 				ErrPrint("Failed to add an update timer for instance %s\n", inst->id);
 			else
 				timer_freeze(inst); /* Freeze the update timer as default */
 		} else {
-			DbgPrint("secured livebox [%s] has no period (%lf)\n", package_name(info), inst->lb.period);
 			inst->update_timer = NULL;
 		}
 	}
@@ -850,7 +842,6 @@ static void deactivate_cb(struct slave_node *slave, const struct packet *packet,
 	 */
 
 	if (!packet) {
-		DbgPrint("Consuming a request of a dead process\n");
 		/*!
 		 * \note
 		 * The instance_reload will care this.
@@ -887,7 +878,6 @@ static void deactivate_cb(struct slave_node *slave, const struct packet *packet,
 		 */
 		switch (inst->requested_state) {
 		case INST_ACTIVATED:
-			DbgPrint("REQ: ACTIVATED\n");
 			instance_state_reset(inst);
 			instance_reactivate(inst);
 			break;
@@ -896,7 +886,6 @@ static void deactivate_cb(struct slave_node *slave, const struct packet *packet,
 			instance_broadcast_deleted_event(inst);
 			instance_state_reset(inst);
 			instance_destroy(inst);
-			DbgPrint("== %s\n", package_name(info));
 		default:
 			/*!< Unable to reach here */
 			break;
@@ -928,7 +917,6 @@ static void deactivate_cb(struct slave_node *slave, const struct packet *packet,
 		 * This is not possible, slave will always return LB_STATUS_ERROR_NOT_EXIST, LB_STATUS_ERROR_INVALID, or 0.
 		 * but care this exceptional case.
 		 */
-		DbgPrint("[%s] instance destroying ret(%d)\n", package_name(inst->info), ret);
 		info = inst->info;
 		instance_broadcast_deleted_event(inst);
 		instance_state_reset(inst);
@@ -952,7 +940,6 @@ static void reactivate_cb(struct slave_node *slave, const struct packet *packet,
 	int is_pinned_up;
 
 	if (!packet) {
-		DbgPrint("Consuming a request of a dead process\n");
 		/*!
 		 * \note
 		 * instance_reload function will care this.
@@ -977,8 +964,6 @@ static void reactivate_cb(struct slave_node *slave, const struct packet *packet,
 
 		DbgFree(inst->content);
 		inst->content = tmp;
-
-		DbgPrint("Update content info %s\n", tmp);
 	}
 
 	if (strlen(title)) {
@@ -992,8 +977,6 @@ static void reactivate_cb(struct slave_node *slave, const struct packet *packet,
 
 		DbgFree(inst->title);
 		inst->title = tmp;
-
-		DbgPrint("Update title info %s\n", tmp);
 	}
 
 	if (inst->state == INST_DESTROYED) {
@@ -1097,7 +1080,6 @@ static void reactivate_cb(struct slave_node *slave, const struct packet *packet,
 		break;
 	default:
 		info = inst->info;
-		DbgPrint("[%s] instance destroying ret(%d)\n", package_name(info), ret);
 		instance_broadcast_deleted_event(inst);
 		instance_state_reset(inst);
 		instance_destroy(inst);
@@ -1121,7 +1103,6 @@ static void activate_cb(struct slave_node *slave, const struct packet *packet, v
 	int is_pinned_up;
 
 	if (!packet) {
-		DbgPrint("Consuming a request of a dead process\n");
 		/*!
 		 * \note
 		 * instance_reload will care this
@@ -1220,7 +1201,6 @@ static void activate_cb(struct slave_node *slave, const struct packet *packet, v
 		}
 		break;
 	default:
-		DbgPrint("[%s] instance destroying ret(%d)\n", package_name(inst->info), ret);
 		instance_unicast_deleted_event(inst, NULL);
 		instance_state_reset(inst);
 		instance_destroy(inst);
@@ -1417,7 +1397,7 @@ HAPI int instance_reactivate(struct inst_info *inst)
 	}
 
 	if (package_is_fault(inst->info)) {
-		DbgPrint("Fault package [%s]\n", package_name(inst->info));
+		ErrPrint("Fault package [%s]\n", package_name(inst->info));
 		return LB_STATUS_ERROR_FAULT;
 	}
 
@@ -1483,7 +1463,7 @@ HAPI int instance_activate(struct inst_info *inst)
 	}
 
 	if (package_is_fault(inst->info)) {
-		DbgPrint("Fault package [%s]\n", package_name(inst->info));
+		ErrPrint("Fault package [%s]\n", package_name(inst->info));
 		return LB_STATUS_ERROR_FAULT;
 	}
 
@@ -1752,18 +1732,16 @@ HAPI int instance_hold_scroll(struct inst_info *inst, int hold)
 {
 	struct packet *packet;
 
-	if (inst->scroll_locked == hold) {
-		DbgPrint("[HOLD] There is changes for hold state: %d\n", hold);
+	DbgPrint("HOLD: (%s) %d\n", inst->id, hold);
+	if (inst->scroll_locked == hold)
 		return LB_STATUS_ERROR_ALREADY;
-	}
 
 	packet = packet_create_noack("scroll", "ssi", package_name(inst->info), inst->id, hold);
 	if (!packet) {
-		ErrPrint("[HOLD] Failed to build a packet\n");
+		ErrPrint("Failed to build a packet\n");
 		return LB_STATUS_ERROR_FAULT;
 	}
 
-	DbgPrint("[HOLD] (%s) %d\n", inst->id, hold);
 	inst->scroll_locked = hold;
 	return CLIENT_SEND_EVENT(inst, packet);
 }
@@ -1840,7 +1818,7 @@ HAPI int instance_set_update_mode(struct inst_info *inst, int active_update)
 	struct update_mode_cbdata *cbdata;
 
 	if (package_is_fault(inst->info)) {
-		DbgPrint("Fault package [%s]\n", package_name(inst->info));
+		ErrPrint("Fault package [%s]\n", package_name(inst->info));
 		return LB_STATUS_ERROR_FAULT;
 	}
 
@@ -1997,7 +1975,7 @@ HAPI int instance_set_pinup(struct inst_info *inst, int pinup)
 	}
 
 	if (package_is_fault(inst->info)) {
-		DbgPrint("Fault package [%s]\n", package_name(inst->info));
+		ErrPrint("Fault package [%s]\n", package_name(inst->info));
 		return LB_STATUS_ERROR_FAULT;
 	}
 
@@ -2030,7 +2008,6 @@ HAPI int instance_freeze_updator(struct inst_info *inst)
 	if (!inst->update_timer)
 		return LB_STATUS_ERROR_INVALID;
 
-	DbgPrint("Freeze the update timer (%s)\n", inst->id);
 	timer_freeze(inst);
 	return LB_STATUS_SUCCESS;
 }
@@ -2040,17 +2017,12 @@ HAPI int instance_thaw_updator(struct inst_info *inst)
 	if (!inst->update_timer)
 		return LB_STATUS_ERROR_INVALID;
 
-	if (client_is_all_paused() || setting_is_lcd_off()) {
-		DbgPrint("Skip thaw (%s)\n", inst->id);
+	if (client_is_all_paused() || setting_is_lcd_off())
 		return LB_STATUS_ERROR_INVALID;
-	}
 
-	if (inst->visible == LB_HIDE_WITH_PAUSE) {
-		DbgPrint("Live box is invisible (%s)\n", inst->id);
+	if (inst->visible == LB_HIDE_WITH_PAUSE)
 		return LB_STATUS_ERROR_INVALID;
-	}
 
-	DbgPrint("Thaw the update timer (%s)\n", inst->id);
 	timer_thaw(inst);
 	return LB_STATUS_SUCCESS;
 }
@@ -2062,10 +2034,8 @@ HAPI enum livebox_visible_state instance_visible_state(struct inst_info *inst)
 
 HAPI int instance_set_visible_state(struct inst_info *inst, enum livebox_visible_state state)
 {
-	if (inst->visible == state) {
-		DbgPrint("Visibility has no changed\n");
+	if (inst->visible == state)
 		return LB_STATUS_SUCCESS;
-	}
 
 	switch (state) {
 	case LB_SHOW:
@@ -2197,7 +2167,7 @@ HAPI int instance_resize(struct inst_info *inst, int w, int h)
 		return LB_STATUS_ERROR_FAULT;
 	}
 
-	DbgPrint("RESIZE: INSTANCE[%s] Request resize[%dx%d] box\n", instance_id(inst), w, h);
+	DbgPrint("RESIZE: [%s] resize[%dx%d]\n", instance_id(inst), w, h);
 	ret = slave_rpc_async_request(package_slave(inst->info), package_name(inst->info), packet, resize_cb, cbdata, 0);
 	return ret;
 }
@@ -2246,8 +2216,6 @@ static Eina_Bool timer_updator_cb(void *data)
 	inst = cbdata->inst;
 	DbgFree(cbdata);
 
-	DbgPrint("Update period is changed to %lf from %lf\n", period, inst->lb.period);
-
 	inst->lb.period = period;
 	if (inst->update_timer) {
 		if (inst->lb.period == 0.0f) {
@@ -2285,7 +2253,7 @@ HAPI int instance_set_period(struct inst_info *inst, double period)
 	}
 
 	if (package_is_fault(inst->info)) {
-		DbgPrint("Fault package [%s]\n", package_name(inst->info));
+		ErrPrint("Fault package [%s]\n", package_name(inst->info));
 		return LB_STATUS_ERROR_FAULT;
 	}
 
@@ -2338,7 +2306,7 @@ HAPI int instance_clicked(struct inst_info *inst, const char *event, double time
 	}
 
 	if (package_is_fault(inst->info)) {
-		DbgPrint("Fault package [%s]\n", package_name(inst->info));
+		ErrPrint("Fault package [%s]\n", package_name(inst->info));
 		return LB_STATUS_ERROR_FAULT;
 	}
 
@@ -2391,7 +2359,7 @@ HAPI int instance_text_signal_emit(struct inst_info *inst, const char *emission,
 	}
 
 	if (package_is_fault(inst->info)) {
-		DbgPrint("Fault package [%s]\n", package_name(inst->info));
+		ErrPrint("Fault package [%s]\n", package_name(inst->info));
 		return LB_STATUS_ERROR_FAULT;
 	}
 
@@ -2460,7 +2428,7 @@ HAPI int instance_change_group(struct inst_info *inst, const char *cluster, cons
 	}
 
 	if (package_is_fault(inst->info)) {
-		DbgPrint("Fault package [%s]\n", package_name(inst->info));
+		ErrPrint("Fault package [%s]\n", package_name(inst->info));
 		return LB_STATUS_ERROR_FAULT;
 	}
 
@@ -2862,6 +2830,7 @@ HAPI int instance_slave_open_pd(struct inst_info *inst, struct client_node *clie
 	 */
 	(void)slave_freeze_ttl(slave);
 
+	DbgPrint("CREATE_PD\n");
 	ret = slave_rpc_request_only(slave, pkgname, packet, 0);
 	if (ret < 0) {
 		ErrPrint("Unable to send request to slave\n");
@@ -2890,7 +2859,6 @@ HAPI int instance_slave_open_pd(struct inst_info *inst, struct client_node *clie
 	}
 
 	inst->pd.owner = client;
-	DbgPrint("pd,show event is sent\n");
 	return ret;
 }
 
@@ -2982,7 +2950,7 @@ HAPI int instance_client_pd_created(struct inst_info *inst, int status)
 HAPI int instance_client_pd_destroyed(struct inst_info *inst, int status)
 {
 	if (!inst->pd.need_to_send_close_event) {
-		DbgPrint("PD is not created\n");
+		ErrPrint("PD is not created\n");
 		return LB_STATUS_ERROR_INVALID;
 	}
 

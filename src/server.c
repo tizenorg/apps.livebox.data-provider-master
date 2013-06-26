@@ -459,8 +459,6 @@ static struct packet *client_text_signal(pid_t pid, int handle, const struct pac
 		goto out;
 	}
 
-	DbgPrint("pid[%d] pkgname[%s] emission[%s] source[%s]\n", pid, pkgname, emission, source);
-
 	/*!
 	 * \NOTE:
 	 * Trust the package name which are sent by the client.
@@ -499,40 +497,6 @@ static Eina_Bool lazy_delete_cb(void *data)
 	return ECORE_CALLBACK_CANCEL;
 }
 
-/*
-static inline void clear_pd_monitor(struct inst_info *inst)
-{
-	Ecore_Timer *pd_monitor;
-
-	pd_monitor = instance_del_data(inst, "pd,open,monitor");
-	if (pd_monitor) {
-		DbgPrint("Clear pd,open,monitor\n");
-		(void)instance_client_pd_created(inst, LB_STATUS_SUCCESS);
-		ecore_timer_del(pd_monitor);
-		(void)instance_unref(inst);
-		return;
-	}
-
-	pd_monitor = instance_del_data(inst, "pd,close,monitor");
-	if (pd_monitor) {
-		DbgPrint("Clear pd,close,monitor\n");
-		(void)instance_client_pd_destroyed(inst, LB_STATUS_SUCCESS);
-		ecore_timer_del(pd_monitor);
-		(void)instance_unref(inst);
-		return;
-	}
-
-	pd_monitor = instance_del_data(inst, "pd,resize,monitor");
-	if (pd_monitor) {
-		DbgPrint("Clear pd,resize,monitor\n");
-		(void)instance_client_pd_destroyed(inst, LB_STATUS_SUCCESS);
-		ecore_timer_del(pd_monitor);
-		(void)instance_unref(inst);
-		return;
-	}
-}
-*/
-
 static struct packet *client_delete(pid_t pid, int handle, const struct packet *packet) /* pid, pkgname, filename, ret */
 {
 	struct client_node *client;
@@ -555,8 +519,6 @@ static struct packet *client_delete(pid_t pid, int handle, const struct packet *
 		ret = LB_STATUS_ERROR_INVALID;
 		goto out;
 	}
-
-	DbgPrint("pid[%d] pkgname[%s]\n", pid, pkgname);
 
 	/*!
 	 * \NOTE:
@@ -585,7 +547,6 @@ static struct packet *client_delete(pid_t pid, int handle, const struct packet *
 				 * So We have to make a delay to send a deleted event.
 				 */
 
-				DbgPrint("Client has PD\n");
 				item->client = client_ref(client);
 				item->inst = instance_ref(inst);
 
@@ -600,12 +561,10 @@ static struct packet *client_delete(pid_t pid, int handle, const struct packet *
 				}
 			}
 		} else {
-			DbgPrint("Client has no permission\n");
+			ErrPrint("Client has no permission\n");
 			ret = LB_STATUS_ERROR_PERMISSION;
 		}
 	} else {
-		DbgPrint("Ok. destroy instance\n");
-		//clear_pd_monitor(inst);
 		ret = instance_destroy(inst);
 	}
 
@@ -2747,8 +2706,6 @@ static struct packet *client_pd_access_hl_next(pid_t pid, int handle, const stru
 			goto out;
 		}
 
-		DbgPrint("Buffer type PD\n");
-
 		packet_ref((struct packet *)packet);
 		ret = slave_rpc_request_only(slave, pkgname, (struct packet *)packet, 0);
 	} else if (package_pd_type(pkg) == PD_TYPE_SCRIPT) {
@@ -2757,14 +2714,14 @@ static struct packet *client_pd_access_hl_next(pid_t pid, int handle, const stru
 
 		script = instance_pd_script(inst);
 		if (!script) {
-			DbgPrint("Script is not created yet\n");
+			ErrPrint("Script is not created yet\n");
 			ret = LB_STATUS_ERROR_FAULT;
 			goto out;
 		}
 
 		e = script_handler_evas(script);
 		if (!e) {
-			DbgPrint("Evas is not exists\n");
+			ErrPrint("Evas is not exists\n");
 			ret = LB_STATUS_ERROR_FAULT;
 			goto out;
 		}
@@ -2783,12 +2740,11 @@ static struct packet *client_pd_access_hl_next(pid_t pid, int handle, const stru
 				cbdata->status = ret;
 
 				if (!ecore_timer_add(DELAY_TIME, lazy_access_status_cb, cbdata)) {
-					DbgPrint("Failed to add timer\n");
+					ErrPrint("Failed to add timer\n");
 					(void)instance_unref(cbdata->inst);
 					DbgFree(cbdata);
 					ret = LB_STATUS_ERROR_FAULT;
 				} else {
-					DbgPrint("Timer is added\n");
 					ret = LB_STATUS_SUCCESS;
 				}
 			}
@@ -4581,7 +4537,7 @@ static Eina_Bool lazy_pd_created_cb(void *data)
 		if (instance_unref(data)) {
 			int ret;
 			ret = instance_client_pd_created(data, LB_STATUS_SUCCESS);
-			DbgPrint("Send PD Create event (%d)\n", ret);
+			DbgPrint("Send PD Create event (%d) to client\n", ret);
 		}
 	}
 
@@ -4594,7 +4550,7 @@ static Eina_Bool lazy_pd_destroyed_cb(void *data)
 		if (instance_unref(data)) {
 			int ret;
 			ret = instance_client_pd_destroyed(data, LB_STATUS_SUCCESS);
-			DbgPrint("Send PD Destroy event (%d)\n", ret);
+			DbgPrint("Send PD Destroy event (%d) to client\n", ret);
 		}
 	}
 
@@ -4692,6 +4648,8 @@ static struct packet *client_create_pd(pid_t pid, int handle, const struct packe
 	struct inst_info *inst;
 	double x;
 	double y;
+
+	DbgPrint("CREATE_PD\n");
 
 	client = client_find_by_pid(pid);
 	if (!client) {
@@ -5503,7 +5461,6 @@ static struct packet *slave_faulted(pid_t pid, int handle, const struct packet *
 	} else if (instance_state(inst) == INST_DESTROYED) {
 		ErrPrint("Instance(%s) is already destroyed\n", id);
 	} else {
-		//clear_pd_monitor(inst);
 		ret = instance_destroy(inst);
 	}
 
@@ -5935,7 +5892,6 @@ static struct packet *slave_deleted(pid_t pid, int handle, const struct packet *
 
 	ret = validate_request(pkgname, id, &inst, NULL);
 	if (ret == LB_STATUS_SUCCESS) {
-		//clear_pd_monitor(inst);
 		ret = instance_destroyed(inst);
 	}
 
@@ -6683,7 +6639,6 @@ static struct packet *liveinfo_pkg_ctrl(pid_t pid, int handle, const struct pack
 		if (!inst) {
 			fprintf(fp, "%d\n", ENOENT);
 		} else {
-			//clear_pd_monitor(inst);
 			(void)instance_destroy(inst);
 			fprintf(fp, "%d\n", 0);
 		}

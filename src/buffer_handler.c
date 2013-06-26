@@ -161,7 +161,6 @@ HAPI struct buffer_info *buffer_handler_create(struct inst_info *inst, enum buff
 	info->inst = inst;
 	info->buffer = NULL;
 
-	DbgPrint("%dx%d size buffer is created\n", w, h);
 	return info;
 }
 
@@ -191,8 +190,6 @@ static inline struct buffer *create_pixmap(struct buffer_info *info)
 	buffer->type = BUFFER_TYPE_PIXMAP;
 	buffer->refcnt = 1;
 	buffer->state = CREATED;
-
-	DbgPrint("Canvas %dx%d - %d is created\n", info->w, info->h, info->pixel_size);
 
 	gem->attachments[0] = DRI2BufferFrontLeft;
 	gem->count = 1;
@@ -251,12 +248,11 @@ static inline int create_gem(struct buffer *buffer)
 			return LB_STATUS_ERROR_MEMORY;
 		}
 
-		DbgPrint("DRI2(gem) is not supported - Fallback to the S/W Backend\n");
+		ErrPrint("DRI2(gem) is not supported - Fallback to the S/W Backend\n");
 		return LB_STATUS_SUCCESS;
 	}
 
 	DRI2CreateDrawable(disp, gem->pixmap);
-	DbgPrint("DRI2CreateDrawable is done\n");
 
 	gem->dri2_buffer = DRI2GetBuffers(disp, gem->pixmap,
 					&gem->w, &gem->h, gem->attachments, gem->count, &gem->buf_count);
@@ -265,11 +261,6 @@ static inline int create_gem(struct buffer *buffer)
 		DRI2DestroyDrawable(disp, gem->pixmap);
 		return LB_STATUS_ERROR_FAULT;
 	}
-	DbgPrint("dri2_buffer: %p, name: %p, %dx%d\n",
-				gem->dri2_buffer, gem->dri2_buffer->name, gem->w, gem->h);
-	DbgPrint("dri2_buffer->pitch : %d, buf_count: %d\n",
-				gem->dri2_buffer->pitch, gem->buf_count);
-
 	/*!
 	 * \How can I destroy this?
 	 */
@@ -282,14 +273,13 @@ static inline int create_gem(struct buffer *buffer)
 
 	if (gem->dri2_buffer->pitch != gem->w * gem->depth) {
 		gem->compensate_data = calloc(1, gem->w * gem->h * gem->depth);
-		if (!gem->compensate_data) {
+		if (!gem->compensate_data)
 			ErrPrint("Failed to allocate heap\n");
-		} else {
-			DbgPrint("Allocate compensate buffer %p(%dx%d %d)\n",
-								gem->compensate_data,
-								gem->w, gem->h, gem->depth);
-		}
 	}
+
+	DbgPrint("dri2_buffer: %p, name: %p, %dx%d, pitch: %d, buf_count: %d, depth: %d, compensate: %p\n",
+				gem->dri2_buffer, gem->dri2_buffer->name, gem->w, gem->h,
+				gem->dri2_buffer->pitch, gem->buf_count, gem->depth, gem->compensate_data);
 
 	return LB_STATUS_SUCCESS;
 }
@@ -303,10 +293,10 @@ static inline void *acquire_gem(struct buffer *buffer)
 
 	gem = (struct gem_data *)buffer->data;
 	if (s_info.fd < 0) {
-		DbgPrint("GEM is not supported - Use the fake gem buffer\n");
+		ErrPrint("GEM is not supported - Use the fake gem buffer\n");
 	} else {
 		if (!gem->pixmap_bo) {
-			DbgPrint("GEM is not created\n");
+			ErrPrint("GEM is not created\n");
 			return NULL;
 		}
 
@@ -339,7 +329,7 @@ static inline void release_gem(struct buffer *buffer)
 
 	gem = (struct gem_data *)buffer->data;
 	if (s_info.fd >= 0 && !gem->pixmap_bo) {
-		DbgPrint("GEM is not created\n");
+		ErrPrint("GEM is not created\n");
 		return;
 	}
 
@@ -385,7 +375,7 @@ static inline void release_gem(struct buffer *buffer)
 			gem->data = NULL;
 		}
 	} else if (gem->refcnt < 0) {
-		DbgPrint("Invalid refcnt: %d (reset)\n", gem->refcnt);
+		ErrPrint("Invalid refcnt: %d (reset)\n", gem->refcnt);
 		gem->refcnt = 0;
 	}
 }
@@ -403,7 +393,7 @@ static inline int destroy_pixmap(struct buffer *buffer)
 		if (!disp)
 			return LB_STATUS_ERROR_IO;
 
-		DbgPrint("Free pixmap 0x%X\n", gem->pixmap);
+		DbgPrint("pixmap 0x%X\n", gem->pixmap);
 		XFreePixmap(disp, gem->pixmap);
 	}
 
@@ -438,7 +428,6 @@ static inline int destroy_gem(struct buffer *buffer)
 			tbm_bo_unref(gem->pixmap_bo);
 			gem->pixmap_bo = NULL;
 
-			DbgPrint("DRI2DestroyDrawable\n");
 			DRI2DestroyDrawable(ecore_x_display_get(), gem->pixmap);
 		}
 	} else if (gem->data) {
@@ -606,7 +595,7 @@ HAPI int buffer_handler_load(struct buffer_info *info)
 	int ret;
 
 	if (!info) {
-		DbgPrint("buffer handler is nil\n");
+		ErrPrint("buffer handler is nil\n");
 		return LB_STATUS_ERROR_INVALID;
 	}
 
@@ -738,7 +727,7 @@ HAPI int buffer_handler_unload(struct buffer_info *info)
 	int ret;
 
 	if (!info) {
-		DbgPrint("buffer handler is NIL\n");
+		ErrPrint("buffer handler is NIL\n");
 		return LB_STATUS_ERROR_INVALID;
 	}
 
@@ -814,10 +803,13 @@ HAPI void *buffer_handler_fb(struct buffer_info *info)
 		int ret;
 
 		/*!
+		 * \note
+		 * For getting the buffer address of gem.
 		 */
 		canvas = buffer_handler_pixmap_acquire_buffer(info);
 		ret = buffer_handler_pixmap_release_buffer(canvas);
-		DbgPrint("Canvas %p(%d) (released but still in use)\n", canvas, ret);
+		if (ret < 0)
+			ErrPrint("Failed to release buffer: %d\n", ret);
 		return canvas;
 	}
 
@@ -909,7 +901,7 @@ HAPI void *buffer_handler_pixmap_ref(struct buffer_info *info)
 
 		buffer = create_pixmap(info);
 		if (!buffer) {
-			DbgPrint("Failed to create a pixmap\n");
+			ErrPrint("Failed to create a pixmap\n");
 			return NULL;
 		}
 
@@ -1264,19 +1256,19 @@ HAPI int buffer_handler_init(void)
 	drm_magic_t magic;
 
 	if (!DRI2QueryExtension(ecore_x_display_get(), &s_info.evt_base, &s_info.err_base)) {
-		DbgPrint("DRI2 is not supported\n");
+		ErrPrint("DRI2 is not supported\n");
 		return LB_STATUS_SUCCESS;
 	}
 
 	if (!DRI2QueryVersion(ecore_x_display_get(), &dri2Major, &dri2Minor)) {
-		DbgPrint("DRI2 is not supported\n");
+		ErrPrint("DRI2 is not supported\n");
 		s_info.evt_base = 0;
 		s_info.err_base = 0;
 		return LB_STATUS_SUCCESS;
 	}
 
 	if (!DRI2Connect(ecore_x_display_get(), DefaultRootWindow(ecore_x_display_get()), &driverName, &deviceName)) {
-		DbgPrint("DRI2 is not supported\n");
+		ErrPrint("DRI2 is not supported\n");
 		s_info.evt_base = 0;
 		s_info.err_base = 0;
 		return LB_STATUS_SUCCESS;
@@ -1295,7 +1287,7 @@ HAPI int buffer_handler_init(void)
 	DbgFree(deviceName);
 	DbgFree(driverName);
 	if (s_info.fd < 0) {
-		DbgPrint("Failed to open a drm device: (%s)\n", strerror(errno));
+		ErrPrint("Failed to open a drm device: (%s)\n", strerror(errno));
 		s_info.evt_base = 0;
 		s_info.err_base = 0;
 		return LB_STATUS_SUCCESS;
@@ -1304,7 +1296,7 @@ HAPI int buffer_handler_init(void)
 	drmGetMagic(s_info.fd, &magic);
 	DbgPrint("DRM Magic: 0x%X\n", magic);
 	if (!DRI2Authenticate(ecore_x_display_get(), DefaultRootWindow(ecore_x_display_get()), (unsigned int)magic)) {
-		DbgPrint("Failed to do authenticate for DRI2\n");
+		ErrPrint("Failed to do authenticate for DRI2\n");
 		if (close(s_info.fd) < 0)
 			ErrPrint("close: %s\n", strerror(errno));
 		s_info.fd = -1;
@@ -1315,7 +1307,7 @@ HAPI int buffer_handler_init(void)
 
 	s_info.slp_bufmgr = tbm_bufmgr_init(s_info.fd);
 	if (!s_info.slp_bufmgr) {
-		DbgPrint("Failed to init bufmgr\n");
+		ErrPrint("Failed to init bufmgr\n");
 		if (close(s_info.fd) < 0)
 			ErrPrint("close: %s\n", strerror(errno));
 		s_info.fd = -1;

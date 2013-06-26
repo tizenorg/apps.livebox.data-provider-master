@@ -223,10 +223,8 @@ static Eina_Bool client_cb(void *data, int type, void *event)
 		return ECORE_CALLBACK_PASS_ON;
 
 	if (!strcmp(name, "_X_ILLUME_DEACTIVATE_WINDOW")) {
-		DbgPrint("PAUSE EVENT\n");
 		xmonitor_pause(client);
 	} else if (!strcmp(name, "_X_ILLUME_ACTIVATE_WINDOW")) {
-		DbgPrint("RESUME EVENT\n");
 		xmonitor_resume(client);
 	} else {
 		/* ignore event */

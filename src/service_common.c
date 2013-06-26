@@ -136,7 +136,7 @@ static void *client_packet_pump_main(void *data)
 		if (ret < 0) {
 			ret = -errno;
 			if (errno == EINTR) {
-				DbgPrint("INTERRUPTED\n");
+				ErrPrint("INTERRUPTED\n");
 				ret = 0;
 				continue;
 			}

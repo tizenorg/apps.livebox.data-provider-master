@@ -205,7 +205,6 @@ HAPI struct cluster *group_create_cluster(const char *name)
 
 	cluster->category_list = NULL;
 
-	DbgPrint("Cluster %s is created\n", cluster->name);
 	s_info.cluster_list = eina_list_append(s_info.cluster_list, cluster);
 	return cluster;
 }
@@ -243,7 +242,6 @@ HAPI struct category *group_create_category(struct cluster *cluster, const char 
 	category->cluster = cluster;
 	category->info_list = NULL;
 
-	DbgPrint("Category %s is created\n", category->name);
 	cluster->category_list = eina_list_append(cluster->category_list, category);
 	return category;
 }
@@ -258,7 +256,6 @@ static inline void destroy_cluster(struct cluster *cluster)
 		group_destroy_category(category);
 	}
 
-	DbgPrint("Destroy cluster: %s\n", cluster->name);
 	DbgFree(cluster->name);
 	DbgFree(cluster);
 }
@@ -290,7 +287,6 @@ static inline void destroy_category(struct category *category)
 		group_destroy_context_info(info);
 	}
 
-	DbgPrint("Destroy category: %s\n", category->name);
 	DbgFree(category->name);
 	DbgFree(category);
 }
@@ -653,7 +649,6 @@ HAPI int group_add_livebox(const char *group, const char *pkgname)
 						DbgFree(name);
 						return LB_STATUS_ERROR_FAULT;
 					}
-					DbgPrint("Keep this syntax only for the compatibility\n");
 				} else if (is_open == 2) {
 					item = group_add_context_item(info, name);
 					if (!item) {
@@ -748,7 +743,6 @@ HAPI int group_add_livebox(const char *group, const char *pkgname)
 					return LB_STATUS_ERROR_FAULT;
 				}
 
-				DbgPrint("Keep this syntax only for the compatibility: %s\n", name);
 				state = CLUSTER;
 				break;
 			case CONTEXT_ITEM:
@@ -770,7 +764,6 @@ HAPI int group_add_livebox(const char *group, const char *pkgname)
 						return LB_STATUS_ERROR_FAULT;
 					}
 
-					DbgPrint("Keep this syntax only for the compatibility: %s\n", name);
 					state = CLUSTER;
 				} else if (is_open == 2) {
 					state = CATEGORY;

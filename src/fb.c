@@ -51,8 +51,6 @@ static void *alloc_fb(void *data, int size)
 {
 	struct fb_info *info = data;
 
-	DbgPrint("FB size: %d\n", size);
-
 	if (buffer_handler_load(info->buffer) < 0) {
 		ErrPrint("Failed to load buffer handler\n");
 		return NULL;
@@ -149,7 +147,6 @@ HAPI int fb_create_buffer(struct fb_info *info)
 	Evas *e;
 
 	buffer_handler_get_size(info->buffer, &ow, &oh);
-	DbgPrint("Buffer handler size: %dx%d\n", ow, oh);
 	if (ow == 0 && oh == 0) {
 		DbgPrint("ZERO Size FB accessed\n");
 		return LB_STATUS_SUCCESS;

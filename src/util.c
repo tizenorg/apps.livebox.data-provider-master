@@ -373,7 +373,6 @@ HAPI double util_time_delay_for_compensation(double period)
 	remain = curtime % _period;
 
 	ret = (double)remain / (double)1000000;
-	DbgPrint("curtime: %llu, _period: %llu, remain: %llu, ret: %lf, result: %lf\n", curtime, _period, remain, ret, period - ret);
 	return period - ret;
 }
 

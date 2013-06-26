@@ -96,7 +96,6 @@ static inline int load_abi_table(void)
 					state = ERROR;
 				} else {
 					group[idx] = '\0';
-					DbgPrint("group: %s\n", group);
 					state = TAG;
 					idx = 0;
 					ptr = NULL;
@@ -137,7 +136,6 @@ static inline int load_abi_table(void)
 				tag_id = idx;
 				idx = 0;
 				ptr = NULL;
-				DbgPrint("tag: %s\n", field[tag_id]);
 			} else if (*ptr == ch) {
 				ptr++;
 			} else {
@@ -163,9 +161,7 @@ static inline int load_abi_table(void)
 				} else if (isspace(ch)) {
 					int ret;
 					pkgname[idx] = '\0';
-					DbgPrint("value: %s\n", pkgname);
 
-					DbgPrint("Add [%s] - [%s]\n", group, pkgname);
 					ret = abi_add_entry(group, pkgname);
 					if (ret != 0)
 						ErrPrint("Failed to add %s for %s\n", pkgname, group);
@@ -196,8 +192,6 @@ static inline int load_abi_table(void)
 			if (idx) {
 				int ret;
 				pkgname[idx] = '\0';
-				DbgPrint("value: %s\n", pkgname);
-				DbgPrint("Add [%s] - [%s]\n", group, pkgname);
 				ret = abi_add_entry(group, pkgname);
 				if (ret != 0)
 					ErrPrint("Failed to add %s for %s\n", pkgname, group);
@@ -315,7 +309,6 @@ static inline int build_provider_info(struct pkg_info *info)
 	tmp = (const char *)sqlite3_column_text(stmt, 4);
 	if (tmp && strlen(tmp)) {
 		package_set_lb_path(info, tmp);
-		DbgPrint("LB Path: %s\n", tmp);
 
 		tmp = (const char *)sqlite3_column_text(stmt, 5);
 		if (tmp && strlen(tmp))
@@ -326,7 +319,6 @@ static inline int build_provider_info(struct pkg_info *info)
 	tmp = (const char *)sqlite3_column_text(stmt, 7);
 	if (tmp && strlen(tmp)) {
 		package_set_pd_path(info, tmp);
-		DbgPrint("PD Path: %s\n", tmp);
 
 		tmp = (const char *)sqlite3_column_text(stmt, 8);
 		if (tmp && strlen(tmp))

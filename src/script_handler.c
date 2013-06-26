@@ -166,7 +166,7 @@ static void render_pre_cb(void *data, Evas *e, void *event_info)
 	struct script_info *info;
 
 	if (instance_state(inst) != INST_ACTIVATED) {
-		DbgPrint("Render pre invoked but instance is not activated\n");
+		ErrPrint("Render pre invoked but instance is not activated\n");
 		return;
 	}
 
@@ -192,7 +192,7 @@ static void render_post_cb(void *data, Evas *e, void *event_info)
 	inst = data;
 
 	if (instance_state(inst) != INST_ACTIVATED) {
-		DbgPrint("Render post invoked but instance is not activated\n");
+		ErrPrint("Render post invoked but instance is not activated\n");
 		return;
 	}
 
@@ -350,7 +350,7 @@ HAPI struct script_info *script_handler_create(struct inst_info *inst, const cha
 {
 	struct script_info *info;
 
-	DbgPrint("Create script: %s (%s)\n", file, option);
+	DbgPrint("Create script: %s (%s) %dx%d\n", file, option, w, h);
 
 	if (!file)
 		return NULL;
@@ -378,7 +378,6 @@ HAPI struct script_info *script_handler_create(struct inst_info *inst, const cha
 		return NULL;
 	}
 
-	DbgPrint("Update info [%dx%d]\n", w, h);
 	info->w = w;
 	info->h = h;
 

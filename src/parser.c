@@ -177,7 +177,7 @@ HAPI int parser_find(const char *pkgname)
 		return LB_STATUS_ERROR_FAULT;
 	}
 
-	DbgPrint("Conf file is %s for package %s\n", filename, pkgname);
+	DbgPrint("Conf file %s for package %s\n", filename, pkgname);
 
 	EINA_LIST_FOREACH(s_list, l, item) {
 		if (!strcmp(item->filename, filename)) {
@@ -671,10 +671,8 @@ HAPI struct parser *parser_load(const char *pkgname)
 	linelen = 0;
 	do {
 		c = getc(fp);
-		if ((c == EOF) && (state == VALUE)) {
-			DbgPrint("[%s:%d] VALUE state EOF\n", __func__, __LINE__);
+		if ((c == EOF) && (state == VALUE))
 			state = END;
-		}
 
 		switch (state) {
 		case COMMENT:

@@ -100,13 +100,11 @@ static void conf_update_size(void)
 static void use_xmonitor(char *buffer)
 {
 	g_conf.use_xmonitor = !strcasecmp(buffer, "true");
-	DbgPrint("Use xmonitor: %d\n", g_conf.use_xmonitor);
 }
 
 static void use_sw_backend_handler(char *buffer)
 {
 	g_conf.use_sw_backend = !strcasecmp(buffer, "true");
-	DbgPrint("SW Backend: %d\n", g_conf.use_sw_backend);
 }
 
 static void provider_method_handler(char *buffer)
@@ -114,41 +112,33 @@ static void provider_method_handler(char *buffer)
 	g_conf.provider_method = strdup(buffer);
 	if (!g_conf.provider_method)
 		ErrPrint("Heap: %s\n", strerror(errno));
-
-	DbgPrint("Method: %s\n", g_conf.provider_method);
 }
 
 static void debug_mode_handler(char *buffer)
 {
 	g_conf.debug_mode = !strcasecmp(buffer, "true");
-	DbgPrint("Debug mode: %d\n", g_conf.debug_mode);
 }
 
 static void overwrite_content_handler(char *buffer)
 {
 	g_conf.overwrite_content = !strcasecmp(buffer, "true");
-	DbgPrint("Overwrite Content: %d\n", g_conf.overwrite_content);
 }
 
 static void com_core_thread_handler(char *buffer)
 {
 	g_conf.com_core_thread = !strcasecmp(buffer, "true");
-	DbgPrint("Com core thread: %d\n", g_conf.com_core_thread);
 }
 
 static void base_width_handler(char *buffer)
 {
 	if (sscanf(buffer, "%d", &g_conf.base_width) != 1)
 		ErrPrint("Failed to parse the base_width\n");
-
-	DbgPrint("Base width: %d\n", g_conf.base_width);
 }
 
 static void base_height_handler(char *buffer)
 {
 	if (sscanf(buffer, "%d", &g_conf.base_height) != 1)
 		ErrPrint("Failed to parse the base_height\n");
-	DbgPrint("Base height: %d\n", g_conf.base_height);
 }
 
 static void minimum_period_handler(char *buffer)
@@ -163,7 +153,6 @@ static void script_handler(char *buffer)
 	g_conf.default_conf.script = strdup(buffer);
 	if (!g_conf.default_conf.script)
 		ErrPrint("Heap: %s\n", strerror(errno));
-	DbgPrint("Default script: %s\n", g_conf.default_conf.script);
 }
 
 static void default_abi_handler(char *buffer)
@@ -171,7 +160,6 @@ static void default_abi_handler(char *buffer)
 	g_conf.default_conf.abi = strdup(buffer);
 	if (!g_conf.default_conf.abi)
 		ErrPrint("Heap: %s\n", strerror(errno));
-	DbgPrint("Default ABI: %s\n", g_conf.default_conf.abi);
 }
 
 static void default_group_handler(char *buffer)
@@ -179,7 +167,6 @@ static void default_group_handler(char *buffer)
 	g_conf.default_conf.pd_group = strdup(buffer);
 	if (!g_conf.default_conf.pd_group)
 		ErrPrint("Heap: %s\n", strerror(errno));
-	DbgPrint("Default PD Group: %s\n", g_conf.default_conf.pd_group);
 }
 
 static void default_period_handler(char *buffer)
@@ -201,7 +188,6 @@ static void default_content_handler(char *buffer)
 	g_conf.default_content = strdup(buffer);
 	if (!g_conf.default_content)
 		ErrPrint("Heap: %s\n", strerror(errno));
-	DbgPrint("Default content: %s\n", g_conf.default_content);
 }
 
 static void default_title_handler(char *buffer)
@@ -209,14 +195,12 @@ static void default_title_handler(char *buffer)
 	g_conf.default_title = strdup(buffer);
 	if (!g_conf.default_title)
 		ErrPrint("Heap: %s\n", strerror(errno));
-	DbgPrint("Default title: %s\n", g_conf.default_title);
 }
 
 static void minimum_space_handler(char *buffer)
 {
 	if (sscanf(buffer, "%lu", &g_conf.minimum_space) != 1)
 		ErrPrint("Failed to parse the minimum_space\n");
-	DbgPrint("Minimum space: %lu\n", g_conf.minimum_space);
 }
 
 static void replace_tag_handler(char *buffer)
@@ -224,7 +208,6 @@ static void replace_tag_handler(char *buffer)
 	g_conf.replace_tag = strdup(buffer);
 	if (!g_conf.replace_tag)
 		ErrPrint("Heap: %s\n", strerror(errno));
-	DbgPrint("Replace Tag: %s\n", g_conf.replace_tag);
 }
 
 static void slave_ttl_handler(char *buffer)
@@ -245,21 +228,18 @@ static void max_log_line_handler(char *buffer)
 {
 	if (sscanf(buffer, "%d", &g_conf.max_log_line) != 1)
 		ErrPrint("Failed to parse the max_log_line\n");
-	DbgPrint("Max log line: %d\n", g_conf.max_log_line);
 }
 
 static void max_log_file_handler(char *buffer)
 {
 	if (sscanf(buffer, "%d", &g_conf.max_log_file) != 1)
 		ErrPrint("Failed to parse the max_log_file\n");
-	DbgPrint("Max log file: %d\n", g_conf.max_log_file);
 }
 
 static void sqlite_flush_max_handler(char *buffer)
 {
 	if (sscanf(buffer, "%lu", &g_conf.sqlite_flush_max) != 1)
 		ErrPrint("Failed to parse the sqlite_flush_max\n");
-	DbgPrint("Flush size: %lu\n", g_conf.sqlite_flush_max);
 }
 
 static void db_path_handler(char *buffer)
@@ -267,7 +247,6 @@ static void db_path_handler(char *buffer)
 	g_conf.path.db = strdup(buffer);
 	if (!g_conf.path.db)
 		ErrPrint("Heap: %s\n", strerror(errno));
-	DbgPrint("DB Path: %s\n", g_conf.path.db);
 }
 
 static void reader_path_handler(char *buffer)
@@ -275,7 +254,6 @@ static void reader_path_handler(char *buffer)
 	g_conf.path.reader = strdup(buffer);
 	if (!g_conf.path.reader)
 		ErrPrint("Heap: %s\n", strerror(errno));
-	DbgPrint("Reader Path: %s\n", g_conf.path.reader);
 }
 
 static void always_path_handler(char *buffer)
@@ -283,7 +261,6 @@ static void always_path_handler(char *buffer)
 	g_conf.path.always = strdup(buffer);
 	if (!g_conf.path.always)
 		ErrPrint("Heap: %s\n", strerror(errno));
-	DbgPrint("Always Path: %s\n", g_conf.path.always);
 }
 
 static void log_path_handler(char *buffer)
@@ -291,7 +268,6 @@ static void log_path_handler(char *buffer)
 	g_conf.path.slave_log = strdup(buffer);
 	if (!g_conf.path.slave_log)
 		ErrPrint("Heap: %s\n", strerror(errno));
-	DbgPrint("LOG Path: %s\n", g_conf.path.slave_log);
 }
 
 static void script_port_path_handler(char *buffer)
@@ -299,7 +275,6 @@ static void script_port_path_handler(char *buffer)
 	g_conf.path.script_port = strdup(buffer);
 	if (!g_conf.path.script_port)
 		ErrPrint("Heap: %s\n", strerror(errno));
-	DbgPrint("Script Port PATH: %s\n", g_conf.path.script_port);
 }
 
 static void share_path_handler(char *buffer)
@@ -307,7 +282,6 @@ static void share_path_handler(char *buffer)
 	g_conf.path.image = strdup(buffer);
 	if (!g_conf.path.image)
 		ErrPrint("Heap: %s\n", strerror(errno));
-	DbgPrint("Shared folder: %s\n", g_conf.path.image);
 }
 
 static void input_path_handler(char *buffer)
@@ -315,7 +289,6 @@ static void input_path_handler(char *buffer)
 	g_conf.path.input = strdup(buffer);
 	if (!g_conf.path.input)
 		ErrPrint("Heap: %s\n", strerror(errno));
-	DbgPrint("Input device: %s\n", g_conf.path.input);
 }
 
 static void ping_time_handler(char *buffer)
@@ -329,7 +302,6 @@ static void slave_max_loader(char *buffer)
 {
 	if (sscanf(buffer, "%d", &g_conf.slave_max_load) != 1)
 		ErrPrint("Failed to parse the slave_max_load\n");
-	DbgPrint("Max load: %d\n", g_conf.slave_max_load);
 }
 
 static void pd_request_timeout_handler(char *buffer)
@@ -638,7 +610,6 @@ HAPI int conf_loader(void)
 
 				if (token_idx >= 0 && token_handler[token_idx].handler) {
 					buffer[buffer_idx] = '\0';
-					DbgPrint("BUFFER: [%s]\n", buffer);
 					token_handler[token_idx].handler(buffer);
 				}
 

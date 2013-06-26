@@ -48,7 +48,6 @@ static struct info {
 	int evt_pipe[PIPE_MAX];
 	int tcb_pipe[PIPE_MAX];
 	Ecore_Fd_Handler *event_handler;
-	Ecore_Fd_Handler *tcb_handler;
 
 	int (*event_cb)(enum event_state state, struct event_data *event, void *data);
 	void *cbdata;
@@ -203,14 +202,17 @@ static void *event_thread_main(void *data)
 	char *ptr = (char *)&input_event;
 	int offset = 0;
 	int readsize = 0;
-	char event_ch = EVENT_CH;
+	int fd;
 
 	DbgPrint("Initiated\n");
 
 	while (1) {
 		FD_ZERO(&set);
 		FD_SET(s_info.handle, &set);
-		ret = select(s_info.handle + 1, &set, NULL, NULL, NULL);
+		FD_SET(s_info.tcb_pipe[PIPE_READ], &set);
+
+		fd = s_info.handle > s_info.tcb_pipe[PIPE_READ] ? s_info.handle : s_info.tcb_pipe[PIPE_READ];
+		ret = select(fd + 1, &set, NULL, NULL, NULL);
 		if (ret < 0) {
 			ret = -errno;
 			if (errno == EINTR) {
@@ -225,105 +227,36 @@ static void *event_thread_main(void *data)
 			break;
 		}
 
-		if (!FD_ISSET(s_info.handle, &set)) {
-			ErrPrint("Unexpected handle is toggled\n");
-			ret = LB_STATUS_ERROR_INVALID;
-			break;
-		}
-
-		readsize = read(s_info.handle, ptr + offset, sizeof(input_event) - offset);
-		if (readsize < 0) {
-			ErrPrint("Unable to read device: %s / fd: %d / offset: %d / size: %d - %d\n", strerror(errno), s_info.handle, offset, sizeof(input_event), readsize);
-			ret = LB_STATUS_ERROR_FAULT;
-			break;
-		}
-
-		offset += readsize;
-		if (offset == sizeof(input_event)) {
-			offset = 0;
-			if (processing_input_event(&input_event) < 0) {
+		if (FD_ISSET(s_info.handle, &set)) {
+			readsize = read(s_info.handle, ptr + offset, sizeof(input_event) - offset);
+			if (readsize < 0) {
+				ErrPrint("Unable to read device: %s / fd: %d / offset: %d / size: %d - %d\n", strerror(errno), s_info.handle, offset, sizeof(input_event), readsize);
 				ret = LB_STATUS_ERROR_FAULT;
 				break;
 			}
+
+			offset += readsize;
+			if (offset == sizeof(input_event)) {
+				offset = 0;
+				if (processing_input_event(&input_event) < 0) {
+					ret = LB_STATUS_ERROR_FAULT;
+					break;
+				}
+			}
+		}
+
+		if (FD_ISSET(s_info.tcb_pipe[PIPE_READ], &set)) {
+			char event_ch;
+
+			if (read(s_info.tcb_pipe[PIPE_READ], &event_ch, sizeof(event_ch)) != sizeof(event_ch))
+				ErrPrint("Unable to read TCB_PIPE: %s\n", strerror(errno));
+
+			ret = LB_STATUS_ERROR_CANCEL;
+			break;
 		}
 	}
-
-	if (write(s_info.tcb_pipe[PIPE_WRITE], &event_ch, sizeof(event_ch)) != sizeof(event_ch))
-		ErrPrint("Unable to write PIPE: %s\n", strerror(errno));
 
 	return (void *)ret;
-}
-
-static inline int reclaim_tcb_resources(void)
-{
-	int status;
-	struct event_data *event;
-	void *ret;
-
-	if (close(s_info.handle) < 0)
-		ErrPrint("Unable to release the fd: %s\n", strerror(errno));
-
-	s_info.handle = -1;
-	DbgPrint("Event handler deactivated\n");
-
-	status = pthread_join(s_info.tid, &ret);
-	if (status != 0)
-		ErrPrint("Failed to join a thread: %s\n", strerror(errno));
-	else
-		DbgPrint("Thread returns: %d\n", (int)ret);
-
-	ecore_main_fd_handler_del(s_info.event_handler);
-	s_info.event_handler = NULL;
-
-	ecore_main_fd_handler_del(s_info.tcb_handler);
-	s_info.tcb_handler = NULL;
-
-	CLOSE_PIPE(s_info.tcb_pipe);
-	CLOSE_PIPE(s_info.evt_pipe);
-
-	EINA_LIST_FREE(s_info.event_list, event) {
-		if (s_info.event_cb) {
-			if (s_info.event_state == EVENT_STATE_DEACTIVATE) {
-				s_info.event_state = EVENT_STATE_ACTIVATE;
-			} else if (s_info.event_state == EVENT_STATE_ACTIVATE) {
-				s_info.event_state = EVENT_STATE_ACTIVATED;
-			}
-			s_info.event_cb(s_info.event_state, event, s_info.cbdata);
-		}
-		free(event);
-	}
-
-	if (s_info.event_state != EVENT_STATE_DEACTIVATE) {
-		s_info.event_state = EVENT_STATE_DEACTIVATE;
-
-		if (s_info.event_cb)
-			s_info.event_cb(s_info.event_state, &s_info.event_data, s_info.cbdata);
-	}
-
-	s_info.event_data.x = -1;
-	s_info.event_data.y = -1;
-	return LB_STATUS_SUCCESS;
-}
-
-static Eina_Bool event_deactivate_cb(void *data, Ecore_Fd_Handler *handler)
-{
-	int fd;
-	char event_ch;
-
-	fd = ecore_main_fd_handler_fd_get(handler);
-	if (fd < 0) {
-		ErrPrint("Invalid fd\n");
-		return ECORE_CALLBACK_CANCEL;
-	}
-
-	if (read(fd, &event_ch, sizeof(event_ch)) != sizeof(event_ch)) {
-		ErrPrint("Unable to read event ch: %s\n", strerror(errno));
-		return ECORE_CALLBACK_CANCEL;
-	}
-
-	DbgPrint("Deactivated event received: %c\n", event_ch);
-	reclaim_tcb_resources();
-	return ECORE_CALLBACK_CANCEL;
 }
 
 static Eina_Bool event_read_cb(void *data, Ecore_Fd_Handler *handler)
@@ -424,28 +357,11 @@ HAPI int event_activate(int x, int y, int (*event_cb)(enum event_state state, st
 		return LB_STATUS_ERROR_FAULT;
 	}
 
-	s_info.tcb_handler = ecore_main_fd_handler_add(s_info.tcb_pipe[PIPE_READ], ECORE_FD_READ, event_deactivate_cb, NULL, NULL, NULL);
-	if (!s_info.event_handler) {
-		ecore_main_fd_handler_del(s_info.event_handler);
-		s_info.event_handler = NULL;
-
-		if (close(s_info.handle) < 0)
-			ErrPrint("Failed to close handle: %s\n", strerror(errno));
-		s_info.handle = -1;
-
-		CLOSE_PIPE(s_info.tcb_pipe);
-		CLOSE_PIPE(s_info.evt_pipe);
-		return LB_STATUS_ERROR_FAULT;
-	}
-
 	status = pthread_create(&s_info.tid, NULL, event_thread_main, NULL);
 	if (status != 0) {
 		ErrPrint("Failed to initiate the thread: %s\n", strerror(status));
 		ecore_main_fd_handler_del(s_info.event_handler);
 		s_info.event_handler = NULL;
-
-		ecore_main_fd_handler_del(s_info.tcb_handler);
-		s_info.tcb_handler = NULL;
 
 		if (close(s_info.handle) < 0)
 			ErrPrint("close: %s\n", strerror(errno));
@@ -467,12 +383,59 @@ HAPI int event_activate(int x, int y, int (*event_cb)(enum event_state state, st
 
 HAPI int event_deactivate(void)
 {
+	int status;
+	struct event_data *event;
+	void *ret;
+	char event_ch = EVENT_CH;
+
 	if (s_info.handle < 0) {
 		ErrPrint("Event handler is not actiavated\n");
 		return LB_STATUS_SUCCESS;
 	}
 
-	return reclaim_tcb_resources();
+	if (write(s_info.tcb_pipe[PIPE_WRITE], &event_ch, sizeof(event_ch)) != sizeof(event_ch))
+		ErrPrint("Unable to write tcb_pipe: %s\n", strerror(errno));
+
+	status = pthread_join(s_info.tid, &ret);
+	if (status != 0)
+		ErrPrint("Failed to join a thread: %s\n", strerror(errno));
+	else
+		DbgPrint("Thread returns: %d\n", (int)ret);
+
+	ecore_main_fd_handler_del(s_info.event_handler);
+	s_info.event_handler = NULL;
+
+	if (close(s_info.handle) < 0)
+		ErrPrint("Unable to release the fd: %s\n", strerror(errno));
+
+	s_info.handle = -1;
+	DbgPrint("Event handler deactivated\n");
+
+	CLOSE_PIPE(s_info.tcb_pipe);
+	CLOSE_PIPE(s_info.evt_pipe);
+
+	EINA_LIST_FREE(s_info.event_list, event) {
+		if (s_info.event_cb) {
+			if (s_info.event_state == EVENT_STATE_DEACTIVATE) {
+				s_info.event_state = EVENT_STATE_ACTIVATE;
+			} else if (s_info.event_state == EVENT_STATE_ACTIVATE) {
+				s_info.event_state = EVENT_STATE_ACTIVATED;
+			}
+			s_info.event_cb(s_info.event_state, event, s_info.cbdata);
+		}
+		free(event);
+	}
+
+	if (s_info.event_state != EVENT_STATE_DEACTIVATE) {
+		s_info.event_state = EVENT_STATE_DEACTIVATE;
+
+		if (s_info.event_cb)
+			s_info.event_cb(s_info.event_state, &s_info.event_data, s_info.cbdata);
+	}
+
+	s_info.event_data.x = -1;
+	s_info.event_data.y = -1;
+	return LB_STATUS_SUCCESS;
 }
 
 HAPI int event_is_activated(void)

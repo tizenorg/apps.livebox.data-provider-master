@@ -122,7 +122,6 @@ HAPI void fault_unicast_info(struct client_node *client, const char *pkgname, co
 		return;
 
 	client_rpc_async_request(client, packet);
-	DbgPrint("Fault package: %s\n", pkgname);
 }
 
 HAPI void fault_broadcast_info(const char *pkgname, const char *filename, const char *func)
@@ -136,7 +135,6 @@ HAPI void fault_broadcast_info(const char *pkgname, const char *filename, const 
 	}
 
 	client_broadcast(NULL, packet);
-	DbgPrint("Fault package: %s\n", pkgname);
 }
 
 static inline void dump_fault_info(const char *name, pid_t pid, const char *pkgname, const char *filename, const char *funcname)

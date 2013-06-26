@@ -223,10 +223,8 @@ static int xmonitor_paused_cb(void *data)
 	struct inst_info *inst;
 	Eina_List *l;
 
-	if (slave_state(info->slave) != SLAVE_TERMINATED) {
-		DbgPrint("Skip this\n");
+	if (slave_state(info->slave) != SLAVE_TERMINATED)
 		return 0;
-	}
 
 	EINA_LIST_FOREACH(info->inst_list, l, inst) {
 		instance_freeze_updator(inst);
@@ -241,10 +239,8 @@ static int xmonitor_resumed_cb(void *data)
 	struct inst_info *inst;
 	Eina_List *l;
 
-	if (slave_state(info->slave) != SLAVE_TERMINATED) {
-		DbgPrint("Skip this\n");
+	if (slave_state(info->slave) != SLAVE_TERMINATED)
 		return 0;
-	}
 
 	EINA_LIST_FOREACH(info->inst_list, l, inst) {
 		instance_thaw_updator(inst);
@@ -1057,7 +1053,6 @@ static inline int assign_new_slave(struct pkg_info *info)
 		return LB_STATUS_ERROR_INVALID;
 	}
 
-	DbgPrint("Slave package: \"%s\" (abi: %s)\n", tmp, info->abi);
 	s_pkgname = util_replace_string(tmp, REPLACE_TAG_APPID, info->pkgname);
 	if (!s_pkgname) {
 		DbgPrint("Failed to get replaced string\n");
@@ -1069,7 +1064,7 @@ static inline int assign_new_slave(struct pkg_info *info)
 		}
 	}
 
-	DbgPrint("New slave name is %s, it is assigned for livebox %s (using %s)\n", s_name, info->pkgname, s_pkgname);
+	DbgPrint("New slave[%s] is assigned for %s (using %s / abi[%s])\n", s_name, info->pkgname, s_pkgname, info->abi);
 	info->slave = slave_create(s_name, info->secured, info->abi, s_pkgname, info->network);
 
 	DbgFree(s_name);
@@ -1104,7 +1099,7 @@ HAPI int package_add_instance(struct pkg_info *info, struct inst_info *inst)
 			if (ret < 0)
 				return ret;
 		} else {
-			DbgPrint("Slave %s is assigned for %s\n", slave_name(info->slave), info->pkgname);
+			DbgPrint("Slave %s is used for %s\n", slave_name(info->slave), info->pkgname);
 		}
 
 		slave_ref(info->slave);
@@ -1225,7 +1220,7 @@ static int io_uninstall_cb(const char *pkgname, int prime, void *data)
 	Eina_List *n;
 	struct inst_info *inst;
 
-	DbgPrint("Livebox package %s is uninstalled\n", pkgname);
+	DbgPrint("Package %s is uninstalled\n", pkgname);
 	info = package_find(pkgname);
 	if (!info) {
 		DbgPrint("%s is not yet loaded\n", pkgname);
@@ -1300,7 +1295,6 @@ static int install_cb(const char *pkgname, enum pkgmgr_status status, double val
 		return 0;
 
 	ret = io_update_livebox_package(pkgname, io_install_cb, NULL);
-	DbgPrint("Processed %d packages\n", ret);
 	return 0;
 }
 
@@ -1310,7 +1304,6 @@ static int uninstall_cb(const char *pkgname, enum pkgmgr_status status, double v
 
 	if (status == PKGMGR_STATUS_START) {
 		ret = io_update_livebox_package(pkgname, io_uninstall_cb, NULL);
-		DbgPrint("Processed %d packages\n", ret);
 		if (ret == 0) {
 			/*! for keeping the old style */
 			(void)io_uninstall_cb(pkgname, -1, NULL);
@@ -1340,7 +1333,6 @@ static int update_cb(const char *pkgname, enum pkgmgr_status status, double valu
 		return 0;
 
 	ret = io_update_livebox_package(pkgname, io_update_cb, NULL);
-	DbgPrint("Processed %d packages\n", ret);
 	return 0;
 }
 

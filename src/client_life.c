@@ -170,8 +170,6 @@ static inline void destroy_client_data(struct client_node *client)
 	struct data_item *data;
 	struct subscribe_item *item;
 
-	DbgPrint("Client %p is destroyed\n", client);
-
 	invoke_global_destroyed_cb(client);
 	client_rpc_fini(client); /*!< Finalize the RPC after invoke destroy callbacks */
 

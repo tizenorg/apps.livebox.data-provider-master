@@ -571,22 +571,19 @@ static inline int load_pixmap_buffer(struct buffer_info *info)
 	len = strlen(SCHEMA_PIXMAP) + 30; /* strlen("pixmap://") + 30 */
 	new_id = malloc(len);
 	if (!new_id) {
-		info->is_loaded = 0;
 		ErrPrint("Heap: %s\n", strerror(errno));
+		info->is_loaded = 0;
 		buffer_handler_pixmap_unref(buffer);
 		return LB_STATUS_ERROR_MEMORY;
 	}
 
-	DbgPrint("Releaseo old id (%s)\n", info->id);
 	DbgFree(info->id);
 	info->id = new_id;
 
 	gem = (struct gem_data *)buffer->data;
-	DbgPrint("gem pointer: %p\n", gem);
 
 	snprintf(info->id, len, SCHEMA_PIXMAP "%d", (int)gem->pixmap);
-	DbgPrint("info->id: %s\n", info->id);
-
+	DbgPrint("Loaded pixmap(info->id): %s\n", info->id);
 	return LB_STATUS_SUCCESS;
 }
 
@@ -912,16 +909,12 @@ HAPI void *buffer_handler_pixmap_ref(struct buffer_info *info)
 
 			if (instance_lb_buffer(info->inst) == info) {
 				pkg = instance_package(info->inst);
-				if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
-					DbgPrint("Doesn't need to create gem for LB\n");
+				if (package_lb_type(pkg) == LB_TYPE_BUFFER)
 					need_gem = 0;
-				}
 			} else if (instance_pd_buffer(info->inst) == info) {
 				pkg = instance_package(info->inst);
-				if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
-					DbgPrint("Doesn't need to create gem for PD\n");
+				if (package_pd_type(pkg) == PD_TYPE_BUFFER)
 					need_gem = 0;
-				}
 			}
 		}
 

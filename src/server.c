@@ -4649,7 +4649,7 @@ static struct packet *client_create_pd(pid_t pid, int handle, const struct packe
 	double x;
 	double y;
 
-	DbgPrint("CREATE_PD\n");
+	DbgPrint("PERF_DBOX\n");
 
 	client = client_find_by_pid(pid);
 	if (!client) {

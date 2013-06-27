@@ -2830,7 +2830,7 @@ HAPI int instance_slave_open_pd(struct inst_info *inst, struct client_node *clie
 	 */
 	(void)slave_freeze_ttl(slave);
 
-	DbgPrint("CREATE_PD\n");
+	DbgPrint("PERF_DBOX\n");
 	ret = slave_rpc_request_only(slave, pkgname, packet, 0);
 	if (ret < 0) {
 		ErrPrint("Unable to send request to slave\n");

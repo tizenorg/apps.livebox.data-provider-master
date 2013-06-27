@@ -1200,6 +1200,7 @@ HAPI int script_handler_parse_desc(const char *pkgname, const char *id, const ch
 			}
 
 			consuming_parsed_block(lineno, inst, is_pd, block);
+			block = NULL;
 			state = UNKNOWN;
 			break;
 

@@ -224,7 +224,6 @@ static inline struct buffer *create_pixmap(struct buffer_info *info)
 		ErrPrint("Unable to clear the pixmap\n");
 	}
 
-	DbgPrint("Pixmap:0x%X is created\n", gem->pixmap);
 	return buffer;
 }
 
@@ -393,7 +392,7 @@ static inline int destroy_pixmap(struct buffer *buffer)
 		if (!disp)
 			return LB_STATUS_ERROR_IO;
 
-		DbgPrint("pixmap 0x%X\n", gem->pixmap);
+		DbgPrint("pixmap %lu\n", gem->pixmap);
 		XFreePixmap(disp, gem->pixmap);
 	}
 
@@ -1056,7 +1055,7 @@ HAPI int buffer_handler_resize(struct buffer_info *info, int w, int h)
 	buffer_handler_update_size(info, w, h);
 
 	if (!info->is_loaded) {
-		DbgPrint("Not yet loaded\n");
+		DbgPrint("Buffer size is updated[%dx%d]\n", w, h);
 		return LB_STATUS_SUCCESS;
 	}
 

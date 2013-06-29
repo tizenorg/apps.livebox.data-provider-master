@@ -4610,9 +4610,12 @@ out:
 static Eina_Bool pd_open_monitor_cb(void *data)
 {
 	int ret;
-	ret = instance_client_pd_created(data, LB_STATUS_ERROR_TIMEOUT);
-	(void)instance_del_data(data, "pd,open,monitor");
-	(void)instance_unref(data);
+	struct inst_info *inst = data;
+
+	ret = instance_slave_close_pd(inst, instance_pd_owner(inst));
+	ret = instance_client_pd_created(inst, LB_STATUS_ERROR_TIMEOUT);
+	(void)instance_del_data(inst, "pd,open,monitor");
+	(void)instance_unref(inst);
 	ErrPrint("PD Open request is timed-out (%lf), ret: %d\n", PD_REQUEST_TIMEOUT, ret);
 	return ECORE_CALLBACK_CANCEL;
 }
@@ -4620,6 +4623,7 @@ static Eina_Bool pd_open_monitor_cb(void *data)
 static Eina_Bool pd_close_monitor_cb(void *data)
 {
 	int ret;
+
 	ret = instance_client_pd_destroyed(data, LB_STATUS_ERROR_TIMEOUT);
 	(void)instance_del_data(data, "pd,close,monitor");
 	(void)instance_unref(data);
@@ -4630,10 +4634,12 @@ static Eina_Bool pd_close_monitor_cb(void *data)
 static Eina_Bool pd_resize_monitor_cb(void *data)
 {
 	int ret;
+	struct inst_info *inst = data;
 
-	ret = instance_client_pd_destroyed(data, LB_STATUS_ERROR_TIMEOUT);
-	(void)instance_del_data(data, "pd,resize,monitor");
-	(void)instance_unref(data);
+	ret = instance_slave_close_pd(inst, instance_pd_owner(inst));
+	ret = instance_client_pd_destroyed(inst, LB_STATUS_ERROR_TIMEOUT);
+	(void)instance_del_data(inst, "pd,resize,monitor");
+	(void)instance_unref(inst);
 	ErrPrint("PD Resize request is not processed in %lf seconds (%d)\n", PD_REQUEST_TIMEOUT, ret);
 	return ECORE_CALLBACK_CANCEL;
 }
@@ -4670,6 +4676,7 @@ static struct packet *client_create_pd(pid_t pid, int handle, const struct packe
 		goto out;
 
 	if (instance_pd_owner(inst)) {
+		ErrPrint("PD is already owned\n");
 		ret = LB_STATUS_ERROR_ALREADY;
 	} else if (package_pd_type(instance_package(inst)) == PD_TYPE_BUFFER) {
 		lazy_pd_destroyed_cb(inst);
@@ -4830,6 +4837,8 @@ static struct packet *client_destroy_pd(pid_t pid, int handle, const struct pack
 	const struct pkg_info *pkg;
 	Ecore_Timer *pd_monitor;
 
+	DbgPrint("PERF_DBOX\n");
+
 	client = client_find_by_pid(pid);
 	if (!client) {
 		ErrPrint("Client %d is not exists\n", pid);
@@ -4849,7 +4858,13 @@ static struct packet *client_destroy_pd(pid_t pid, int handle, const struct pack
 		goto out;
 
 	if (instance_pd_owner(inst) != client) {
-		ret = instance_pd_owner(inst) == NULL ? LB_STATUS_ERROR_ALREADY : LB_STATUS_ERROR_PERMISSION;
+		if (instance_pd_owner(inst) == NULL) {
+			ErrPrint("PD looks already closed\n");
+			ret = LB_STATUS_ERROR_ALREADY;
+		} else {
+			ErrPrint("PD owner mimatched\n");
+			ret = LB_STATUS_ERROR_PERMISSION;
+		}
 	} else if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
 		int resize_aborted = 0;
 
@@ -4911,23 +4926,21 @@ static struct packet *client_destroy_pd(pid_t pid, int handle, const struct pack
 		ret = instance_slave_close_pd(inst, client);
 		if (ret < 0) {
 			ErrPrint("PD close request failed: %d\n", ret);
-		} else {
-			if (resize_aborted) {
-				pd_monitor = ecore_timer_add(DELAY_TIME, lazy_pd_destroyed_cb, instance_ref(inst));
-				if (!pd_monitor) {
-					ErrPrint("Failed to create a timer: %s\n", pkgname);
-					(void)instance_unref(inst);
-				} else {
-					(void)instance_set_data(inst, "lazy,pd,close", pd_monitor);
-				}
+		} else if (resize_aborted) {
+			pd_monitor = ecore_timer_add(DELAY_TIME, lazy_pd_destroyed_cb, instance_ref(inst));
+			if (!pd_monitor) {
+				ErrPrint("Failed to create a timer: %s\n", pkgname);
+				(void)instance_unref(inst);
 			} else {
-				pd_monitor = ecore_timer_add(PD_REQUEST_TIMEOUT, pd_close_monitor_cb, instance_ref(inst));
-				if (!pd_monitor) {
-					(void)instance_unref(inst);
-					ErrPrint("Failed to add pd close monitor\n");
-				} else {
-					(void)instance_set_data(inst, "pd,close,monitor", pd_monitor);
-				}
+				(void)instance_set_data(inst, "lazy,pd,close", pd_monitor);
+			}
+		} else {
+			pd_monitor = ecore_timer_add(PD_REQUEST_TIMEOUT, pd_close_monitor_cb, instance_ref(inst));
+			if (!pd_monitor) {
+				(void)instance_unref(inst);
+				ErrPrint("Failed to add pd close monitor\n");
+			} else {
+				(void)instance_set_data(inst, "pd,close,monitor", pd_monitor);
 			}
 		}
 		/*!
@@ -6171,7 +6184,7 @@ static struct packet *slave_release_buffer(pid_t pid, int handle, const struct p
 
 		pd_monitor = instance_del_data(inst, "pd,close,monitor");
 		if (!pd_monitor) {
-			ErrPrint("There is no requests to release pd buffer\n");
+			ErrPrint("Slave requests to release a buffer\n");
 			/*!
 			 * \note
 			 * In this case just keep going to release buffer,

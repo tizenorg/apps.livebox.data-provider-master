@@ -2802,19 +2802,25 @@ HAPI int instance_slave_open_pd(struct inst_info *inst, struct client_node *clie
 		}
 	}
 
-	slave = package_slave(instance_package(inst));
-	if (!slave)
-		return LB_STATUS_ERROR_FAULT;
-
 	info = instance_package(inst);
-	if (!info)
+	if (!info) {
+		ErrPrint("No package info\n");
 		return LB_STATUS_ERROR_INVALID;
+	}
+
+	slave = package_slave(info);
+	if (!slave) {
+		ErrPrint("No slave\n");
+		return LB_STATUS_ERROR_FAULT;
+	}
 
 	pkgname = package_name(info);
 	id = instance_id(inst);
 
-	if (!pkgname || !id)
+	if (!pkgname || !id) {
+		ErrPrint("pkgname[%s] id[%s]\n", pkgname, id);
 		return LB_STATUS_ERROR_INVALID;
+	}
 
 	packet = packet_create_noack("pd_show", "ssiidd", pkgname, id, instance_pd_width(inst), instance_pd_height(inst), inst->pd.x, inst->pd.y);
 	if (!packet) {
@@ -2871,32 +2877,43 @@ HAPI int instance_slave_close_pd(struct inst_info *inst, struct client_node *cli
 	struct pkg_info *pkg;
 	int ret;
 
-	if (inst->pd.owner != client)
-		return LB_STATUS_ERROR_INVALID;
-
-	slave = package_slave(instance_package(inst));
-	if (!slave)
-		return LB_STATUS_ERROR_FAULT;
+	if (inst->pd.owner != client) {
+		ErrPrint("Has no permission\n");
+		return LB_STATUS_ERROR_PERMISSION;
+	}
 
 	pkg = instance_package(inst);
-	if (!pkg)
+	if (!pkg) {
+		ErrPrint("No package info\n");
 		return LB_STATUS_ERROR_INVALID;
+	}
+
+	slave = package_slave(pkg);
+	if (!slave) {
+		ErrPrint("No assigned slave\n");
+		return LB_STATUS_ERROR_FAULT;
+	}
 
 	pkgname = package_name(pkg);
 	id = instance_id(inst);
 
-	if (!pkgname || !id)
+	if (!pkgname || !id) {
+		ErrPrint("pkgname[%s] & id[%s] is not valid\n", pkgname, id);
 		return LB_STATUS_ERROR_INVALID;
+	}
 
 	packet = packet_create_noack("pd_hide", "ss", pkgname, id);
-	if (!packet)
+	if (!packet) {
+		ErrPrint("Failed to create a packet\n");
 		return LB_STATUS_ERROR_FAULT;
+	}
 
 	slave_thaw_ttl(slave);
 
 	ret = slave_rpc_request_only(slave, pkgname, packet, 0);
 	release_resource_for_closing_pd(pkg, inst, client);
 	inst->pd.owner = NULL;
+	DbgPrint("PERF_DBOX\n");
 	return ret;
 }
 
@@ -3089,7 +3106,7 @@ HAPI void *instance_get_data(struct inst_info *inst, const char *tag)
 	return item->data;
 }
 
-HAPI const struct client_node *instance_pd_owner(struct inst_info *inst)
+HAPI struct client_node *instance_pd_owner(struct inst_info *inst)
 {
 	return inst->pd.owner;
 }

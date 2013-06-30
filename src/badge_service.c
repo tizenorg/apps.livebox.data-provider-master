@@ -41,7 +41,7 @@ static struct info {
 	.svc_ctx = NULL, /*!< \WARN: This is only used for MAIN THREAD */
 };
 
-#define ENABLE_BS_ACCESS_CONTROL 0
+#define ENABLE_BS_ACCESS_CONTROL 1
 
 struct context {
 	struct tcb *tcb;
@@ -286,6 +286,22 @@ static void _handler_service_register(struct tcb *tcb, struct packet *packet, vo
 	}
 }
 
+static void _handler_access_control_error(struct tcb *tcb, struct packet *packet)
+{
+	int ret_p = 0;
+	struct packet *packet_reply = NULL;
+
+	packet_reply = packet_create_reply(packet, "i", BADGE_ERROR_PERMISSION_DENIED);
+	if (packet_reply) {
+		if ((ret_p = service_common_unicast_packet(tcb, packet_reply)) < 0) {
+			ErrPrint("Failed to send a reply packet:%d", ret_p);
+		}
+		packet_destroy(packet_reply);
+	} else {
+		ErrPrint("Failed to create a reply packet");
+	}
+}
+
 static int _is_valid_permission(int fd, struct badge_service *service)
 {
 	int ret;
@@ -369,6 +385,8 @@ static int service_thread_main(struct tcb *tcb, struct packet *packet, void *dat
 #if ENABLE_BS_ACCESS_CONTROL
 			if (_is_valid_permission(tcb_fd(tcb), &(service_req_table[i])) == 1) {
 				service_req_table[i].handler(tcb, packet, data);
+			} else {
+				_handler_access_control_error(tcb, packet);
 			}
 #else
 			_is_valid_permission(tcb_fd(tcb), &(service_req_table[i]));

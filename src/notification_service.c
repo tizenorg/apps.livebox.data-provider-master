@@ -36,7 +36,7 @@
 #ifndef NOTIFICATION_DEL_PACKET_UNIT
 #define NOTIFICATION_DEL_PACKET_UNIT 10
 #endif
-#define ENABLE_NS_ACCESS_CONTROL 0
+#define ENABLE_NS_ACCESS_CONTROL 1
 
 static struct info {
 	Eina_List *context_list;
@@ -56,6 +56,7 @@ struct noti_service {
 	void (*handler)(struct tcb *tcb, struct packet *packet, void *data);
 	const char *rule;
 	const char *access;
+	void (*handler_access_error)(struct tcb *tcb, struct packet *packet);
 };
 
 /*!
@@ -349,6 +350,38 @@ static void _handler_service_register(struct tcb *tcb, struct packet *packet, vo
 	}
 }
 
+static void _handler_access_control_error_common(struct tcb *tcb, struct packet *packet)
+{
+	int ret_p = 0;
+	struct packet *packet_reply = NULL;
+
+	packet_reply = packet_create_reply(packet, "ii", NOTIFICATION_ERROR_PERMISSION_DENIED, 0);
+	if (packet_reply) {
+		if ((ret_p = service_common_unicast_packet(tcb, packet_reply)) < 0) {
+			ErrPrint("Failed to send a reply packet:%d", ret_p);
+		}
+		packet_destroy(packet_reply);
+	} else {
+		ErrPrint("Failed to create a reply packet");
+	}
+}
+
+static void _handler_access_control_error_refresh(struct tcb *tcb, struct packet *packet)
+{
+	int ret_p = 0;
+	struct packet *packet_reply = NULL;
+
+	packet_reply = packet_create_reply(packet, "i", NOTIFICATION_ERROR_PERMISSION_DENIED);
+	if (packet_reply) {
+		if ((ret_p = service_common_unicast_packet(tcb, packet_reply)) < 0) {
+			ErrPrint("Failed to send a reply packet:%d", ret_p);
+		}
+		packet_destroy(packet_reply);
+	} else {
+		ErrPrint("Failed to create a reply packet");
+	}
+}
+
 static int _is_valid_permission(int fd, struct noti_service *service)
 {
 	int ret;
@@ -377,42 +410,49 @@ static int service_thread_main(struct tcb *tcb, struct packet *packet, void *dat
 			.handler = _handler_insert,
 			.rule = "data-provider-master::notification.client",
 			.access = "w",
+			.handler_access_error = _handler_access_control_error_common,
 		},
 		{
 			.cmd = "update_noti",
 			.handler = _handler_update,
 			.rule = "data-provider-master::notification.client",
 			.access = "w",
+			.handler_access_error = _handler_access_control_error_common,
 		},
 		{
 			.cmd = "refresh_noti",
 			.handler = _handler_refresh,
 			.rule = "data-provider-master::notification.client",
 			.access = "w",
+			.handler_access_error = _handler_access_control_error_refresh,
 		},
 		{
 			.cmd = "del_noti_single",
 			.handler = _handler_delete_single,
 			.rule = "data-provider-master::notification.client",
 			.access = "w",
+			.handler_access_error = _handler_access_control_error_common,
 		},
 		{
 			.cmd = "del_noti_multiple",
 			.handler = _handler_delete_multiple,
 			.rule = "data-provider-master::notification.client",
 			.access = "w",
+			.handler_access_error = _handler_access_control_error_common,
 		},
 		{
 			.cmd = "service_register",
 			.handler = _handler_service_register,
 			.rule = NULL,
 			.access = NULL,
+			.handler_access_error = NULL,
 		},
 		{
 			.cmd = NULL,
 			.handler = NULL,
 			.rule = NULL,
 			.access = NULL,
+			.handler_access_error = NULL,
 		},
 	};
 
@@ -439,6 +479,10 @@ static int service_thread_main(struct tcb *tcb, struct packet *packet, void *dat
 #if ENABLE_NS_ACCESS_CONTROL
 			if (_is_valid_permission(tcb_fd(tcb), &(service_req_table[i])) == 1) {
 				service_req_table[i].handler(tcb, packet, data);
+			} else {
+				if (service_req_table[i].handler_access_error != NULL) {
+					service_req_table[i].handler_access_error(tcb, packet);
+				}
 			}
 #else
 			_is_valid_permission(tcb_fd(tcb), &(service_req_table[i]));

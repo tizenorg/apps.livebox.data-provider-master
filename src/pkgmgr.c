@@ -208,7 +208,6 @@ static int start_cb(const char *pkgname, const char *val, void *data)
 	}
 
 	item->status = PKGMGR_STATUS_START;
-	s_info.item_list = eina_list_append(s_info.item_list, item);
 
 	if (!strcasecmp(val, "download")) {
 		item->type = PKGMGR_EVENT_DOWNLOAD;
@@ -226,6 +225,8 @@ static int start_cb(const char *pkgname, const char *val, void *data)
 		ErrPrint("Invalid val: %s\n", val);
 		return LB_STATUS_ERROR_INVALID;
 	}
+
+	s_info.item_list = eina_list_append(s_info.item_list, item);
 
 	invoke_callback(pkgname, item, 0.0f);
 	return LB_STATUS_SUCCESS;

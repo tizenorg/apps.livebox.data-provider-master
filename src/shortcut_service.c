@@ -25,6 +25,7 @@
 #include <sys/smack.h>
 
 #include <security-server.h>
+#include <shortcut.h>
 
 #include "service_common.h"
 #include "debug.h"
@@ -88,6 +89,22 @@ static inline struct tcb *get_reply_context(double seq)
 	return tcb;
 }
 
+static inline void send_reply_packet(struct tcb *tcb, struct packet *packet, int ret)
+{
+	struct packet *reply_packet;
+
+	reply_packet = packet_create_reply(packet, "i", ret);
+	if (!reply_packet) {
+		ErrPrint("Failed to create a packet\n");
+		return;
+	}
+
+	if (service_common_unicast_packet(tcb, reply_packet) < 0)
+		ErrPrint("Unable to send reply packet\n");
+
+	packet_destroy(reply_packet);
+}
+
 /*!
  * SERVICE THREAD
  */
@@ -116,11 +133,16 @@ static int service_thread_main(struct tcb *tcb, struct packet *packet, void *dat
 			ret = security_server_check_privilege_by_sockfd(tcb_fd(tcb), "data-provider-master::shortcut.livebox", "w");
 			if (ret == SECURITY_SERVER_API_ERROR_ACCESS_DENIED) {
 				ErrPrint("SMACK:Access denied\n");
+				send_reply_packet(tcb, packet, SHORTCUT_ERROR_PERMISSION);
+				break;
 			}
+
 		} else if (!strcmp(command, "add_shortcut") || !strcmp(command, "rm_shortcut")) {
 			ret = security_server_check_privilege_by_sockfd(tcb_fd(tcb), "data-provider-master::shortcut.shortcut", "w");
 			if (ret == SECURITY_SERVER_API_ERROR_ACCESS_DENIED) {
 				ErrPrint("SMACK:Access denied\n");
+				send_reply_packet(tcb, packet, SHORTCUT_ERROR_PERMISSION);
+				break;
 			}
 		}
 

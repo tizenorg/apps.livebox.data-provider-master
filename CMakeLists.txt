@@ -31,6 +31,7 @@ pkg_check_modules(pkg REQUIRED
 	notification
 	badge
 	libsmack
+	shortcut
 )
 
 SET(PACKAGE "${PROJECT_NAME}")

@@ -18,7 +18,7 @@ enum xmonitor_event {
 	XMONITOR_PAUSED,
 	XMONITOR_RESUMED,
 
-	XMONITOR_ERROR = 0xFFFFFFFF, /* To specify the size of this enum */
+	XMONITOR_ERROR = 0xFFFFFFFF /* To specify the size of this enum */
 };
 
 extern int xmonitor_init(void);

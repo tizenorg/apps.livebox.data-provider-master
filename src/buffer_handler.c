@@ -56,7 +56,7 @@
 struct buffer {
 	enum {
 		CREATED = 0x00beef00,
-		DESTROYED = 0x00dead00,
+		DESTROYED = 0x00dead00
 	} state;
 	enum buffer_type type;
 	int refcnt;

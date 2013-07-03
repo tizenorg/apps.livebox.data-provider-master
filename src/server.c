@@ -68,7 +68,7 @@ static struct info {
 enum target_type {
 	TYPE_LB,
 	TYPE_PD,
-	TYPE_ERROR,
+	TYPE_ERROR
 };
 
 struct access_cbdata {

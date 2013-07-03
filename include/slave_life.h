@@ -29,7 +29,7 @@ enum slave_event {
 	SLAVE_EVENT_PAUSE,
 	SLAVE_EVENT_RESUME,
 
-	SLAVE_NEED_TO_REACTIVATE,
+	SLAVE_NEED_TO_REACTIVATE
 };
 
 enum slave_state {
@@ -64,7 +64,7 @@ enum slave_state {
 	SLAVE_PAUSED,
 	SLAVE_RESUMED,
 
-	SLAVE_ERROR = 0xFF, /* Explicitly define the size of this enum type */
+	SLAVE_ERROR = 0xFF /* Explicitly define the size of this enum type */
 };
 
 extern struct slave_node *slave_ref(struct slave_node *slave);

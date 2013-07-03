@@ -91,7 +91,7 @@
 
 enum instance_event {
 	INSTANCE_EVENT_DESTROY,
-	INSTNACE_EVENT_UNKNOWN,
+	INSTNACE_EVENT_UNKNOWN
 };
 
 enum instance_state {
@@ -106,7 +106,7 @@ enum instance_state {
 	/*!
 	 */
 	INST_DESTROYED, /*!< Instance is unloaded and also it requires to be deleted from the master */
-	INST_REQUEST_TO_DESTROY, /*!< Sent a request to a slave, when the master receives deleted event, the master will delete this */
+	INST_REQUEST_TO_DESTROY /*!< Sent a request to a slave, when the master receives deleted event, the master will delete this */
 };
 
 enum livebox_visible_state { /*!< Must be sync'd with livebox-viewer */
@@ -115,7 +115,7 @@ enum livebox_visible_state { /*!< Must be sync'd with livebox-viewer */
 
 	LB_HIDE_WITH_PAUSE = 0x02, /*!< Livebix is hide, it needs to be paused (with freezed update timer) */
 
-	LB_VISIBLE_ERROR = 0xFFFFFFFF, /* To enlarge the size of this enumeration type */
+	LB_VISIBLE_ERROR = 0xFFFFFFFF /* To enlarge the size of this enumeration type */
 };
 
 #define IS_PD	1

@@ -21,7 +21,7 @@ enum buffer_type { /*!< Must have to be sync with libprovider, liblivebox-viewer
 	BUFFER_TYPE_FILE,
 	BUFFER_TYPE_SHM,
 	BUFFER_TYPE_PIXMAP,
-	BUFFER_TYPE_ERROR,
+	BUFFER_TYPE_ERROR
 };
 
 /*!

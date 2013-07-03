@@ -835,7 +835,7 @@ HAPI int script_handler_parse_desc(const char *pkgname, const char *id, const ch
 		VALUE_FILE = 0x03,
 		VALUE_OPTION = 0x04,
 		VALUE_ID = 0x05,
-		VALUE_TARGET = 0x06,
+		VALUE_TARGET = 0x06
 	};
 	const char *field_name[] = {
 		"type",

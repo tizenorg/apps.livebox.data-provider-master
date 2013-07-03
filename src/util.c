@@ -240,7 +240,7 @@ HAPI char *util_replace_string(const char *src, const char *pattern, const char 
 		STATE_START,
 		STATE_FIND,
 		STATE_CHECK,
-		STATE_END,
+		STATE_END
 	} state;
 
 	if (!src || !pattern)

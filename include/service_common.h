@@ -16,7 +16,7 @@
 enum tcb_type {
 	TCB_CLIENT_TYPE_APP	= 0x00,
 	TCB_CLIENT_TYPE_SERVICE	= 0x01,
-	TCB_CLIENT_TYPE_UNKNOWN = 0xff,
+	TCB_CLIENT_TYPE_UNKNOWN = 0xff
 };
 
 struct tcb;

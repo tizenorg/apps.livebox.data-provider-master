@@ -322,7 +322,7 @@ HAPI int conf_loader(void)
 		VALUE,
 		ERROR,
 		COMMENT,
-		END,
+		END
 	} state;
 	int ch_idx;
 	int token_idx;

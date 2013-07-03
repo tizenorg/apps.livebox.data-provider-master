@@ -40,7 +40,7 @@ int errno;
 
 struct service_event_item {
 	enum {
-		SERVICE_EVENT_TIMER,
+		SERVICE_EVENT_TIMER
 	} type;
 
 	union {

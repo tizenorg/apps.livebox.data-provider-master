@@ -59,7 +59,7 @@ static inline int load_abi_table(void)
 		GROUP = 0x1,
 		TAG = 0x02,
 		VALUE = 0x03,
-		ERROR = 0x05,
+		ERROR = 0x05
 	} state;
 	enum {
 		PKGNAME = 0x0,

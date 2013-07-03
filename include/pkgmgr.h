@@ -19,7 +19,7 @@ enum pkgmgr_event_type {
 	PKGMGR_EVENT_INSTALL,
 	PKGMGR_EVENT_UPDATE,
 	PKGMGR_EVENT_UNINSTALL,
-	PKGMGR_EVENT_RECOVER,
+	PKGMGR_EVENT_RECOVER
 };
 
 enum pkgmgr_status {
@@ -27,7 +27,7 @@ enum pkgmgr_status {
 	PKGMGR_STATUS_PROCESSING,
 	PKGMGR_STATUS_COMMAND,
 	PKGMGR_STATUS_END,
-	PKGMGR_STATUS_ERROR,
+	PKGMGR_STATUS_ERROR
 };
 
 extern int pkgmgr_init(void);

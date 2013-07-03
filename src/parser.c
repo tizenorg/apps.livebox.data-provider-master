@@ -203,7 +203,7 @@ static inline int parse_size(const char *buffer, unsigned int *size)
 		HEIGHT,
 		ERROR,
 		STOP,
-		END,
+		END
 	} state;
 
 	*size = 0;
@@ -529,7 +529,7 @@ HAPI struct parser *parser_load(const char *pkgname)
 		VALUE,
 		ERROR,
 		COMMENT,
-		END,
+		END
 	} state;
 	int ch_idx;
 	int token_idx;

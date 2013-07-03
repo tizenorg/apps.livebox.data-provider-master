@@ -23,7 +23,7 @@ struct event_data {
 enum event_state {
 	EVENT_STATE_ACTIVATE,
 	EVENT_STATE_ACTIVATED,
-	EVENT_STATE_DEACTIVATE,
+	EVENT_STATE_DEACTIVATE
 };
 
 extern int event_init(void);

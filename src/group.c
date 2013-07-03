@@ -492,7 +492,7 @@ HAPI int group_add_livebox(const char *group, const char *pkgname)
 		CONTEXT_ITEM,
 		CONTEXT_OPTION_KEY,
 		CONTEXT_OPTION_VALUE,
-		CONTEXT_ERROR = 0xFFFFFFFF,
+		CONTEXT_ERROR = 0xFFFFFFFF
 	} state;
 
 	state = CLUSTER;

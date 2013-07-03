@@ -16,6 +16,7 @@
 
 struct fb_info;
 struct inst_info;
+struct buffer_info;
 
 extern int fb_init(void);
 extern int fb_fini(void);
@@ -34,5 +35,5 @@ extern int fb_resize(struct fb_info *info, int w, int h);
  */
 extern void *fb_pixmap_render_pre(struct fb_info *info);
 extern int fb_pixmap_render_post(struct fb_info *info);
-
+extern struct buffer_info *fb_buffer_info(struct fb_info *info);
 /* End of a file */

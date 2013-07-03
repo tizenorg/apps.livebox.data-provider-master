@@ -276,4 +276,9 @@ HAPI int fb_pixmap_render_post(struct fb_info *info)
 	return buffer_handler_pixmap_release_buffer(canvas);
 }
 
+HAPI struct buffer_info *fb_buffer_info(struct fb_info *info)
+{
+	return info->buffer;
+}
+
 /* End of a file */

@@ -4331,8 +4331,26 @@ static struct packet *client_lb_acquire_pixmap(pid_t pid, int handle, const stru
 
 	buffer = instance_lb_buffer(inst);
 	if (!buffer) {
-		ErrPrint("Unable to get LB buffer: %s\n", id);
-		goto out;
+		struct script_info *script_info;
+		struct fb_info *fb_info;
+
+		script_info = instance_lb_script(inst);
+		if (!script_info) {
+			ErrPrint("Unable to get LB buffer: %s\n", id);
+			goto out;
+		}
+
+		fb_info = script_handler_fb(script_info);
+		if (!fb_info) {
+			ErrPrint("Unable to get fb_info: %s\n", id);
+			goto out;
+		}
+
+		buffer = fb_buffer_info(fb_info);
+		if (!buffer) {
+			ErrPrint("Unable to get buffer_info: %s\n", id);
+			goto out;
+		}
 	}
 
 	buf_ptr = buffer_handler_pixmap_ref(buffer);
@@ -4427,8 +4445,26 @@ static struct packet *client_pd_acquire_pixmap(pid_t pid, int handle, const stru
 
 	buffer = instance_pd_buffer(inst);
 	if (!buffer) {
-		ErrPrint("Unable to get PD buffer (%s)\n", id);
-		goto out;
+		struct script_info *script_info;
+		struct fb_info *fb_info;
+
+		script_info = instance_pd_script(inst);
+		if (!script_info) {
+			ErrPrint("Unable to get LB buffer: %s\n", id);
+			goto out;
+		}
+
+		fb_info = script_handler_fb(script_info);
+		if (!fb_info) {
+			ErrPrint("Unable to get fb_info: %s\n", id);
+			goto out;
+		}
+
+		buffer = fb_buffer_info(fb_info);
+		if (!buffer) {
+			ErrPrint("Unable to get buffer_info: %s\n", id);
+			goto out;
+		}
 	}
 
 	buf_ptr = buffer_handler_pixmap_ref(buffer);

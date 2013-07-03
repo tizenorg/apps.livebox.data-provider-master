@@ -104,7 +104,7 @@ static void *client_packet_pump_main(void *data)
 	struct service_context *svc_ctx = tcb->svc_ctx;
 	struct packet *packet;
 	fd_set set;
-	char *ptr;
+	char *ptr = NULL;
 	int size;
 	int packet_offset;
 	int recv_offset;

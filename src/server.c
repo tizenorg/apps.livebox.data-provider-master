@@ -98,6 +98,94 @@ static Eina_Bool lazy_access_status_cb(void *data)
 	return ECORE_CALLBACK_CANCEL;
 }
 
+static int slave_fault_open_script_cb(struct slave_node *slave, void *data)
+{
+	Ecore_Timer *timer;
+
+	(void)script_handler_unload(instance_pd_script(data), 1);
+	(void)instance_slave_close_pd(data, instance_pd_owner(data));
+	(void)instance_client_pd_created(data, LB_STATUS_ERROR_FAULT);
+
+	timer = instance_del_data(data, "lazy,pd,open");
+	if (timer) {
+		ecore_timer_del(timer);
+	}
+
+	(void)instance_unref(data);
+
+	return -1; /* remove this handler */
+}
+
+static int slave_fault_open_buffer_cb(struct slave_node *slave, void *data)
+{
+	Ecore_Timer *timer;
+
+	(void)instance_slave_close_pd(data, instance_pd_owner(data));
+	(void)instance_client_pd_created(data, LB_STATUS_ERROR_FAULT);
+
+	timer = instance_del_data(data, "pd,open,monitor");
+	if (timer) {
+		ecore_timer_del(timer);
+	}
+
+	(void)instance_unref(data);
+
+	return -1; /* remove this handler */
+}
+
+static int slave_fault_close_script_cb(struct slave_node *slave, void *data)
+{
+	Ecore_Timer *timer;
+
+	(void)instance_client_pd_destroyed(data, LB_STATUS_ERROR_FAULT);
+
+	timer = instance_del_data(data, "lazy,pd,close");
+	if (timer) {
+		ecore_timer_del(timer);
+	}
+
+	(void)instance_unref(data);
+
+	return -1; /* remove this handler */
+}
+
+static int slave_fault_close_buffer_cb(struct slave_node *slave, void *data)
+{
+	Ecore_Timer *timer;
+
+	(void)instance_client_pd_destroyed(data, LB_STATUS_ERROR_FAULT);
+
+	timer = instance_del_data(data, "lazy,pd,close");
+	if (!timer) {
+		timer = instance_del_data(data, "pd,close,monitor");
+	}
+
+	if (timer) {
+		ecore_timer_del(timer);
+	}
+
+	(void)instance_unref(data);
+
+	return -1; /* remove this handler */
+}
+
+static int slave_fault_resize_buffer_cb(struct slave_node *slave, void *data)
+{
+	Ecore_Timer *timer;
+
+	(void)instance_slave_close_pd(data, instance_pd_owner(data));
+	(void)instance_client_pd_destroyed(data, LB_STATUS_ERROR_FAULT);
+
+	timer = instance_del_data(data, "pd,resize,monitor");
+	if (timer) {
+		ecore_timer_del(timer);
+	}
+
+	(void)instance_unref(data);
+
+	return -1; /* remove this handler */
+}
+
 static int event_lb_route_cb(enum event_state state, struct event_data *event_info, void *data)
 {
 	struct inst_info *inst = data;
@@ -480,15 +568,13 @@ static Eina_Bool lazy_delete_cb(void *data)
 {
 	struct deleted_item *item = data;
 
-	DbgPrint("Send delete event to the client\n");
-
 	/*!
 	 * Before invoke this callback, the instance is able to already remove this client
 	 * So check it again
 	 */
 	if (instance_has_client(item->inst, item->client)) {
-		instance_unicast_deleted_event(item->inst, item->client);
-		instance_del_client(item->inst, item->client);
+		(void)instance_unicast_deleted_event(item->inst, item->client);
+		(void)instance_del_client(item->inst, item->client);
 	}
 
 	(void)client_unref(item->client);
@@ -4563,31 +4649,64 @@ out:
 	return result;
 }
 
-static Eina_Bool lazy_pd_created_cb(void *data)
+static Eina_Bool lazy_pd_created_cb(void *inst)
 {
-	if (!!instance_del_data(data, "lazy,pd,open")) {
-		/*!
-		 * After unref instance first,
-		 * if the instance is not destroyed, try to notify the created PD event to the client.
-		 */
-		if (instance_unref(data)) {
-			int ret;
-			ret = instance_client_pd_created(data, LB_STATUS_SUCCESS);
-			DbgPrint("Send PD Create event (%d) to client\n", ret);
+	struct pkg_info *pkg;
+
+	if (!instance_del_data(inst, "lazy,pd,open")) {
+		ErrPrint("lazy,pd,open is already deleted.\n");
+		return ECORE_CALLBACK_CANCEL;
+	}
+
+	pkg = instance_package(inst);
+	if (pkg) {
+		struct slave_node *slave;
+
+		slave = package_slave(pkg);
+		if (slave) {
+			slave_event_callback_del(slave, SLAVE_EVENT_DEACTIVATE, slave_fault_open_script_cb, inst);
 		}
+	}
+
+	/*!
+	 * After unref instance first,
+	 * if the instance is not destroyed, try to notify the created PD event to the client.
+	 */
+	if (instance_unref(inst)) {
+		int ret;
+		ret = instance_client_pd_created(inst, LB_STATUS_SUCCESS);
+		DbgPrint("Send PD Create event (%d) to client\n", ret);
 	}
 
 	return ECORE_CALLBACK_CANCEL;
 }
 
-static Eina_Bool lazy_pd_destroyed_cb(void *data)
+static Eina_Bool lazy_pd_destroyed_cb(void *inst)
 {
-	if (!!instance_del_data(data, "lazy,pd,close")) {
-		if (instance_unref(data)) {
-			int ret;
-			ret = instance_client_pd_destroyed(data, LB_STATUS_SUCCESS);
-			DbgPrint("Send PD Destroy event (%d) to client\n", ret);
+	struct pkg_info *pkg;
+	struct slave_node *slave;
+
+	if (!instance_del_data(inst, "lazy,pd,close")) {
+		ErrPrint("lazy,pd,close is already deleted.\n");
+		return ECORE_CALLBACK_CANCEL;
+	}
+
+	pkg = instance_package(inst);
+	if (pkg) {
+		slave = package_slave(pkg);
+		if (slave) {
+			if (package_pd_type(pkg) == PD_TYPE_SCRIPT) {
+				slave_event_callback_del(slave, SLAVE_EVENT_DEACTIVATE, slave_fault_close_script_cb, inst);
+			} else if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
+				slave_event_callback_del(slave, SLAVE_EVENT_DEACTIVATE, slave_fault_close_buffer_cb, inst);
+			}
 		}
+	}
+
+	if (instance_unref(inst)) {
+		int ret;
+		ret = instance_client_pd_destroyed(inst, LB_STATUS_SUCCESS);
+		DbgPrint("Send PD Destroy event (%d) to client\n", ret);
 	}
 
 	return ECORE_CALLBACK_CANCEL;
@@ -4643,10 +4762,20 @@ out:
 	return NULL;
 }
 
-static Eina_Bool pd_open_monitor_cb(void *data)
+static Eina_Bool pd_open_monitor_cb(void *inst)
 {
 	int ret;
-	struct inst_info *inst = data;
+	struct pkg_info *pkg;
+
+	pkg = instance_package(inst);
+	if (pkg) {
+		struct slave_node *slave;
+
+		slave = package_slave(pkg);
+		if (slave) {
+			slave_event_callback_del(slave, SLAVE_EVENT_DEACTIVATE, slave_fault_open_buffer_cb, inst);
+		}
+	}
 
 	ret = instance_slave_close_pd(inst, instance_pd_owner(inst));
 	ret = instance_client_pd_created(inst, LB_STATUS_ERROR_TIMEOUT);
@@ -4656,21 +4785,41 @@ static Eina_Bool pd_open_monitor_cb(void *data)
 	return ECORE_CALLBACK_CANCEL;
 }
 
-static Eina_Bool pd_close_monitor_cb(void *data)
+static Eina_Bool pd_close_monitor_cb(void *inst)
 {
 	int ret;
+	struct pkg_info *pkg;
 
-	ret = instance_client_pd_destroyed(data, LB_STATUS_ERROR_TIMEOUT);
-	(void)instance_del_data(data, "pd,close,monitor");
-	(void)instance_unref(data);
+	pkg = instance_package(inst);
+	if (pkg) {
+		struct slave_node *slave;
+
+		slave = package_slave(pkg);
+		if (slave) {
+			slave_event_callback_del(slave, SLAVE_EVENT_DEACTIVATE, slave_fault_close_buffer_cb, inst);
+		}
+	}
+
+	ret = instance_client_pd_destroyed(inst, LB_STATUS_ERROR_TIMEOUT);
+	(void)instance_del_data(inst, "pd,close,monitor");
+	(void)instance_unref(inst);
 	ErrPrint("PD Close request is not processed in %lf seconds (%d)\n", PD_REQUEST_TIMEOUT, ret);
 	return ECORE_CALLBACK_CANCEL;
 }
 
-static Eina_Bool pd_resize_monitor_cb(void *data)
+static Eina_Bool pd_resize_monitor_cb(void *inst)
 {
 	int ret;
-	struct inst_info *inst = data;
+	struct pkg_info *pkg;
+
+	pkg = instance_package(inst);
+	if (pkg) {
+		struct slave_node *slave;
+		slave = package_slave(pkg);
+		if (slave) {
+			slave_event_callback_del(slave, SLAVE_EVENT_DEACTIVATE, slave_fault_resize_buffer_cb, inst);
+		}
+	}
 
 	ret = instance_slave_close_pd(inst, instance_pd_owner(inst));
 	ret = instance_client_pd_destroyed(inst, LB_STATUS_ERROR_TIMEOUT);
@@ -4688,6 +4837,8 @@ static struct packet *client_create_pd(pid_t pid, int handle, const struct packe
 	const char *id;
 	int ret;
 	struct inst_info *inst;
+	const struct pkg_info *pkg;
+	Ecore_Timer *pd_monitor;
 	double x;
 	double y;
 
@@ -4707,7 +4858,7 @@ static struct packet *client_create_pd(pid_t pid, int handle, const struct packe
 		goto out;
 	}
 
-	ret = validate_request(pkgname, id, &inst, NULL);
+	ret = validate_request(pkgname, id, &inst, &pkg);
 	if (ret != LB_STATUS_SUCCESS)
 		goto out;
 
@@ -4715,7 +4866,12 @@ static struct packet *client_create_pd(pid_t pid, int handle, const struct packe
 		ErrPrint("PD is already owned\n");
 		ret = LB_STATUS_ERROR_ALREADY;
 	} else if (package_pd_type(instance_package(inst)) == PD_TYPE_BUFFER) {
-		lazy_pd_destroyed_cb(inst);
+		pd_monitor = instance_get_data(inst, "lazy,pd,close");
+		if (pd_monitor) {
+			ecore_timer_del(pd_monitor);
+			/* This timer attribute will be deleted */
+			lazy_pd_destroyed_cb(inst);
+		}
 		
 		if (instance_get_data(inst, "pd,open,monitor")) {
 			DbgPrint("PD Open request is already processed\n");
@@ -4750,14 +4906,24 @@ static struct packet *client_create_pd(pid_t pid, int handle, const struct packe
 				tmp_ret = instance_slave_close_pd(inst, client);
 				ErrPrint("Unable to send script event for openning PD [%s], %d\n", pkgname, tmp_ret);
 			} else {
-				Ecore_Timer *pd_monitor;
-
 				pd_monitor = ecore_timer_add(PD_REQUEST_TIMEOUT, pd_open_monitor_cb, instance_ref(inst));
 				if (!pd_monitor) {
 					(void)instance_unref(inst);
 					ErrPrint("Failed to create a timer for PD Open monitor\n");
 				} else {
+					struct slave_node *slave;
+
 					(void)instance_set_data(inst, "pd,open,monitor", pd_monitor);
+
+					slave = package_slave(pkg);
+					if (!slave) {
+						ErrPrint("Failed to get slave(%s)\n", pkgname);
+						goto out;
+					}
+
+					if (slave_event_callback_add(slave, SLAVE_EVENT_DEACTIVATE, slave_fault_open_buffer_cb, inst) != LB_STATUS_SUCCESS) {
+						ErrPrint("Failed to add fault handler: %s\n");
+					}
 				}
 			}
 		} else {
@@ -4776,7 +4942,12 @@ static struct packet *client_create_pd(pid_t pid, int handle, const struct packe
 		int ix;
 		int iy;
 
-		lazy_pd_destroyed_cb(inst);
+		pd_monitor = instance_get_data(inst, "lazy,pd,close");
+		if (pd_monitor) {
+			ecore_timer_del(pd_monitor);
+			/* lazy,pd,close will be deleted */
+			lazy_pd_destroyed_cb(inst);
+		}
 
 		/*!
 		 * \note
@@ -4802,7 +4973,6 @@ static struct packet *client_create_pd(pid_t pid, int handle, const struct packe
 			 * Send the PD created event to the clients,
 			 */
 			if (ret == LB_STATUS_SUCCESS) {
-				Ecore_Timer *timer;
 
 				/*!
 				 * \note
@@ -4824,8 +4994,8 @@ static struct packet *client_create_pd(pid_t pid, int handle, const struct packe
 				 * But I just add it to the tagged-data of the instance.
 				 * Just reserve for future-use.
 				 */
-				timer = ecore_timer_add(DELAY_TIME, lazy_pd_created_cb, inst);
-				if (!timer) {
+				pd_monitor = ecore_timer_add(DELAY_TIME, lazy_pd_created_cb, inst);
+				if (!pd_monitor) {
 					struct inst_info *tmp_inst;
 
 					tmp_inst = instance_unref(inst);
@@ -4839,7 +5009,19 @@ static struct packet *client_create_pd(pid_t pid, int handle, const struct packe
 
 					ret = LB_STATUS_ERROR_FAULT;
 				} else {
-					(void)instance_set_data(inst, "lazy,pd,open", timer);
+					struct slave_node *slave;
+
+					(void)instance_set_data(inst, "lazy,pd,open", pd_monitor);
+
+					slave = package_slave(pkg);
+					if (!slave) {
+						ErrPrint("Failed to get slave: %s\n", pkgname);
+						goto out;
+					}
+
+					if (slave_event_callback_add(slave, SLAVE_EVENT_DEACTIVATE, slave_fault_open_script_cb, inst) != LB_STATUS_SUCCESS) {
+						ErrPrint("Failed to add fault callback: %s\n", pkgname);
+					}
 				}
 			} else {
 				int tmp_ret;
@@ -4872,6 +5054,7 @@ static struct packet *client_destroy_pd(pid_t pid, int handle, const struct pack
 	struct inst_info *inst;
 	const struct pkg_info *pkg;
 	Ecore_Timer *pd_monitor;
+	struct slave_node *slave;
 
 	DbgPrint("PERF_DBOX\n");
 
@@ -4893,6 +5076,12 @@ static struct packet *client_destroy_pd(pid_t pid, int handle, const struct pack
 	if (ret != LB_STATUS_SUCCESS)
 		goto out;
 
+	slave = package_slave(pkg);
+	if (!slave) {
+		ret = LB_STATUS_ERROR_INVALID;
+		goto out;
+	}
+
 	if (instance_pd_owner(inst) != client) {
 		if (instance_pd_owner(inst) == NULL) {
 			ErrPrint("PD looks already closed\n");
@@ -4906,7 +5095,10 @@ static struct packet *client_destroy_pd(pid_t pid, int handle, const struct pack
 
 		pd_monitor = instance_del_data(inst, "pd,open,monitor");
 		if (pd_monitor) {
+			
 			ErrPrint("PD Open request is found. cancel it [%s]\n", pkgname);
+
+			slave_event_callback_del(slave, SLAVE_EVENT_DEACTIVATE, slave_fault_open_buffer_cb, inst);
 
 			/*!
 			 * \note
@@ -4946,6 +5138,8 @@ static struct packet *client_destroy_pd(pid_t pid, int handle, const struct pack
 		pd_monitor = instance_del_data(inst, "pd,resize,monitor");
 		if (pd_monitor) {
 			ErrPrint("PD Resize request is found. clear it [%s]\n", pkgname);
+			slave_event_callback_del(slave, SLAVE_EVENT_DEACTIVATE, slave_fault_resize_buffer_cb, inst);
+
 			ecore_timer_del(pd_monitor);
 
 			inst = instance_unref(inst);
@@ -4969,6 +5163,7 @@ static struct packet *client_destroy_pd(pid_t pid, int handle, const struct pack
 				(void)instance_unref(inst);
 			} else {
 				(void)instance_set_data(inst, "lazy,pd,close", pd_monitor);
+				slave_event_callback_add(slave, SLAVE_EVENT_DEACTIVATE, slave_fault_close_buffer_cb, inst);
 			}
 		} else {
 			pd_monitor = ecore_timer_add(PD_REQUEST_TIMEOUT, pd_close_monitor_cb, instance_ref(inst));
@@ -4977,6 +5172,7 @@ static struct packet *client_destroy_pd(pid_t pid, int handle, const struct pack
 				ErrPrint("Failed to add pd close monitor\n");
 			} else {
 				(void)instance_set_data(inst, "pd,close,monitor", pd_monitor);
+				slave_event_callback_add(slave, SLAVE_EVENT_DEACTIVATE, slave_fault_close_buffer_cb, inst);
 			}
 		}
 		/*!
@@ -4987,7 +5183,11 @@ static struct packet *client_destroy_pd(pid_t pid, int handle, const struct pack
 		 * instance_client_pd_destroyed(inst);
 		 */
 	} else if (package_pd_type(pkg) == PD_TYPE_SCRIPT) {
-		lazy_pd_created_cb(inst);
+		pd_monitor = instance_get_data(inst, "lazy,pd,open");
+		if (pd_monitor) {
+			ecore_timer_del(pd_monitor);
+			lazy_pd_created_cb(inst);
+		}
 
 		ret = script_handler_unload(instance_pd_script(inst), 1);
 		if (ret < 0)
@@ -5020,6 +5220,7 @@ static struct packet *client_destroy_pd(pid_t pid, int handle, const struct pack
 				(void)instance_unref(inst);
 			} else {
 				(void)instance_set_data(inst, "lazy,pd,close", pd_monitor);
+				slave_event_callback_add(slave, SLAVE_EVENT_DEACTIVATE, slave_fault_close_script_cb, inst);
 			}
 		}
 	} else {
@@ -6035,8 +6236,14 @@ static struct packet *slave_acquire_buffer(pid_t pid, int handle, const struct p
 		if (!pd_monitor) {
 			pd_monitor = instance_del_data(inst, "pd,resize,monitor");
 			is_resize = !!pd_monitor;
-			if (!is_resize)
+			if (!is_resize) {
+				/* Invalid request. Reject this */
 				goto out;
+			}
+
+			slave_event_callback_del(slave, SLAVE_EVENT_DEACTIVATE, slave_fault_resize_buffer_cb, inst);
+		} else {
+			slave_event_callback_del(slave, SLAVE_EVENT_DEACTIVATE, slave_fault_open_buffer_cb, inst);
 		}
 
 		ecore_timer_del(pd_monitor);
@@ -6258,9 +6465,14 @@ static struct packet *slave_release_buffer(pid_t pid, int handle, const struct p
 					ErrPrint("Failed to create a timer for PD Open monitor\n");
 				} else {
 					(void)instance_set_data(inst, "pd,resize,monitor", pd_monitor);
+					if (slave_event_callback_add(slave, SLAVE_EVENT_DEACTIVATE, slave_fault_resize_buffer_cb, inst) != LB_STATUS_SUCCESS) {
+						ErrPrint("Failed to add event handler: %s\n", pkgname);
+					}
 				}
 			}
 		} else {
+			slave_event_callback_del(slave, SLAVE_EVENT_DEACTIVATE, slave_fault_close_buffer_cb, inst);
+
 			ecore_timer_del(pd_monitor);
 			inst = instance_unref(inst);
 			if (!inst) {

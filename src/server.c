@@ -81,6 +81,116 @@ struct deleted_item {
 	struct inst_info *inst;
 };
 
+static inline int forward_lb_event_packet(const struct pkg_info *pkg, struct inst_info *inst, const struct packet *packet)
+{
+	struct buffer_info *buffer;
+	struct slave_node *slave;
+	int ret;
+
+	buffer = instance_lb_buffer(inst);
+	if (!buffer) {
+		ErrPrint("Instance[%s] has no buffer\n", instance_id(inst));
+		ret = LB_STATUS_ERROR_FAULT;
+		goto out;
+	}
+
+	slave = package_slave(pkg);
+	if (!slave) {
+		ErrPrint("Package[%s] has no slave\n", package_name(pkg));
+		ret = LB_STATUS_ERROR_INVALID;
+		goto out;
+	}
+
+	packet_ref((struct packet *)packet);
+	ret = slave_rpc_request_only(slave, package_name(pkg), (struct packet *)packet, 0);
+
+out:
+	return ret;
+}
+
+static inline int forward_pd_event_packet(const struct pkg_info *pkg, struct inst_info *inst, const struct packet *packet)
+{
+	struct buffer_info *buffer;
+	struct slave_node *slave;
+	int ret;
+
+	buffer = instance_pd_buffer(inst);
+	if (!buffer) {
+		ErrPrint("Instance[%s] has no buffer\n", instance_id(inst));
+		ret = LB_STATUS_ERROR_FAULT;
+		goto out;
+	}
+
+	slave = package_slave(pkg);
+	if (!slave) {
+		ErrPrint("Package[%s] has no slave\n", package_name(pkg));
+		ret = LB_STATUS_ERROR_INVALID;
+		goto out;
+	}
+
+	packet_ref((struct packet *)packet);
+	ret = slave_rpc_request_only(slave, package_name(pkg), (struct packet *)packet, 0);
+
+out:
+	return ret;
+}
+
+static inline int forward_pd_access_packet(const struct pkg_info *pkg, struct inst_info *inst, const char *command, double timestamp, int x, int y)
+{
+	int ret;
+	struct buffer_info *buffer;
+	struct slave_node *slave;
+	struct packet *p;
+
+	buffer = instance_pd_buffer(inst);
+	if (!buffer) {
+		ErrPrint("Instance[%s] has no buffer\n", instance_id(inst));
+		ret = LB_STATUS_ERROR_FAULT;
+		goto out;
+	}
+
+	slave = package_slave(pkg);
+	if (!slave) {
+		ErrPrint("Package[%s] has no slave\n", package_name(pkg));
+		ret = LB_STATUS_ERROR_INVALID;
+		goto out;
+	}
+
+	p = packet_create_noack(command, "ssdii", package_name(pkg), instance_id(inst), timestamp, x, y);
+	ret = slave_rpc_request_only(slave, package_name(pkg), p, 0);
+
+out:
+	return ret;
+}
+
+static inline int forward_lb_access_packet(const struct pkg_info *pkg, struct inst_info *inst, const char *command, double timestamp, int x, int y)
+{
+	int ret;
+	struct buffer_info *buffer;
+	struct slave_node *slave;
+	struct packet *p;
+
+	buffer = instance_lb_buffer(inst);
+	if (!buffer) {
+		ErrPrint("Instance[%s] has no buffer\n", instance_id(inst));
+		ret = LB_STATUS_ERROR_FAULT;
+		goto out;
+	}
+
+	slave = package_slave(pkg);
+	if (!slave) {
+		ErrPrint("Package[%s] has no slave\n", package_name(pkg));
+		ret = LB_STATUS_ERROR_INVALID;
+		goto out;
+	}
+
+	p = packet_create_noack(command, "ssdii", package_name(pkg), instance_id(inst), timestamp, x, y);
+	ret = slave_rpc_request_only(slave, package_name(pkg), p, 0);
+
+out:
+	return ret;
+}
+
 static Eina_Bool lazy_access_status_cb(void *data)
 {
 	struct access_cbdata *cbdata = data;
@@ -966,25 +1076,7 @@ static struct packet *client_pd_mouse_enter(pid_t pid, int handle, const struct 
 		goto out;
 
 	if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
-		struct buffer_info *buffer;
-		struct slave_node *slave;
-
-		buffer = instance_pd_buffer(inst);
-		if (!buffer) {
-			ErrPrint("Instance[%s] has no buffer\n", id);
-			ret = LB_STATUS_ERROR_FAULT;
-			goto out;
-		}
-
-		slave = package_slave(pkg);
-		if (!slave) {
-			ErrPrint("Package[%s] has no slave\n", pkgname);
-			ret = LB_STATUS_ERROR_INVALID;
-			goto out;
-		}
-
-		packet_ref((struct packet *)packet);
-		ret = slave_rpc_request_only(slave, pkgname, (struct packet *)packet, 0);
+		ret = forward_pd_event_packet(pkg, inst, packet);
 	} else if (package_pd_type(pkg) == PD_TYPE_SCRIPT) {
 		struct script_info *script;
 		Evas *e;
@@ -1045,25 +1137,7 @@ static struct packet *client_pd_mouse_leave(pid_t pid, int handle, const struct 
 		goto out;
 
 	if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
-		struct buffer_info *buffer;
-		struct slave_node *slave;
-
-		buffer = instance_pd_buffer(inst);
-		if (!buffer) {
-			ErrPrint("Instance[%s] has no buffer\n", id);
-			ret = LB_STATUS_ERROR_FAULT;
-			goto out;
-		}
-
-		slave = package_slave(pkg);
-		if (!slave) {
-			ErrPrint("Package[%s] has no slave\n", pkgname);
-			ret = LB_STATUS_ERROR_INVALID;
-			goto out;
-		}
-
-		packet_ref((struct packet *)packet);
-		ret = slave_rpc_request_only(slave, pkgname, (struct packet *)packet, 0);
+		ret = forward_pd_event_packet(pkg, inst, packet);
 	} else if (package_pd_type(pkg) == PD_TYPE_SCRIPT) {
 		struct script_info *script;
 		Evas *e;
@@ -1124,25 +1198,7 @@ static struct packet *client_pd_mouse_down(pid_t pid, int handle, const struct p
 		goto out;
 
 	if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
-		struct buffer_info *buffer;
-		struct slave_node *slave;
-
-		buffer = instance_pd_buffer(inst);
-		if (!buffer) {
-			ErrPrint("Instance[%s] has no buffer\n", id);
-			ret = LB_STATUS_ERROR_FAULT;
-			goto out;
-		}
-
-		slave = package_slave(pkg);
-		if (!slave) {
-			ErrPrint("Package[%s] has no slave\n", pkgname);
-			ret = LB_STATUS_ERROR_INVALID;
-			goto out;
-		}
-
-		packet_ref((struct packet *)packet);
-		ret = slave_rpc_request_only(slave, pkgname, (struct packet *)packet, 0);
+		ret = forward_pd_event_packet(pkg, inst, packet);
 	} else if (package_pd_type(pkg) == PD_TYPE_SCRIPT) {
 		struct script_info *script;
 		Evas *e;
@@ -1203,25 +1259,7 @@ static struct packet *client_pd_mouse_up(pid_t pid, int handle, const struct pac
 		goto out;
 
 	if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
-		struct buffer_info *buffer;
-		struct slave_node *slave;
-
-		buffer = instance_pd_buffer(inst);
-		if (!buffer) {
-			ErrPrint("Instance[%s] has no buffer\n", id);
-			ret = LB_STATUS_ERROR_FAULT;
-			goto out;
-		}
-
-		slave = package_slave(pkg);
-		if (!slave) {
-			ErrPrint("Package[%s] has no slave\n", pkgname);
-			ret = LB_STATUS_ERROR_INVALID;
-			goto out;
-		}
-
-		packet_ref((struct packet *)packet);
-		ret = slave_rpc_request_only(slave, pkgname, (struct packet *)packet, 0);
+		ret = forward_pd_event_packet(pkg, inst, packet);
 	} else if (package_pd_type(pkg) == PD_TYPE_SCRIPT) {
 		struct script_info *script;
 		Evas *e;
@@ -1282,25 +1320,7 @@ static struct packet *client_pd_mouse_move(pid_t pid, int handle, const struct p
 		goto out;
 
 	if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
-		struct buffer_info *buffer;
-		struct slave_node *slave;
-
-		buffer = instance_pd_buffer(inst);
-		if (!buffer) {
-			ErrPrint("Instance[%s] has no buffer\n", id);
-			ret = LB_STATUS_ERROR_FAULT;
-			goto out;
-		}
-
-		slave = package_slave(pkg);
-		if (!slave) {
-			ErrPrint("Package[%s] has no slave\n", pkgname);
-			ret = LB_STATUS_ERROR_INVALID;
-			goto out;
-		}
-
-		packet_ref((struct packet *)packet);
-		ret = slave_rpc_request_only(slave, pkgname, (struct packet *)packet, 0);
+		ret = forward_pd_event_packet(pkg, inst, packet);
 	} else if (package_pd_type(pkg) == PD_TYPE_SCRIPT) {
 		struct script_info *script;
 		Evas *e;
@@ -1361,25 +1381,7 @@ static struct packet *client_lb_mouse_move(pid_t pid, int handle, const struct p
 		goto out;
 
 	if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
-		struct buffer_info *buffer;
-		struct slave_node *slave;
-
-		buffer = instance_lb_buffer(inst);
-		if (!buffer) {
-			ErrPrint("Instance[%s] has no buffer\n", id);
-			ret = LB_STATUS_ERROR_FAULT;
-			goto out;
-		}
-
-		slave = package_slave(pkg);
-		if (!slave) {
-			ErrPrint("Package[%s] has no slave\n", pkgname);
-			ret = LB_STATUS_ERROR_INVALID;
-			goto out;
-		}
-
-		packet_ref((struct packet *)packet);
-		ret = slave_rpc_request_only(slave, pkgname, (struct packet *)packet, 0);
+		ret = forward_lb_event_packet(pkg, inst, packet);
 	} else if (package_lb_type(pkg) == LB_TYPE_SCRIPT) {
 		struct script_info *script;
 		Evas *e;
@@ -1651,25 +1653,7 @@ static struct packet *client_lb_mouse_enter(pid_t pid, int handle, const struct 
 		goto out;
 
 	if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
-		struct buffer_info *buffer;
-		struct slave_node *slave;
-
-		buffer = instance_lb_buffer(inst);
-		if (!buffer) {
-			ErrPrint("Instance[%s] has no buffer\n", id);
-			ret = LB_STATUS_ERROR_FAULT;
-			goto out;
-		}
-
-		slave = package_slave(pkg);
-		if (!slave) {
-			ErrPrint("Package[%s] has no slave\n", pkgname);
-			ret = LB_STATUS_ERROR_INVALID;
-			goto out;
-		}
-
-		packet_ref((struct packet *)packet);
-		ret = slave_rpc_request_only(slave, pkgname, (struct packet *)packet, 0);
+		ret = forward_lb_event_packet(pkg, inst, packet);
 	} else if (package_lb_type(pkg) == LB_TYPE_SCRIPT) {
 		struct script_info *script;
 		Evas *e;
@@ -1730,25 +1714,7 @@ static struct packet *client_lb_mouse_leave(pid_t pid, int handle, const struct 
 		goto out;
 
 	if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
-		struct buffer_info *buffer;
-		struct slave_node *slave;
-
-		buffer = instance_lb_buffer(inst);
-		if (!buffer) {
-			ErrPrint("Instance[%s] has no buffer\n", id);
-			ret = LB_STATUS_ERROR_FAULT;
-			goto out;
-		}
-
-		slave = package_slave(pkg);
-		if (!slave) {
-			ErrPrint("Package[%s] has no slave\n", pkgname);
-			ret = LB_STATUS_ERROR_INVALID;
-			goto out;
-		}
-
-		packet_ref((struct packet *)packet);
-		ret = slave_rpc_request_only(slave, pkgname, (struct packet *)packet, 0);
+		ret = forward_lb_event_packet(pkg, inst, packet);
 	} else if (package_lb_type(pkg) == LB_TYPE_SCRIPT) {
 		struct script_info *script;
 		Evas *e;
@@ -1809,25 +1775,7 @@ static struct packet *client_lb_mouse_down(pid_t pid, int handle, const struct p
 		goto out;
 
 	if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
-		struct buffer_info *buffer;
-		struct slave_node *slave;
-
-		buffer = instance_lb_buffer(inst);
-		if (!buffer) {
-			ErrPrint("Instance[%s] has no buffer\n", id);
-			ret = LB_STATUS_ERROR_FAULT;
-			goto out;
-		}
-
-		slave = package_slave(pkg);
-		if (!slave) {
-			ErrPrint("Package[%s] has no slave\n", pkgname);
-			ret = LB_STATUS_ERROR_INVALID;
-			goto out;
-		}
-
-		packet_ref((struct packet *)packet);
-		ret = slave_rpc_request_only(slave, pkgname, (struct packet *)packet, 0);
+		ret = forward_lb_event_packet(pkg, inst, packet);
 	} else if (package_lb_type(pkg) == LB_TYPE_SCRIPT) {
 		struct script_info *script;
 		Evas *e;
@@ -1888,25 +1836,7 @@ static struct packet *client_lb_mouse_up(pid_t pid, int handle, const struct pac
 		goto out;
 
 	if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
-		struct buffer_info *buffer;
-		struct slave_node *slave;
-
-		buffer = instance_lb_buffer(inst);
-		if (!buffer) {
-			ErrPrint("Instance[%s] has no buffer\n", id);
-			ret = LB_STATUS_ERROR_FAULT;
-			goto out;
-		}
-
-		slave = package_slave(pkg);
-		if (!slave) {
-			ErrPrint("Package[%s] has no slave\n", pkgname);
-			ret = LB_STATUS_ERROR_INVALID;
-			goto out;
-		}
-
-		packet_ref((struct packet *)packet);
-		ret = slave_rpc_request_only(slave, pkgname, (struct packet *)packet, 0);
+		ret = forward_lb_event_packet(pkg, inst, packet);
 	} else if (package_lb_type(pkg) == LB_TYPE_SCRIPT) {
 		struct script_info *script;
 		Evas *e;
@@ -1968,25 +1898,7 @@ static struct packet *client_pd_access_action_up(pid_t pid, int handle, const st
 		goto out;
 
 	if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
-		struct buffer_info *buffer;
-		struct slave_node *slave;
-
-		buffer = instance_pd_buffer(inst);
-		if (!buffer) {
-			ErrPrint("Instance[%s] has no buffer\n", id);
-			ret = LB_STATUS_ERROR_FAULT;
-			goto out;
-		}
-
-		slave = package_slave(pkg);
-		if (!slave) {
-			ErrPrint("Package[%s] has no slave\n", pkgname);
-			ret = LB_STATUS_ERROR_INVALID;
-			goto out;
-		}
-
-		packet_ref((struct packet *)packet);
-		ret = slave_rpc_request_only(slave, pkgname, (struct packet *)packet, 0);
+		ret = forward_pd_access_packet(pkg, inst, packet_command(packet), timestamp, x, y);
 	} else if (package_pd_type(pkg) == PD_TYPE_SCRIPT) {
 		struct script_info *script;
 		Evas *e;
@@ -2069,25 +1981,7 @@ static struct packet *client_pd_access_action_down(pid_t pid, int handle, const 
 		goto out;
 
 	if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
-		struct buffer_info *buffer;
-		struct slave_node *slave;
-
-		buffer = instance_pd_buffer(inst);
-		if (!buffer) {
-			ErrPrint("Instance[%s] has no buffer\n", id);
-			ret = LB_STATUS_ERROR_FAULT;
-			goto out;
-		}
-
-		slave = package_slave(pkg);
-		if (!slave) {
-			ErrPrint("Package[%s] has no slave\n", pkgname);
-			ret = LB_STATUS_ERROR_INVALID;
-			goto out;
-		}
-
-		packet_ref((struct packet *)packet);
-		ret = slave_rpc_request_only(slave, pkgname, (struct packet *)packet, 0);
+		ret = forward_pd_access_packet(pkg, inst, packet_command(packet), timestamp, x, y);
 	} else if (package_pd_type(pkg) == PD_TYPE_SCRIPT) {
 		struct script_info *script;
 		Evas *e;
@@ -2170,25 +2064,7 @@ static struct packet *client_pd_access_scroll_down(pid_t pid, int handle, const 
 		goto out;
 
 	if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
-		struct buffer_info *buffer;
-		struct slave_node *slave;
-
-		buffer = instance_pd_buffer(inst);
-		if (!buffer) {
-			ErrPrint("Instance[%s] has no buffer\n", id);
-			ret = LB_STATUS_ERROR_FAULT;
-			goto out;
-		}
-
-		slave = package_slave(pkg);
-		if (!slave) {
-			ErrPrint("Package[%s] has no slave\n", pkgname);
-			ret = LB_STATUS_ERROR_INVALID;
-			goto out;
-		}
-
-		packet_ref((struct packet *)packet);
-		ret = slave_rpc_request_only(slave, pkgname, (struct packet *)packet, 0);
+		ret = forward_pd_access_packet(pkg, inst, packet_command(packet), timestamp, x, y);
 	} else if (package_pd_type(pkg) == PD_TYPE_SCRIPT) {
 		struct script_info *script;
 		Evas *e;
@@ -2271,25 +2147,7 @@ static struct packet *client_pd_access_scroll_move(pid_t pid, int handle, const 
 		goto out;
 
 	if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
-		struct buffer_info *buffer;
-		struct slave_node *slave;
-
-		buffer = instance_pd_buffer(inst);
-		if (!buffer) {
-			ErrPrint("Instance[%s] has no buffer\n", id);
-			ret = LB_STATUS_ERROR_FAULT;
-			goto out;
-		}
-
-		slave = package_slave(pkg);
-		if (!slave) {
-			ErrPrint("Package[%s] has no slave\n", pkgname);
-			ret = LB_STATUS_ERROR_INVALID;
-			goto out;
-		}
-
-		packet_ref((struct packet *)packet);
-		ret = slave_rpc_request_only(slave, pkgname, (struct packet *)packet, 0);
+		ret = forward_pd_access_packet(pkg, inst, packet_command(packet), timestamp, x, y);
 	} else if (package_pd_type(pkg) == PD_TYPE_SCRIPT) {
 		struct script_info *script;
 		Evas *e;
@@ -2372,25 +2230,7 @@ static struct packet *client_pd_access_scroll_up(pid_t pid, int handle, const st
 		goto out;
 
 	if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
-		struct buffer_info *buffer;
-		struct slave_node *slave;
-
-		buffer = instance_pd_buffer(inst);
-		if (!buffer) {
-			ErrPrint("Instance[%s] has no buffer\n", id);
-			ret = LB_STATUS_ERROR_FAULT;
-			goto out;
-		}
-
-		slave = package_slave(pkg);
-		if (!slave) {
-			ErrPrint("Package[%s] has no slave\n", pkgname);
-			ret = LB_STATUS_ERROR_INVALID;
-			goto out;
-		}
-
-		packet_ref((struct packet *)packet);
-		ret = slave_rpc_request_only(slave, pkgname, (struct packet *)packet, 0);
+		ret = forward_pd_access_packet(pkg, inst, packet_command(packet), timestamp, x, y);
 	} else if (package_pd_type(pkg) == PD_TYPE_SCRIPT) {
 		struct script_info *script;
 		Evas *e;
@@ -2473,25 +2313,7 @@ static struct packet *client_pd_access_unhighlight(pid_t pid, int handle, const 
 		goto out;
 
 	if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
-		struct buffer_info *buffer;
-		struct slave_node *slave;
-
-		buffer = instance_pd_buffer(inst);
-		if (!buffer) {
-			ErrPrint("Instance[%s] has no buffer\n", id);
-			ret = LB_STATUS_ERROR_FAULT;
-			goto out;
-		}
-
-		slave = package_slave(pkg);
-		if (!slave) {
-			ErrPrint("Package[%s] has no slave\n", pkgname);
-			ret = LB_STATUS_ERROR_INVALID;
-			goto out;
-		}
-
-		packet_ref((struct packet *)packet);
-		ret = slave_rpc_request_only(slave, pkgname, (struct packet *)packet, 0);
+		ret = forward_pd_access_packet(pkg, inst, packet_command(packet), timestamp, x, y);
 	} else if (package_pd_type(pkg) == PD_TYPE_SCRIPT) {
 		struct script_info *script;
 		Evas *e;
@@ -2573,25 +2395,7 @@ static struct packet *client_pd_access_hl(pid_t pid, int handle, const struct pa
 		goto out;
 
 	if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
-		struct buffer_info *buffer;
-		struct slave_node *slave;
-
-		buffer = instance_pd_buffer(inst);
-		if (!buffer) {
-			ErrPrint("Instance[%s] has no buffer\n", id);
-			ret = LB_STATUS_ERROR_FAULT;
-			goto out;
-		}
-
-		slave = package_slave(pkg);
-		if (!slave) {
-			ErrPrint("Package[%s] has no slave\n", pkgname);
-			ret = LB_STATUS_ERROR_INVALID;
-			goto out;
-		}
-
-		packet_ref((struct packet *)packet);
-		ret = slave_rpc_request_only(slave, pkgname, (struct packet *)packet, 0);
+		ret = forward_pd_access_packet(pkg, inst, packet_command(packet), timestamp, x, y);
 	} else if (package_pd_type(pkg) == PD_TYPE_SCRIPT) {
 		struct script_info *script;
 		Evas *e;
@@ -2674,25 +2478,7 @@ static struct packet *client_pd_access_hl_prev(pid_t pid, int handle, const stru
 		goto out;
 
 	if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
-		struct buffer_info *buffer;
-		struct slave_node *slave;
-
-		buffer = instance_pd_buffer(inst);
-		if (!buffer) {
-			ErrPrint("Instance[%s] has no buffer\n", id);
-			ret = LB_STATUS_ERROR_FAULT;
-			goto out;
-		}
-
-		slave = package_slave(pkg);
-		if (!slave) {
-			ErrPrint("Package[%s] has no slave\n", pkgname);
-			ret = LB_STATUS_ERROR_INVALID;
-			goto out;
-		}
-
-		packet_ref((struct packet *)packet);
-		ret = slave_rpc_request_only(slave, pkgname, (struct packet *)packet, 0);
+		ret = forward_pd_access_packet(pkg, inst, packet_command(packet), timestamp, x, y);
 	} else if (package_pd_type(pkg) == PD_TYPE_SCRIPT) {
 		struct script_info *script;
 		Evas *e;
@@ -2775,25 +2561,7 @@ static struct packet *client_pd_access_hl_next(pid_t pid, int handle, const stru
 		goto out;
 
 	if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
-		struct buffer_info *buffer;
-		struct slave_node *slave;
-
-		buffer = instance_pd_buffer(inst);
-		if (!buffer) {
-			ErrPrint("Instance[%s] has no buffer\n", id);
-			ret = LB_STATUS_ERROR_FAULT;
-			goto out;
-		}
-
-		slave = package_slave(pkg);
-		if (!slave) {
-			ErrPrint("Package[%s] has no slave\n", pkgname);
-			ret = LB_STATUS_ERROR_INVALID;
-			goto out;
-		}
-
-		packet_ref((struct packet *)packet);
-		ret = slave_rpc_request_only(slave, pkgname, (struct packet *)packet, 0);
+		ret = forward_pd_access_packet(pkg, inst, packet_command(packet), timestamp, x, y);
 	} else if (package_pd_type(pkg) == PD_TYPE_SCRIPT) {
 		struct script_info *script;
 		Evas *e;
@@ -2882,25 +2650,7 @@ static struct packet *client_pd_access_activate(pid_t pid, int handle, const str
 		goto out;
 
 	if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
-		struct buffer_info *buffer;
-		struct slave_node *slave;
-
-		buffer = instance_pd_buffer(inst);
-		if (!buffer) {
-			ErrPrint("Instance[%s] has no buffer\n", id);
-			ret = LB_STATUS_ERROR_FAULT;
-			goto out;
-		}
-
-		slave = package_slave(pkg);
-		if (!slave) {
-			ErrPrint("Package[%s] has no slave\n", pkgname);
-			ret = LB_STATUS_ERROR_INVALID;
-			goto out;
-		}
-
-		packet_ref((struct packet *)packet);
-		ret = slave_rpc_request_only(slave, pkgname, (struct packet *)packet, 0);
+		ret = forward_pd_access_packet(pkg, inst, packet_command(packet), timestamp, x, y);
 	} else if (package_pd_type(pkg) == PD_TYPE_SCRIPT) {
 		struct script_info *script;
 		Evas *e;
@@ -2982,25 +2732,7 @@ static struct packet *client_pd_key_down(pid_t pid, int handle, const struct pac
 		goto out;
 
 	if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
-		struct buffer_info *buffer;
-		struct slave_node *slave;
-
-		buffer = instance_pd_buffer(inst);
-		if (!buffer) {
-			ErrPrint("Instance[%s] has no buffer\n", id);
-			ret = LB_STATUS_ERROR_FAULT;
-			goto out;
-		}
-
-		slave = package_slave(pkg);
-		if (!slave) {
-			ErrPrint("Package[%s] has no slave\n", pkgname);
-			ret = LB_STATUS_ERROR_INVALID;
-			goto out;
-		}
-
-		packet_ref((struct packet *)packet);
-		ret = slave_rpc_request_only(slave, pkgname, (struct packet *)packet, 0);
+		ret = forward_pd_event_packet(pkg, inst, packet);
 	} else if (package_pd_type(pkg) == PD_TYPE_SCRIPT) {
 		struct script_info *script;
 		Evas *e;
@@ -3119,25 +2851,7 @@ static struct packet *client_pd_key_up(pid_t pid, int handle, const struct packe
 		goto out;
 
 	if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
-		struct buffer_info *buffer;
-		struct slave_node *slave;
-
-		buffer = instance_pd_buffer(inst);
-		if (!buffer) {
-			ErrPrint("Instance[%s] has no buffer\n", id);
-			ret = LB_STATUS_ERROR_FAULT;
-			goto out;
-		}
-
-		slave = package_slave(pkg);
-		if (!slave) {
-			ErrPrint("Package[%s] has no slave\n", pkgname);
-			ret = LB_STATUS_ERROR_INVALID;
-			goto out;
-		}
-
-		packet_ref((struct packet *)packet);
-		ret = slave_rpc_request_only(slave, pkgname, (struct packet *)packet, 0);
+		ret = forward_pd_event_packet(pkg, inst, packet);
 	} else if (package_pd_type(pkg) == PD_TYPE_SCRIPT) {
 		struct script_info *script;
 		Evas *e;
@@ -3201,25 +2915,7 @@ static struct packet *client_lb_access_hl(pid_t pid, int handle, const struct pa
 		goto out;
 
 	if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
-		struct buffer_info *buffer;
-		struct slave_node *slave;
-
-		buffer = instance_lb_buffer(inst);
-		if (!buffer) {
-			ErrPrint("Instance[%s] has no buffer\n", id);
-			ret = LB_STATUS_ERROR_FAULT;
-			goto out;
-		}
-
-		slave = package_slave(pkg);
-		if (!slave) {
-			ErrPrint("Package[%s] has no slave\n", pkgname);
-			ret = LB_STATUS_ERROR_INVALID;
-			goto out;
-		}
-
-		packet_ref((struct packet *)packet);
-		ret = slave_rpc_request_only(slave, pkgname, (struct packet *)packet, 0);
+		ret = forward_lb_access_packet(pkg, inst, packet_command(packet), timestamp, x, y);
 	} else if (package_lb_type(pkg) == LB_TYPE_SCRIPT) {
 		struct script_info *script;
 		Evas *e;
@@ -3302,25 +2998,7 @@ static struct packet *client_lb_access_hl_prev(pid_t pid, int handle, const stru
 		goto out;
 
 	if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
-		struct buffer_info *buffer;
-		struct slave_node *slave;
-
-		buffer = instance_lb_buffer(inst);
-		if (!buffer) {
-			ErrPrint("Instance[%s] has no buffer\n", id);
-			ret = LB_STATUS_ERROR_FAULT;
-			goto out;
-		}
-
-		slave = package_slave(pkg);
-		if (!slave) {
-			ErrPrint("Package[%s] has no slave\n", pkgname);
-			ret = LB_STATUS_ERROR_INVALID;
-			goto out;
-		}
-
-		packet_ref((struct packet *)packet);
-		ret = slave_rpc_request_only(slave, pkgname, (struct packet *)packet, 0);
+		ret = forward_lb_access_packet(pkg, inst, packet_command(packet), timestamp, x, y);
 	} else if (package_lb_type(pkg) == LB_TYPE_SCRIPT) {
 		struct script_info *script;
 		Evas *e;
@@ -3403,25 +3081,7 @@ static struct packet *client_lb_access_hl_next(pid_t pid, int handle, const stru
 		goto out;
 
 	if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
-		struct buffer_info *buffer;
-		struct slave_node *slave;
-
-		buffer = instance_lb_buffer(inst);
-		if (!buffer) {
-			ErrPrint("Instance[%s] has no buffer\n", id);
-			ret = LB_STATUS_ERROR_FAULT;
-			goto out;
-		}
-
-		slave = package_slave(pkg);
-		if (!slave) {
-			ErrPrint("Package[%s] has no slave\n", pkgname);
-			ret = LB_STATUS_ERROR_INVALID;
-			goto out;
-		}
-
-		packet_ref((struct packet *)packet);
-		ret = slave_rpc_request_only(slave, pkgname, (struct packet *)packet, 0);
+		ret = forward_lb_access_packet(pkg, inst, packet_command(packet), timestamp, x, y);
 	} else if (package_lb_type(pkg) == LB_TYPE_SCRIPT) {
 		struct script_info *script;
 		Evas *e;
@@ -3504,25 +3164,7 @@ static struct packet *client_lb_access_action_up(pid_t pid, int handle, const st
 		goto out;
 
 	if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
-		struct buffer_info *buffer;
-		struct slave_node *slave;
-
-		buffer = instance_lb_buffer(inst);
-		if (!buffer) {
-			ErrPrint("Instance[%s] has no buffer\n", id);
-			ret = LB_STATUS_ERROR_FAULT;
-			goto out;
-		}
-
-		slave = package_slave(pkg);
-		if (!slave) {
-			ErrPrint("Slave is not exists\n");
-			ret = LB_STATUS_ERROR_INVALID;
-			goto out;
-		}
-
-		packet_ref((struct packet *)packet);
-		ret = slave_rpc_request_only(slave, pkgname, (struct packet *)packet, 0);
+		ret = forward_lb_access_packet(pkg, inst, packet_command(packet), timestamp, x, y);
 		/*!
 		 * Enen if it fails to send packet,
 		 * The packet will be unref'd
@@ -3612,25 +3254,7 @@ static struct packet *client_lb_access_action_down(pid_t pid, int handle, const 
 		goto out;
 
 	if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
-		struct buffer_info *buffer;
-		struct slave_node *slave;
-
-		buffer = instance_lb_buffer(inst);
-		if (!buffer) {
-			ErrPrint("Instance[%s] has no buffer\n", id);
-			ret = LB_STATUS_ERROR_FAULT;
-			goto out;
-		}
-
-		slave = package_slave(pkg);
-		if (!slave) {
-			ErrPrint("Slave is not exists\n");
-			ret = LB_STATUS_ERROR_INVALID;
-			goto out;
-		}
-
-		packet_ref((struct packet *)packet);
-		ret = slave_rpc_request_only(slave, pkgname, (struct packet *)packet, 0);
+		ret = forward_lb_access_packet(pkg, inst, packet_command(packet), timestamp, x, y);
 		/*!
 		 * Enen if it fails to send packet,
 		 * The packet will be unref'd
@@ -3720,25 +3344,7 @@ static struct packet *client_lb_access_unhighlight(pid_t pid, int handle, const 
 		goto out;
 
 	if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
-		struct buffer_info *buffer;
-		struct slave_node *slave;
-
-		buffer = instance_lb_buffer(inst);
-		if (!buffer) {
-			ErrPrint("Instance[%s] has no buffer\n", id);
-			ret = LB_STATUS_ERROR_FAULT;
-			goto out;
-		}
-
-		slave = package_slave(pkg);
-		if (!slave) {
-			ErrPrint("Package[%s] has no slave\n", pkgname);
-			ret = LB_STATUS_ERROR_INVALID;
-			goto out;
-		}
-
-		packet_ref((struct packet *)packet);
-		ret = slave_rpc_request_only(slave, pkgname, (struct packet *)packet, 0);
+		ret = forward_lb_access_packet(pkg, inst, packet_command(packet), timestamp, x, y);
 	} else if (package_lb_type(pkg) == LB_TYPE_SCRIPT) {
 		struct script_info *script;
 		Evas *e;
@@ -3821,25 +3427,7 @@ static struct packet *client_lb_access_scroll_down(pid_t pid, int handle, const 
 		goto out;
 
 	if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
-		struct buffer_info *buffer;
-		struct slave_node *slave;
-
-		buffer = instance_lb_buffer(inst);
-		if (!buffer) {
-			ErrPrint("Instance[%s] has no buffer\n", id);
-			ret = LB_STATUS_ERROR_FAULT;
-			goto out;
-		}
-
-		slave = package_slave(pkg);
-		if (!slave) {
-			ErrPrint("Slave is not exists\n");
-			ret = LB_STATUS_ERROR_INVALID;
-			goto out;
-		}
-
-		packet_ref((struct packet *)packet);
-		ret = slave_rpc_request_only(slave, pkgname, (struct packet *)packet, 0);
+		ret = forward_lb_access_packet(pkg, inst, packet_command(packet), timestamp, x, y);
 		/*!
 		 * Enen if it fails to send packet,
 		 * The packet will be unref'd
@@ -3929,25 +3517,7 @@ static struct packet *client_lb_access_scroll_move(pid_t pid, int handle, const 
 		goto out;
 
 	if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
-		struct buffer_info *buffer;
-		struct slave_node *slave;
-
-		buffer = instance_lb_buffer(inst);
-		if (!buffer) {
-			ErrPrint("Instance[%s] has no buffer\n", id);
-			ret = LB_STATUS_ERROR_FAULT;
-			goto out;
-		}
-
-		slave = package_slave(pkg);
-		if (!slave) {
-			ErrPrint("Slave is not exists\n");
-			ret = LB_STATUS_ERROR_INVALID;
-			goto out;
-		}
-
-		packet_ref((struct packet *)packet);
-		ret = slave_rpc_request_only(slave, pkgname, (struct packet *)packet, 0);
+		ret = forward_lb_access_packet(pkg, inst, packet_command(packet), timestamp, x, y);
 		/*!
 		 * Enen if it fails to send packet,
 		 * The packet will be unref'd
@@ -4037,25 +3607,7 @@ static struct packet *client_lb_access_scroll_up(pid_t pid, int handle, const st
 		goto out;
 
 	if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
-		struct buffer_info *buffer;
-		struct slave_node *slave;
-
-		buffer = instance_lb_buffer(inst);
-		if (!buffer) {
-			ErrPrint("Instance[%s] has no buffer\n", id);
-			ret = LB_STATUS_ERROR_FAULT;
-			goto out;
-		}
-
-		slave = package_slave(pkg);
-		if (!slave) {
-			ErrPrint("Slave is not exists\n");
-			ret = LB_STATUS_ERROR_INVALID;
-			goto out;
-		}
-
-		packet_ref((struct packet *)packet);
-		ret = slave_rpc_request_only(slave, pkgname, (struct packet *)packet, 0);
+		ret = forward_lb_access_packet(pkg, inst, packet_command(packet), timestamp, x, y);
 		/*!
 		 * Enen if it fails to send packet,
 		 * The packet will be unref'd
@@ -4145,25 +3697,7 @@ static struct packet *client_lb_access_activate(pid_t pid, int handle, const str
 		goto out;
 
 	if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
-		struct buffer_info *buffer;
-		struct slave_node *slave;
-
-		buffer = instance_lb_buffer(inst);
-		if (!buffer) {
-			ErrPrint("Instance[%s] has no buffer\n", id);
-			ret = LB_STATUS_ERROR_FAULT;
-			goto out;
-		}
-
-		slave = package_slave(pkg);
-		if (!slave) {
-			ErrPrint("Package[%s] has no slave\n", pkgname);
-			ret = LB_STATUS_ERROR_INVALID;
-			goto out;
-		}
-
-		packet_ref((struct packet *)packet);
-		ret = slave_rpc_request_only(slave, pkgname, (struct packet *)packet, 0);
+		ret = forward_lb_access_packet(pkg, inst, packet_command(packet), timestamp, x, y);
 	} else if (package_lb_type(pkg) == LB_TYPE_SCRIPT) {
 		struct script_info *script;
 		Evas *e;
@@ -4247,25 +3781,7 @@ static struct packet *client_lb_key_down(pid_t pid, int handle, const struct pac
 		goto out;
 
 	if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
-		struct buffer_info *buffer;
-		struct slave_node *slave;
-
-		buffer = instance_lb_buffer(inst);
-		if (!buffer) {
-			ErrPrint("Instance[%s] has no buffer\n", id);
-			ret = LB_STATUS_ERROR_FAULT;
-			goto out;
-		}
-
-		slave = package_slave(pkg);
-		if (!slave) {
-			ErrPrint("Package[%s] has no slave\n", pkgname);
-			ret = LB_STATUS_ERROR_INVALID;
-			goto out;
-		}
-
-		packet_ref((struct packet *)packet);
-		ret = slave_rpc_request_only(slave, pkgname, (struct packet *)packet, 0);
+		ret = forward_lb_event_packet(pkg, inst, packet);
 	} else if (package_lb_type(pkg) == LB_TYPE_SCRIPT) {
 		struct script_info *script;
 		Evas *e;
@@ -4329,25 +3845,7 @@ static struct packet *client_lb_key_up(pid_t pid, int handle, const struct packe
 		goto out;
 
 	if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
-		struct buffer_info *buffer;
-		struct slave_node *slave;
-
-		buffer = instance_lb_buffer(inst);
-		if (!buffer) {
-			ErrPrint("Instance[%s] has no buffer\n", id);
-			ret = LB_STATUS_ERROR_FAULT;
-			goto out;
-		}
-
-		slave = package_slave(pkg);
-		if (!slave) {
-			ErrPrint("Package[%s] has no slave\n", pkgname);
-			ret = LB_STATUS_ERROR_INVALID;
-			goto out;
-		}
-
-		packet_ref((struct packet *)packet);
-		ret = slave_rpc_request_only(slave, pkgname, (struct packet *)packet, 0);
+		ret = forward_lb_event_packet(pkg, inst, packet);
 	} else if (package_lb_type(pkg) == LB_TYPE_SCRIPT) {
 		struct script_info *script;
 		Evas *e;

@@ -122,6 +122,9 @@ static inline int processing_input_event(struct input_event *event)
 					ErrPrint("Unable to send an event: %s\n", strerror(errno));
 					return LB_STATUS_ERROR_IO;
 				}
+
+				/* Take a breathe */
+				pthread_yield();
 			}
 			break;
 		case SYN_CONFIG:

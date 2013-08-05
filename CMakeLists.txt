@@ -60,6 +60,8 @@ ADD_DEFINITIONS("-DSHORTCUT_SMACK_LABEL=\"data-provider-master::shortcut\"")
 ADD_DEFINITIONS("-DNOTIFICATION_SMACK_LABEL=\"data-provider-master::notification\"")
 ADD_DEFINITIONS("-DBADGE_SMACK_LABEL=\"data-provider-master::badge\"")
 
+ADD_DEFINITIONS("-DCLIENT_PORT=\"8208\"")
+
 ADD_DEFINITIONS("-DNDEBUG")
 #ADD_DEFINITIONS("-DFLOG")
 ADD_DEFINITIONS(${pkg_CFLAGS})
@@ -96,6 +98,7 @@ ADD_EXECUTABLE(${PROJECT_NAME}
 	src/notification_service.c
 	src/utility_service.c
 	src/service_common.c
+	src/file_service.c
 )
 
 TARGET_LINK_LIBRARIES(${PROJECT_NAME} ${pkg_LDFLAGS} "-ldl")

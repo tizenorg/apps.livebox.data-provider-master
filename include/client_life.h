@@ -66,8 +66,6 @@ extern struct client_node *client_deactivated_by_fault(struct client_node *clien
 extern void client_reset_fault(struct client_node *client);
 extern const int const client_is_faulted(const struct client_node *client);
 
-extern const int const client_is_activated(const struct client_node *client);
-
 /*!
  * \note
  * For other components which wants to know the state of a client

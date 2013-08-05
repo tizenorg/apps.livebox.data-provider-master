@@ -57,11 +57,13 @@ static struct info {
 	int client_fd;
 	int service_fd;
 	int slave_fd;
+	int remote_client_fd;
 } s_info = {
 	.info_fd = -1,
 	.client_fd = -1,
 	.service_fd = -1,
 	.slave_fd = -1,
+	.remote_client_fd = -1,
 };
 
 /* Share this with provider */
@@ -460,7 +462,7 @@ static struct packet *client_acquire(pid_t pid, int handle, const struct packet 
 	double timestamp;
 	int ret;
 
-	client = client_find_by_pid(pid);
+	client = client_find_by_rpc_handle(handle);
 	if (client) {
 		ErrPrint("Client is already exists %d\n", pid);
 		ret = LB_STATUS_ERROR_EXIST;
@@ -498,7 +500,7 @@ static struct packet *cilent_release(pid_t pid, int handle, const struct packet 
 	struct packet *result;
 	int ret;
 
-	client = client_find_by_pid(pid);
+	client = client_find_by_rpc_handle(handle);
 	if (!client) {
 		ErrPrint("Client %d is not exists\n", pid);
 		ret = LB_STATUS_ERROR_NOT_EXIST;
@@ -560,7 +562,7 @@ static struct packet *client_clicked(pid_t pid, int handle, const struct packet 
 	int ret;
 	struct inst_info *inst;
 
-	client = client_find_by_pid(pid);
+	client = client_find_by_rpc_handle(handle);
 	if (!client) {
 		ErrPrint("Client %d is not exists\n", pid);
 		goto out;
@@ -596,7 +598,7 @@ static struct packet *client_update_mode(pid_t pid, int handle, const struct pac
 	int ret;
 	struct inst_info *inst;
 
-	client = client_find_by_pid(pid);
+	client = client_find_by_rpc_handle(handle);
 	if (!client) {
 		ErrPrint("Client %d is not exists\n", pid);
 		ret = LB_STATUS_ERROR_INVALID;
@@ -643,7 +645,7 @@ static struct packet *client_text_signal(pid_t pid, int handle, const struct pac
 	struct inst_info *inst;
 	int ret;
 
-	client = client_find_by_pid(pid);
+	client = client_find_by_rpc_handle(handle);
 	if (!client) {
 		ErrPrint("Client %d is not exists\n", pid);
 		ret = LB_STATUS_ERROR_NOT_EXIST;
@@ -702,7 +704,7 @@ static struct packet *client_delete(pid_t pid, int handle, const struct packet *
 	struct inst_info *inst;
 	int ret;
 
-	client = client_find_by_pid(pid);
+	client = client_find_by_rpc_handle(handle);
 	if (!client) {
 		ErrPrint("Client %d is not exists\n", pid);
 		ret = LB_STATUS_ERROR_NOT_EXIST;
@@ -783,7 +785,7 @@ static struct packet *client_resize(pid_t pid, int handle, const struct packet *
 	struct inst_info *inst;
 	int ret;
 
-	client = client_find_by_pid(pid);
+	client = client_find_by_rpc_handle(handle);
 	if (!client) {
 		ErrPrint("Client %d is not exists\n", pid);
 		ret = LB_STATUS_ERROR_NOT_EXIST;
@@ -838,7 +840,7 @@ static struct packet *client_new(pid_t pid, int handle, const struct packet *pac
 	char *lb_pkgname;
 	char *mainappid;
 
-	client = client_find_by_pid(pid);
+	client = client_find_by_rpc_handle(handle);
 	if (!client) {
 		ErrPrint("Client %d is not exists\n", pid);
 		ret = LB_STATUS_ERROR_NOT_EXIST;
@@ -915,7 +917,7 @@ static struct packet *client_change_visibility(pid_t pid, int handle, const stru
 	int ret;
 	struct inst_info *inst;
 
-	client = client_find_by_pid(pid);
+	client = client_find_by_rpc_handle(handle);
 	if (!client) {
 		ErrPrint("Client %d is not exists\n", pid);
 		ret = LB_STATUS_ERROR_NOT_EXIST;
@@ -958,7 +960,7 @@ static struct packet *client_set_period(pid_t pid, int handle, const struct pack
 	int ret;
 	struct inst_info *inst;
 
-	client = client_find_by_pid(pid);
+	client = client_find_by_rpc_handle(handle);
 	if (!client) {
 		ErrPrint("Client %d is not exists\n", pid);
 		ret = LB_STATUS_ERROR_NOT_EXIST;
@@ -1007,7 +1009,7 @@ static struct packet *client_change_group(pid_t pid, int handle, const struct pa
 	struct inst_info *inst;
 	int ret;
 
-	client = client_find_by_pid(pid);
+	client = client_find_by_rpc_handle(handle);
 	if (!client) {
 		ErrPrint("Client %d is not exists\n", pid);
 		ret = LB_STATUS_ERROR_NOT_EXIST;
@@ -1057,7 +1059,7 @@ static struct packet *client_pd_mouse_enter(pid_t pid, int handle, const struct 
 	struct inst_info *inst;
 	const struct pkg_info *pkg;
 
-	client = client_find_by_pid(pid);
+	client = client_find_by_rpc_handle(handle);
 	if (!client) {
 		ErrPrint("Client %d is not exists\n", pid);
 		ret = LB_STATUS_ERROR_NOT_EXIST;
@@ -1118,7 +1120,7 @@ static struct packet *client_pd_mouse_leave(pid_t pid, int handle, const struct 
 	struct inst_info *inst;
 	const struct pkg_info *pkg;
 
-	client = client_find_by_pid(pid);
+	client = client_find_by_rpc_handle(handle);
 	if (!client) {
 		ErrPrint("Client %d is not exists\n", pid);
 		ret = LB_STATUS_ERROR_NOT_EXIST;
@@ -1179,7 +1181,7 @@ static struct packet *client_pd_mouse_down(pid_t pid, int handle, const struct p
 	struct inst_info *inst;
 	const struct pkg_info *pkg;
 
-	client = client_find_by_pid(pid);
+	client = client_find_by_rpc_handle(handle);
 	if (!client) {
 		ErrPrint("Client %d is not exists\n", pid);
 		ret = LB_STATUS_ERROR_NOT_EXIST;
@@ -1240,7 +1242,7 @@ static struct packet *client_pd_mouse_up(pid_t pid, int handle, const struct pac
 	struct inst_info *inst;
 	const struct pkg_info *pkg;
 
-	client = client_find_by_pid(pid);
+	client = client_find_by_rpc_handle(handle);
 	if (!client) {
 		ErrPrint("Client %d is not exists\n", pid);
 		ret = LB_STATUS_ERROR_NOT_EXIST;
@@ -1301,7 +1303,7 @@ static struct packet *client_pd_mouse_move(pid_t pid, int handle, const struct p
 	struct inst_info *inst;
 	const struct pkg_info *pkg;
 
-	client = client_find_by_pid(pid);
+	client = client_find_by_rpc_handle(handle);
 	if (!client) {
 		ErrPrint("Client %d is not exists\n", pid);
 		ret = LB_STATUS_ERROR_NOT_EXIST;
@@ -1362,7 +1364,7 @@ static struct packet *client_lb_mouse_move(pid_t pid, int handle, const struct p
 	struct inst_info *inst;
 	const struct pkg_info *pkg;
 
-	client = client_find_by_pid(pid);
+	client = client_find_by_rpc_handle(handle);
 	if (!client) {
 		ErrPrint("Client %d is not exists\n", pid);
 		ret = LB_STATUS_ERROR_NOT_EXIST;
@@ -1429,7 +1431,7 @@ static struct packet *client_lb_mouse_set(pid_t pid, int handle, const struct pa
 	struct inst_info *inst;
 	const struct pkg_info *pkg;
 
-	client = client_find_by_pid(pid);
+	client = client_find_by_rpc_handle(handle);
 	if (!client) {
 		ErrPrint("Client %d is not exists\n", pid);
 		ret = LB_STATUS_ERROR_NOT_EXIST;
@@ -1485,7 +1487,7 @@ static struct packet *client_lb_mouse_unset(pid_t pid, int handle, const struct 
 	struct inst_info *inst;
 	const struct pkg_info *pkg;
 
-	client = client_find_by_pid(pid);
+	client = client_find_by_rpc_handle(handle);
 	if (!client) {
 		ErrPrint("Client %d is not exists\n", pid);
 		ret = LB_STATUS_ERROR_NOT_EXIST;
@@ -1531,7 +1533,7 @@ static struct packet *client_pd_mouse_set(pid_t pid, int handle, const struct pa
 	struct inst_info *inst;
 	const struct pkg_info *pkg;
 
-	client = client_find_by_pid(pid);
+	client = client_find_by_rpc_handle(handle);
 	if (!client) {
 		ErrPrint("Client %d is not exists\n", pid);
 		ret = LB_STATUS_ERROR_NOT_EXIST;
@@ -1588,7 +1590,7 @@ static struct packet *client_pd_mouse_unset(pid_t pid, int handle, const struct 
 	struct inst_info *inst;
 	const struct pkg_info *pkg;
 
-	client = client_find_by_pid(pid);
+	client = client_find_by_rpc_handle(handle);
 	if (!client) {
 		ErrPrint("Client %d is not exists\n", pid);
 		ret = LB_STATUS_ERROR_NOT_EXIST;
@@ -1634,7 +1636,7 @@ static struct packet *client_lb_mouse_enter(pid_t pid, int handle, const struct 
 	struct inst_info *inst;
 	const struct pkg_info *pkg;
 
-	client = client_find_by_pid(pid);
+	client = client_find_by_rpc_handle(handle);
 	if (!client) {
 		ErrPrint("Client %d is not exists\n", pid);
 		ret = LB_STATUS_ERROR_NOT_EXIST;
@@ -1695,7 +1697,7 @@ static struct packet *client_lb_mouse_leave(pid_t pid, int handle, const struct 
 	struct inst_info *inst;
 	const struct pkg_info *pkg;
 
-	client = client_find_by_pid(pid);
+	client = client_find_by_rpc_handle(handle);
 	if (!client) {
 		ErrPrint("Client %d is not exists\n", pid);
 		ret = LB_STATUS_ERROR_NOT_EXIST;
@@ -1756,7 +1758,7 @@ static struct packet *client_lb_mouse_down(pid_t pid, int handle, const struct p
 	struct inst_info *inst;
 	const struct pkg_info *pkg;
 
-	client = client_find_by_pid(pid);
+	client = client_find_by_rpc_handle(handle);
 	if (!client) {
 		ErrPrint("Client %d is not exists\n", pid);
 		ret = LB_STATUS_ERROR_NOT_EXIST;
@@ -1817,7 +1819,7 @@ static struct packet *client_lb_mouse_up(pid_t pid, int handle, const struct pac
 	struct inst_info *inst;
 	const struct pkg_info *pkg;
 
-	client = client_find_by_pid(pid);
+	client = client_find_by_rpc_handle(handle);
 	if (!client) {
 		ErrPrint("Client %d is not exists\n", pid);
 		ret = LB_STATUS_ERROR_NOT_EXIST;
@@ -1879,7 +1881,7 @@ static struct packet *client_pd_access_action_up(pid_t pid, int handle, const st
 	struct inst_info *inst;
 	const struct pkg_info *pkg;
 
-	client = client_find_by_pid(pid);
+	client = client_find_by_rpc_handle(handle);
 	if (!client) {
 		ErrPrint("Client %d is not exists\n", pid);
 		ret = LB_STATUS_ERROR_NOT_EXIST;
@@ -1962,7 +1964,7 @@ static struct packet *client_pd_access_action_down(pid_t pid, int handle, const 
 	struct inst_info *inst;
 	const struct pkg_info *pkg;
 
-	client = client_find_by_pid(pid);
+	client = client_find_by_rpc_handle(handle);
 	if (!client) {
 		ErrPrint("Client %d is not exists\n", pid);
 		ret = LB_STATUS_ERROR_NOT_EXIST;
@@ -2045,7 +2047,7 @@ static struct packet *client_pd_access_scroll_down(pid_t pid, int handle, const 
 	struct inst_info *inst;
 	const struct pkg_info *pkg;
 
-	client = client_find_by_pid(pid);
+	client = client_find_by_rpc_handle(handle);
 	if (!client) {
 		ErrPrint("Client %d is not exists\n", pid);
 		ret = LB_STATUS_ERROR_NOT_EXIST;
@@ -2128,7 +2130,7 @@ static struct packet *client_pd_access_scroll_move(pid_t pid, int handle, const 
 	struct inst_info *inst;
 	const struct pkg_info *pkg;
 
-	client = client_find_by_pid(pid);
+	client = client_find_by_rpc_handle(handle);
 	if (!client) {
 		ErrPrint("Client %d is not exists\n", pid);
 		ret = LB_STATUS_ERROR_NOT_EXIST;
@@ -2211,7 +2213,7 @@ static struct packet *client_pd_access_scroll_up(pid_t pid, int handle, const st
 	struct inst_info *inst;
 	const struct pkg_info *pkg;
 
-	client = client_find_by_pid(pid);
+	client = client_find_by_rpc_handle(handle);
 	if (!client) {
 		ErrPrint("Client %d is not exists\n", pid);
 		ret = LB_STATUS_ERROR_NOT_EXIST;
@@ -2294,7 +2296,7 @@ static struct packet *client_pd_access_unhighlight(pid_t pid, int handle, const 
 	int ret;
 	double timestamp;
 
-	client = client_find_by_pid(pid);
+	client = client_find_by_rpc_handle(handle);
 	if (!client) {
 		ErrPrint("Client %d is not exists\n", pid);
 		ret = LB_STATUS_ERROR_NOT_EXIST;
@@ -2376,7 +2378,7 @@ static struct packet *client_pd_access_hl(pid_t pid, int handle, const struct pa
 	struct inst_info *inst;
 	const struct pkg_info *pkg;
 
-	client = client_find_by_pid(pid);
+	client = client_find_by_rpc_handle(handle);
 	if (!client) {
 		ErrPrint("Client %d is not exists\n", pid);
 		ret = LB_STATUS_ERROR_NOT_EXIST;
@@ -2459,7 +2461,7 @@ static struct packet *client_pd_access_hl_prev(pid_t pid, int handle, const stru
 	struct inst_info *inst;
 	const struct pkg_info *pkg;
 
-	client = client_find_by_pid(pid);
+	client = client_find_by_rpc_handle(handle);
 	if (!client) {
 		ErrPrint("Client %d is not exists\n", pid);
 		ret = LB_STATUS_ERROR_NOT_EXIST;
@@ -2542,7 +2544,7 @@ static struct packet *client_pd_access_hl_next(pid_t pid, int handle, const stru
 	struct inst_info *inst;
 	const struct pkg_info *pkg;
 
-	client = client_find_by_pid(pid);
+	client = client_find_by_rpc_handle(handle);
 	if (!client) {
 		ErrPrint("Client %d is not exists\n", pid);
 		ret = LB_STATUS_ERROR_NOT_EXIST;
@@ -2631,7 +2633,7 @@ static struct packet *client_pd_access_activate(pid_t pid, int handle, const str
 	struct inst_info *inst;
 	const struct pkg_info *pkg;
 
-	client = client_find_by_pid(pid);
+	client = client_find_by_rpc_handle(handle);
 	if (!client) {
 		ErrPrint("Client %d is not exists\n", pid);
 		ret = LB_STATUS_ERROR_NOT_EXIST;
@@ -2713,7 +2715,7 @@ static struct packet *client_pd_key_down(pid_t pid, int handle, const struct pac
 	struct inst_info *inst;
 	const struct pkg_info *pkg;
 
-	client = client_find_by_pid(pid);
+	client = client_find_by_rpc_handle(handle);
 	if (!client) {
 		ErrPrint("Client %d is not exists\n", pid);
 		ret = LB_STATUS_ERROR_NOT_EXIST;
@@ -2770,7 +2772,7 @@ static struct packet *client_pause_request(pid_t pid, int handle, const struct p
 	double timestamp;
 	int ret;
 
-	client = client_find_by_pid(pid);
+	client = client_find_by_rpc_handle(handle);
 	if (!client) {
 		ErrPrint("Client %d is paused - manually reported\n", pid);
 		ret = LB_STATUS_ERROR_NOT_EXIST;
@@ -2799,7 +2801,7 @@ static struct packet *client_resume_request(pid_t pid, int handle, const struct 
 	double timestamp;
 	int ret;
 
-	client = client_find_by_pid(pid);
+	client = client_find_by_rpc_handle(handle);
 	if (!client) {
 		ErrPrint("Client %d is not exists\n", pid);
 		goto out;
@@ -2832,7 +2834,7 @@ static struct packet *client_pd_key_up(pid_t pid, int handle, const struct packe
 	struct inst_info *inst;
 	const struct pkg_info *pkg;
 
-	client = client_find_by_pid(pid);
+	client = client_find_by_rpc_handle(handle);
 	if (!client) {
 		ErrPrint("Client %d is not exists\n", pid);
 		ret = LB_STATUS_ERROR_NOT_EXIST;
@@ -2896,7 +2898,7 @@ static struct packet *client_lb_access_hl(pid_t pid, int handle, const struct pa
 	struct inst_info *inst;
 	const struct pkg_info *pkg;
 
-	client = client_find_by_pid(pid);
+	client = client_find_by_rpc_handle(handle);
 	if (!client) {
 		ErrPrint("Client %d is not exists\n", pid);
 		ret = LB_STATUS_ERROR_NOT_EXIST;
@@ -2979,7 +2981,7 @@ static struct packet *client_lb_access_hl_prev(pid_t pid, int handle, const stru
 	struct inst_info *inst;
 	const struct pkg_info *pkg;
 
-	client = client_find_by_pid(pid);
+	client = client_find_by_rpc_handle(handle);
 	if (!client) {
 		ErrPrint("Client %d is not exists\n", pid);
 		ret = LB_STATUS_ERROR_NOT_EXIST;
@@ -3062,7 +3064,7 @@ static struct packet *client_lb_access_hl_next(pid_t pid, int handle, const stru
 	struct inst_info *inst;
 	const struct pkg_info *pkg;
 
-	client = client_find_by_pid(pid);
+	client = client_find_by_rpc_handle(handle);
 	if (!client) {
 		ErrPrint("Client %d is not exists\n", pid);
 		ret = LB_STATUS_ERROR_NOT_EXIST;
@@ -3145,7 +3147,7 @@ static struct packet *client_lb_access_action_up(pid_t pid, int handle, const st
 	int x;
 	int y;
 
-	client = client_find_by_pid(pid);
+	client = client_find_by_rpc_handle(handle);
 	if (!client) {
 		ErrPrint("Client %d is not exist\n", pid);
 		ret = LB_STATUS_ERROR_NOT_EXIST;
@@ -3235,7 +3237,7 @@ static struct packet *client_lb_access_action_down(pid_t pid, int handle, const 
 	int x;
 	int y;
 
-	client = client_find_by_pid(pid);
+	client = client_find_by_rpc_handle(handle);
 	if (!client) {
 		ErrPrint("Client %d is not exist\n", pid);
 		ret = LB_STATUS_ERROR_NOT_EXIST;
@@ -3325,7 +3327,7 @@ static struct packet *client_lb_access_unhighlight(pid_t pid, int handle, const 
 	struct inst_info *inst;
 	const struct pkg_info *pkg;
 
-	client = client_find_by_pid(pid);
+	client = client_find_by_rpc_handle(handle);
 	if (!client) {
 		ErrPrint("Client %d is not exists\n", pid);
 		ret = LB_STATUS_ERROR_NOT_EXIST;
@@ -3408,7 +3410,7 @@ static struct packet *client_lb_access_scroll_down(pid_t pid, int handle, const 
 	int x;
 	int y;
 
-	client = client_find_by_pid(pid);
+	client = client_find_by_rpc_handle(handle);
 	if (!client) {
 		ErrPrint("Client %d is not exist\n", pid);
 		ret = LB_STATUS_ERROR_NOT_EXIST;
@@ -3498,7 +3500,7 @@ static struct packet *client_lb_access_scroll_move(pid_t pid, int handle, const 
 	int x;
 	int y;
 
-	client = client_find_by_pid(pid);
+	client = client_find_by_rpc_handle(handle);
 	if (!client) {
 		ErrPrint("Client %d is not exist\n", pid);
 		ret = LB_STATUS_ERROR_NOT_EXIST;
@@ -3588,7 +3590,7 @@ static struct packet *client_lb_access_scroll_up(pid_t pid, int handle, const st
 	int x;
 	int y;
 
-	client = client_find_by_pid(pid);
+	client = client_find_by_rpc_handle(handle);
 	if (!client) {
 		ErrPrint("Client %d is not exist\n", pid);
 		ret = LB_STATUS_ERROR_NOT_EXIST;
@@ -3678,7 +3680,7 @@ static struct packet *client_lb_access_activate(pid_t pid, int handle, const str
 	struct inst_info *inst;
 	const struct pkg_info *pkg;
 
-	client = client_find_by_pid(pid);
+	client = client_find_by_rpc_handle(handle);
 	if (!client) {
 		ErrPrint("Client %d is not exists\n", pid);
 		ret = LB_STATUS_ERROR_NOT_EXIST;
@@ -3762,7 +3764,7 @@ static struct packet *client_lb_key_down(pid_t pid, int handle, const struct pac
 	struct inst_info *inst;
 	const struct pkg_info *pkg;
 
-	client = client_find_by_pid(pid);
+	client = client_find_by_rpc_handle(handle);
 	if (!client) {
 		ErrPrint("Client %d is not exists\n", pid);
 		ret = LB_STATUS_ERROR_NOT_EXIST;
@@ -3826,7 +3828,7 @@ static struct packet *client_lb_key_up(pid_t pid, int handle, const struct packe
 	struct inst_info *inst;
 	const struct pkg_info *pkg;
 
-	client = client_find_by_pid(pid);
+	client = client_find_by_rpc_handle(handle);
 	if (!client) {
 		ErrPrint("Client %d is not exists\n", pid);
 		ret = LB_STATUS_ERROR_NOT_EXIST;
@@ -3897,7 +3899,7 @@ static struct packet *client_lb_acquire_pixmap(pid_t pid, int handle, const stru
 	void *buf_ptr;
 	struct buffer_info *buffer;
 
-	client = client_find_by_pid(pid);
+	client = client_find_by_rpc_handle(handle);
 	if (!client) {
 		ErrPrint("Client %d is not exists\n", pid);
 		goto out;
@@ -3969,7 +3971,7 @@ static struct packet *client_lb_release_pixmap(pid_t pid, int handle, const stru
 	void *buf_ptr;
 	int ret;
 
-	client = client_find_by_pid(pid);
+	client = client_find_by_rpc_handle(handle);
 	if (!client) {
 		ErrPrint("Client %d is not exists\n", pid);
 		goto out;
@@ -4011,7 +4013,7 @@ static struct packet *client_pd_acquire_pixmap(pid_t pid, int handle, const stru
 	void *buf_ptr;
 	struct buffer_info *buffer;
 
-	client = client_find_by_pid(pid);
+	client = client_find_by_rpc_handle(handle);
 	if (!client) {
 		ErrPrint("Client %d is not exists\n", pid);
 		goto out;
@@ -4079,7 +4081,7 @@ static struct packet *client_pd_release_pixmap(pid_t pid, int handle, const stru
 	void *buf_ptr;
 	int ret;
 
-	client = client_find_by_pid(pid);
+	client = client_find_by_rpc_handle(handle);
 	if (!client) {
 		ErrPrint("Client %d is not exists\n", pid);
 		goto out;
@@ -4119,7 +4121,7 @@ static struct packet *client_pinup_changed(pid_t pid, int handle, const struct p
 	int ret;
 	struct inst_info *inst;
 
-	client = client_find_by_pid(pid);
+	client = client_find_by_rpc_handle(handle);
 	if (!client) {
 		ErrPrint("Client %d is not exists\n", pid);
 		ret = LB_STATUS_ERROR_NOT_EXIST;
@@ -4221,7 +4223,7 @@ static struct packet *client_pd_move(pid_t pid, int handle, const struct packet 
 	double y = 0.0f;
 	int ret;
 
-	client = client_find_by_pid(pid);
+	client = client_find_by_rpc_handle(handle);
 	if (!client) {
 		ErrPrint("Client %d is not exists\n", pid);
 		ret = LB_STATUS_ERROR_NOT_EXIST;
@@ -4342,7 +4344,7 @@ static struct packet *client_create_pd(pid_t pid, int handle, const struct packe
 
 	DbgPrint("PERF_DBOX\n");
 
-	client = client_find_by_pid(pid);
+	client = client_find_by_rpc_handle(handle);
 	if (!client) {
 		ErrPrint("Client %d is not exists\n", pid);
 		ret = LB_STATUS_ERROR_NOT_EXIST;
@@ -4556,7 +4558,7 @@ static struct packet *client_destroy_pd(pid_t pid, int handle, const struct pack
 
 	DbgPrint("PERF_DBOX\n");
 
-	client = client_find_by_pid(pid);
+	client = client_find_by_rpc_handle(handle);
 	if (!client) {
 		ErrPrint("Client %d is not exists\n", pid);
 		ret = LB_STATUS_ERROR_NOT_EXIST;
@@ -4742,7 +4744,7 @@ static struct packet *client_activate_package(pid_t pid, int handle, const struc
 	int ret;
 	struct pkg_info *info;
 
-	client = client_find_by_pid(pid);
+	client = client_find_by_rpc_handle(handle);
 	if (!client) {
 		ErrPrint("Client %d is not exists\n", pid);
 		ret = LB_STATUS_ERROR_NOT_EXIST;
@@ -4792,7 +4794,7 @@ static struct packet *client_subscribed(pid_t pid, int handle, const struct pack
 	struct client_node *client;
 	int ret;
 
-	client = client_find_by_pid(pid);
+	client = client_find_by_rpc_handle(handle);
 	if (!client) {
 		ErrPrint("Client %d is not exists\n", pid);
 		ret = LB_STATUS_ERROR_NOT_EXIST;
@@ -4832,7 +4834,7 @@ static struct packet *client_delete_cluster(pid_t pid, int handle, const struct 
 	struct packet *result;
 	int ret;
 
-	client = client_find_by_pid(pid);
+	client = client_find_by_rpc_handle(handle);
 	if (!client) {
 		ErrPrint("Client %d is not exists\n", pid);
 		ret = LB_STATUS_ERROR_NOT_EXIST;
@@ -4911,7 +4913,7 @@ static struct packet *client_update(pid_t pid, int handle, const struct packet *
 	const char *id;
 	int ret;
 
-	client = client_find_by_pid(pid);
+	client = client_find_by_rpc_handle(handle);
 	if (!client) {
 		ErrPrint("Cilent %d is not exists\n", pid);
 		goto out;
@@ -4951,7 +4953,7 @@ static struct packet *client_refresh_group(pid_t pid, int handle, const struct p
 	Eina_List *info_list;
 	Eina_List *l;
 
-	client = client_find_by_pid(pid);
+	client = client_find_by_rpc_handle(handle);
 	if (!client) {
 		ErrPrint("Cilent %d is not exists\n", pid);
 		goto out;
@@ -5000,7 +5002,7 @@ static struct packet *client_delete_category(pid_t pid, int handle, const struct
 	struct packet *result;
 	int ret;
 
-	client = client_find_by_pid(pid);
+	client = client_find_by_rpc_handle(handle);
 	if (!client) {
 		ErrPrint("Client %d is not exists\n", pid);
 		ret = LB_STATUS_ERROR_NOT_EXIST;
@@ -5040,7 +5042,7 @@ static struct packet *client_unsubscribed(pid_t pid, int handle, const struct pa
 	struct client_node *client;
 	int ret;
 
-	client = client_find_by_pid(pid);
+	client = client_find_by_rpc_handle(handle);
 	if (!client) {
 		ErrPrint("Client %d is not exists\n", pid);
 		ret = LB_STATUS_ERROR_NOT_EXIST;
@@ -6892,6 +6894,15 @@ HAPI int server_init(void)
 	if (s_info.client_fd < 0)
 		ErrPrint("Failed to create a client socket\n");
 
+	/*!
+	 * \note
+	 * remote://:8208
+	 * Skip address to use the NULL.
+	 */
+	s_info.remote_client_fd = com_core_packet_server_init("remote://:"CLIENT_PORT, s_client_table);
+	if (s_info.client_fd < 0)
+		ErrPrint("Failed to create a remote client socket\n");
+
 	s_info.service_fd = com_core_packet_server_init(SERVICE_SOCKET, s_service_table);
 	if (s_info.service_fd < 0)
 		ErrPrint("Faild to create a service socket\n");
@@ -6926,6 +6937,11 @@ HAPI int server_fini(void)
 	if (s_info.client_fd > 0) {
 		com_core_packet_server_fini(s_info.client_fd);
 		s_info.client_fd = -1;
+	}
+
+	if (s_info.remote_client_fd > 0) {
+		com_core_packet_server_fini(s_info.remote_client_fd);
+		s_info.remote_client_fd = -1;
 	}
 
 	if (s_info.service_fd > 0) {

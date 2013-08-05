@@ -171,6 +171,11 @@ static int service_thread_main(struct tcb *tcb, struct packet *packet, void *dat
 			break;
 		}
 
+		if (tcb_is_valid(s_info.svc_ctx, tcb) < 0) {
+			ErrPrint("TCB is not valid (already disconnected?)\n");
+			break;
+		}
+
 		if (service_common_unicast_packet(tcb, packet) < 0)
 			ErrPrint("Unable to send reply packet\n");
 		break;

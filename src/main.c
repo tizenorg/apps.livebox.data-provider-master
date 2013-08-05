@@ -56,6 +56,7 @@
 #include "notification_service.h"
 #include "utility_service.h"
 #include "badge_service.h"
+#include "file_service.h"
 
 #if defined(FLOG)
 FILE *__file_log_fp;
@@ -125,12 +126,17 @@ static inline int app_create(void)
 	utility_service_init();
 	script_init();
 
+	file_service_init();
+
 	return 0;
 }
 
 static inline int app_terminate(void)
 {
 	int ret;
+
+	ret = file_service_fini();
+	DbgPrint("Finalize the file service: %d\n", ret);
 
 	ret = server_fini();
 	DbgPrint("Finalize server: %d\n", ret);

@@ -49,6 +49,8 @@ struct conf {
 
 	double slave_ttl;
 	double slave_activate_time;
+	double slave_relaunch_time;
+	int slave_relaunch_count;
 
 	int max_log_line;
 	int max_log_file;
@@ -140,6 +142,8 @@ extern int conf_loader(void);
 #define REPLACE_TAG_APPID	g_conf.replace_tag
 #define SLAVE_TTL		g_conf.slave_ttl
 #define SLAVE_ACTIVATE_TIME	g_conf.slave_activate_time
+#define SLAVE_RELAUNCH_TIME	g_conf.slave_relaunch_time
+#define SLAVE_RELAUNCH_COUNT	g_conf.slave_relaunch_count
 
 #define MAX_LOG_LINE		g_conf.max_log_line
 #define MAX_LOG_FILE		g_conf.max_log_file

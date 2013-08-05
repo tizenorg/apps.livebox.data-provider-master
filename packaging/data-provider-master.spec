@@ -1,6 +1,6 @@
 Name: data-provider-master
 Summary: Master service provider for liveboxes.
-Version: 0.24.23
+Version: 0.25.2
 Release: 1
 Group: HomeTF/Livebox
 License: Flora License
@@ -48,7 +48,17 @@ Keep trace on the life-cycle of the livebox and status of the service providers,
 %setup -q
 
 %build
-cmake . -DCMAKE_INSTALL_PREFIX=%{_prefix} -DPRODUCT=private
+%if 0%{?tizen_build_binary_release_type_eng}
+export CFLAGS="${CFLAGS} -DTIZEN_ENGINEER_MODE"
+export CXXFLAGS="${CXXFLAGS} -DTIZEN_ENGINEER_MODE"
+export FFLAGS="${FFLAGS} -DTIZEN_ENGINEER_MODE"
+%endif
+
+%if 0%{?sec_product_feature_livebox_shm}
+	cmake . -DCMAKE_INSTALL_PREFIX=%{_prefix} -DPRODUCT=baltic
+%else
+	cmake . -DCMAKE_INSTALL_PREFIX=%{_prefix} -DPRODUCT=private
+%endif
 
 CFLAGS="${CFLAGS} -Wall -Winline -Werror" LDFLAGS="${LDFLAGS}" make %{?jobs:-j%jobs}
 
@@ -101,6 +111,7 @@ chmod 640 /opt/dbspace/.livebox.db
 chown 0:5000 /opt/dbspace/.livebox.db-journal
 chmod 640 /opt/dbspace/.livebox.db-journal
 vconftool set -t bool "memory/data-provider-master/started" 0 -i -u 5000 -f -s system::vconf_system
+vconftool set -t string "db/data-provider-master/serveraddr" "/opt/usr/share/live_magazine/.client.socket" -i -u 5000 -f -s system::vconf_system
 echo "Successfully installed. Please start a daemon again manually"
 echo "%{_sysconfdir}/init.d/data-provider-master start"
 

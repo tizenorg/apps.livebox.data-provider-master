@@ -116,11 +116,6 @@ static Eina_Bool command_consumer_cb(void *data)
 		goto out;
 	}
 
-	if (!client_is_activated(command->client)) {
-		ErrPrint("Client[%p] is not activated, destroy this command\n", command->client);
-		goto out;
-	}
-
 	if (client_is_faulted(command->client)) {
 		ErrPrint("Client[%p] is faulted, discard command\n", command->client);
 		goto out;
@@ -128,7 +123,7 @@ static Eina_Bool command_consumer_cb(void *data)
 
 	rpc = client_data(command->client, RPC_TAG);
 	if (!rpc) {
-		ErrPrint("Invalid command\n");
+		ErrPrint("Client is not activated\n");
 		goto out;
 	}
 

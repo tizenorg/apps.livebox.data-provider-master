@@ -517,7 +517,7 @@ static inline int load_shm_buffer(struct buffer_info *info)
 	buffer->type = BUFFER_TYPE_SHM;
 	buffer->refcnt = id;
 	buffer->state = CREATED; /*!< Needless */
-	buffer->info = NULL; /*!< This has not to be used, every process will see this. So, don't try to save anything on here */
+	buffer->info = (void *)size; /*!< Use this field to indicates the size of SHM */
 
 	len = strlen(SCHEMA_SHM) + 30; /* strlen("shm://") + 30 */
 
@@ -1325,6 +1325,180 @@ HAPI int buffer_handler_fini(void)
 	}
 
 	return LB_STATUS_SUCCESS;
+}
+
+static inline struct buffer *raw_open_file(const char *filename)
+{
+	struct buffer *buffer;
+	int fd;
+	off_t off;
+
+	fd = open(filename, O_RDONLY);
+	if (fd < 0) {
+		ErrPrint("open: %s\n", strerror(errno));
+		return NULL;
+	}
+
+	off = lseek(fd, 0L, SEEK_END);
+	if (off == (off_t)-1) {
+		ErrPrint("lseek: %s\n", strerror(errno));
+
+		if (close(fd) < 0)
+			ErrPrint("close: %s\n", strerror(errno));
+
+		return NULL;
+	}
+
+	if (lseek(fd, 0L, SEEK_SET) == (off_t)-1) {
+		ErrPrint("lseek: %s\n", strerror(errno));
+
+		if (close(fd) < 0)
+			ErrPrint("close: %s\n", strerror(errno));
+
+		return NULL;
+	}
+
+	buffer = calloc(1, sizeof(*buffer) + off);
+	if (!buffer) {
+		ErrPrint("Heap: %s\n", strerror(errno));
+
+		if (close(fd) < 0)
+			ErrPrint("close: %s\n", strerror(errno));
+
+		return NULL;
+	}
+
+	buffer->state = CREATED;
+	buffer->type = BUFFER_TYPE_FILE;
+	buffer->refcnt = 0;
+	buffer->info = (void *)off;
+
+	if (read(fd, buffer->data, off) < 0) {
+		ErrPrint("read: %s\n", strerror(errno));
+		free(buffer);
+
+		if (close(fd) < 0)
+			ErrPrint("close: %s\n", strerror(errno));
+
+		return NULL;
+	}
+
+	if (close(fd) < 0)
+		ErrPrint("close: %s\n", strerror(errno));
+
+	return buffer;
+}
+
+static inline int raw_close_file(struct buffer *buffer)
+{
+	free(buffer);
+	return 0;
+}
+
+static inline struct buffer *raw_open_shm(int shm)
+{
+	struct buffer *buffer;
+
+	buffer = (struct buffer *)shmat(shm, NULL, SHM_RDONLY);
+	if (buffer == (struct buffer *)-1) {
+		ErrPrint("shmat: %s\n", strerror(errno));
+		return NULL;
+	}
+
+	return buffer;
+}
+
+static inline int raw_close_shm(struct buffer *buffer)
+{
+	int ret;
+
+	ret = shmdt(buffer);
+	if (ret < 0)
+		ErrPrint("shmdt: %s\n", strerror(errno));
+
+	return ret;
+}
+
+static inline struct buffer *raw_open_pixmap(unsigned int pixmap)
+{
+	struct buffer *buffer;
+
+	buffer = calloc(1, sizeof(*buffer) + sizeof(int));
+	if (!buffer) {
+		ErrPrint("Heap: %s\n", strerror(errno));
+		return NULL;
+	}
+
+	buffer->state = CREATED;
+	buffer->type = BUFFER_TYPE_PIXMAP;
+
+	return buffer;
+}
+
+static inline int raw_close_pixmap(struct buffer *buffer)
+{
+	free(buffer);
+	return 0;
+}
+
+HAPI void *buffer_handler_raw_data(struct buffer *buffer)
+{
+	if (!buffer || buffer->state != CREATED)
+		return NULL;
+
+	return buffer->data;
+}
+
+HAPI int buffer_handler_raw_size(struct buffer *buffer)
+{
+	if (!buffer || buffer->state != CREATED)
+		return -EINVAL;
+
+	return (int)buffer->info;
+}
+
+HAPI struct buffer *buffer_handler_raw_open(enum buffer_type buffer_type, void *resource)
+{
+	struct buffer *handle;
+
+	switch (buffer_type) {
+	case BUFFER_TYPE_SHM:
+		handle = raw_open_shm((int)resource);
+		break;
+	case BUFFER_TYPE_FILE:
+		handle = raw_open_file(resource);
+		break;
+	case BUFFER_TYPE_PIXMAP:
+		handle = raw_open_pixmap((unsigned int)resource);
+		break;
+	default:
+		handle = NULL;
+		break;
+	}
+
+	return handle;
+}
+
+HAPI int buffer_handler_raw_close(struct buffer *buffer)
+{
+	int ret;
+
+	switch (buffer->type) {
+	case BUFFER_TYPE_SHM:
+		ret = raw_close_shm(buffer);
+		break;
+	case BUFFER_TYPE_FILE:
+		ret = raw_close_file(buffer);
+		break;
+	case BUFFER_TYPE_PIXMAP:
+		ret = raw_close_pixmap(buffer);
+		break;
+	default:
+		ret = -EINVAL;
+		break;
+	}
+
+	return ret;
 }
 
 /* End of a file */

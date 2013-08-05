@@ -64,6 +64,7 @@ struct service_context {
 	int fd; /*!< Server socket handle */
 
 	Eina_List *tcb_list; /*!< TCB list, list of every thread for client connections */
+	pthread_mutex_t tcb_list_lock;
 
 	Eina_List *packet_list;
 	pthread_mutex_t packet_list_lock;
@@ -357,7 +358,9 @@ static inline struct tcb *tcb_create(struct service_context *svc_ctx, int fd)
 		return NULL;
 	}
 
+	CRITICAL_SECTION_BEGIN(&svc_ctx->tcb_list_lock);
 	svc_ctx->tcb_list = eina_list_append(svc_ctx->tcb_list, tcb);
+	CRITICAL_SECTION_END(&svc_ctx->tcb_list_lock);
 	return tcb;
 }
 
@@ -407,7 +410,9 @@ static inline void tcb_destroy(struct service_context *svc_ctx, struct tcb *tcb)
 	int status;
 	char ch = EVT_END_CH;
 
+	CRITICAL_SECTION_BEGIN(&svc_ctx->tcb_list_lock);
 	svc_ctx->tcb_list = eina_list_remove(svc_ctx->tcb_list, tcb);
+	CRITICAL_SECTION_END(&svc_ctx->tcb_list_lock);
 	/*!
 	 * ASSERT(tcb->fd >= 0);
 	 * Close the connection, and then collecting the return value of thread
@@ -555,32 +560,6 @@ static void *server_main(void *data)
 			}
 		} 
 
-		if (FD_ISSET(svc_ctx->tcb_pipe[PIPE_READ], &set)) {
-			if (read(svc_ctx->tcb_pipe[PIPE_READ], &tcb, sizeof(tcb)) != sizeof(tcb)) {
-				ErrPrint("Unable to read pipe: %s\n", strerror(errno));
-				ret = -EFAULT;
-				break;
-			}
-
-			if (!tcb) {
-				ErrPrint("Terminate service thread\n");
-				ret = -ECANCELED;
-				break;
-			}
-
-			/*!
-			 * \note
-			 * Invoke the service thread main, to notify the termination of a TCB
-			 */
-			ret = svc_ctx->service_thread_main(tcb, NULL, svc_ctx->service_thread_data);
-
-			/*!
-			 * at this time, the client thread can access this tcb.
-			 * how can I protect this TCB from deletion without disturbing the server thread?
-			 */
-			tcb_destroy(svc_ctx, tcb);
-		} 
-
 		if (FD_ISSET(svc_ctx->evt_pipe[PIPE_READ], &set)) {
 			if (read(svc_ctx->evt_pipe[PIPE_READ], &evt_ch, sizeof(evt_ch)) != sizeof(evt_ch)) {
 				ErrPrint("Unable to read pipe: %s\n", strerror(errno));
@@ -612,6 +591,62 @@ static void *server_main(void *data)
 		}
 
 		processing_timer_event(svc_ctx, &set);
+
+		/*!
+		 * \note
+		 * Destroying TCB should be processed at last.
+		 */
+		if (FD_ISSET(svc_ctx->tcb_pipe[PIPE_READ], &set)) {
+			Eina_List *lockfree_packet_list;
+			Eina_List *l;
+			Eina_List *n;
+
+			if (read(svc_ctx->tcb_pipe[PIPE_READ], &tcb, sizeof(tcb)) != sizeof(tcb)) {
+				ErrPrint("Unable to read pipe: %s\n", strerror(errno));
+				ret = -EFAULT;
+				break;
+			}
+
+			if (!tcb) {
+				ErrPrint("Terminate service thread\n");
+				ret = -ECANCELED;
+				break;
+			}
+
+			lockfree_packet_list = NULL;
+			CRITICAL_SECTION_BEGIN(&svc_ctx->packet_list_lock);
+			EINA_LIST_FOREACH_SAFE(svc_ctx->packet_list, l, n, packet_info) {
+				if (packet_info->tcb != tcb)
+					continue;
+
+				svc_ctx->packet_list = eina_list_remove(svc_ctx->packet_list, packet_info);
+				lockfree_packet_list = eina_list_append(lockfree_packet_list, packet_info);
+			}
+			CRITICAL_SECTION_END(&svc_ctx->packet_list_lock);
+
+			EINA_LIST_FREE(lockfree_packet_list, packet_info) {
+				ret = read(svc_ctx->evt_pipe[PIPE_READ], &evt_ch, sizeof(evt_ch));
+				DbgPrint("Flushing filtered pipe: %d (%c)\n", ret, evt_ch);
+				ret = svc_ctx->service_thread_main(packet_info->tcb, packet_info->packet, svc_ctx->service_thread_data);
+				if (ret < 0)
+					ErrPrint("Service thread returns: %d\n", ret);
+				packet_destroy(packet_info->packet);
+				free(packet_info);
+			}
+
+			/*!
+			 * \note
+			 * Invoke the service thread main, to notify the termination of a TCB
+			 */
+			ret = svc_ctx->service_thread_main(tcb, NULL, svc_ctx->service_thread_data);
+
+			/*!
+			 * at this time, the client thread can access this tcb.
+			 * how can I protect this TCB from deletion without disturbing the server thread?
+			 */
+			tcb_destroy(svc_ctx, tcb);
+		} 
+
 		/* If there is no such triggered FD? */
 	}
 
@@ -767,6 +802,28 @@ HAPI int service_common_destroy(struct service_context *svc_ctx)
 
 /*!
  * \note
+ * SERVER THREAD or OTHER THREAD (not main)
+ */
+HAPI int tcb_is_valid(struct service_context *svc_ctx, struct tcb *tcb)
+{
+	Eina_List *l;
+	struct tcb *tmp;
+	int ret = 0;
+
+	CRITICAL_SECTION_BEGIN(&svc_ctx->tcb_list_lock);
+	EINA_LIST_FOREACH(svc_ctx->tcb_list, l, tmp) {
+		if (tmp == tcb /* && tcb->svc_ctx == svc_ctx */) {
+			ret = tcb->fd;
+			break;
+		}
+	}
+	CRITICAL_SECTION_END(&svc_ctx->tcb_list_lock);
+
+	return ret;
+}
+
+/*!
+ * \note
  * SERVER THREAD
  */
 HAPI int tcb_fd(struct tcb *tcb)
@@ -849,6 +906,11 @@ HAPI int service_common_multicast_packet(struct tcb *tcb, struct packet *packet,
 	svc_ctx = tcb->svc_ctx;
 
 	DbgPrint("Multicasting packets\n");
+
+	/*!
+	 * \note
+	 * Does not need to make a critical section from here.
+	 */
 	EINA_LIST_FOREACH(svc_ctx->tcb_list, l, target) {
 		if (target == tcb || target->type != type) {
 			DbgPrint("Skip target: %p(%d) == %p/%d\n", target, target->type, tcb, type);

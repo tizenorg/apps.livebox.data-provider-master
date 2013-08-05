@@ -16,6 +16,7 @@
 
 struct buffer_info;
 struct inst_info;
+struct buffer;
 
 enum buffer_type { /*!< Must have to be sync with libprovider, liblivebox-viewer */
 	BUFFER_TYPE_FILE,
@@ -158,5 +159,13 @@ extern void *buffer_handler_pixmap_find(int pixmap);
 extern void *buffer_handler_pixmap_buffer(struct buffer_info *info);
 
 extern struct inst_info *buffer_handler_instance(struct buffer_info *info);
+
+extern struct buffer *buffer_handler_raw_open(enum buffer_type, void *resource);
+
+extern int buffer_handler_raw_close(struct buffer *buffer);
+
+extern void *buffer_handler_raw_data(struct buffer *buffer);
+
+extern int buffer_handler_raw_size(struct buffer *buffer);
 
 /* End of a file */

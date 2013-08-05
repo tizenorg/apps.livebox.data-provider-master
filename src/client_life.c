@@ -252,9 +252,9 @@ HAPI struct client_node *client_create(pid_t pid, int handle)
 	struct client_node *client;
 	int ret;
 
-	client = client_find_by_pid(pid);
+	client = client_find_by_rpc_handle(handle);
 	if (client) {
-		ErrPrint("Client %d is already exists\n", pid);
+		ErrPrint("Client %d(%d) is already exists\n", pid, handle);
 		return client;
 	}
 
@@ -594,11 +594,6 @@ HAPI void client_fini(void)
 	}
 }
 
-HAPI const int const client_is_activated(const struct client_node *client)
-{
-	return client ? (client->pid != (pid_t)-1) : 1;
-}
-
 HAPI int client_global_event_handler_add(enum client_global_event event_type, int (*cb)(struct client_node *client, void *data), void *data)
 {
 	struct global_event_handler *handler;
@@ -774,7 +769,7 @@ HAPI int client_broadcast(struct inst_info *inst, struct packet *packet)
 
 	list = inst ? instance_client_list(inst) : s_info.client_list;
 	EINA_LIST_FOREACH(list, l, client) {
-		if (client_pid(client) < 0) {
+		if (client_pid(client) == -1) {
 			ErrPrint("Client[%p] has PID[%d]\n", client, client_pid(client));
 			continue;
 		}

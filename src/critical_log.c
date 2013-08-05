@@ -86,14 +86,11 @@ HAPI int critical_log(const char *func, int line, const char *fmt, ...)
 {
 	va_list ap;
 	int ret;
-	int status;
 
 	if (!s_info.fp)
 		return LB_STATUS_ERROR_IO;
 
-	status = pthread_mutex_lock(&s_info.cri_lock);
-	if (status != 0)
-		ErrPrint("lock: %s\n", strerror(status));
+	CRITICAL_SECTION_BEGIN(&s_info.cri_lock);
 
 	fprintf(s_info.fp, "%lf [%s:%d] ", util_timestamp(), util_basename((char *)func), line);
 
@@ -106,10 +103,7 @@ HAPI int critical_log(const char *func, int line, const char *fmt, ...)
 	s_info.nr_of_lines++;
 	rotate_log();
 
-	status = pthread_mutex_unlock(&s_info.cri_lock);
-	if (status != 0)
-		ErrPrint("unlock: %s\n", strerror(status));
-
+	CRITICAL_SECTION_END(&s_info.cri_lock);
 	return ret;
 }
 

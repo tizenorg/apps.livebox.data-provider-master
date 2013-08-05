@@ -164,7 +164,7 @@ HAPI int xmonitor_update_state(int target_pid)
 	struct client_node *client;
 	int pid;
 
-	if (!USE_XMONITOR)
+	if (!USE_XMONITOR || target_pid < 0)
 		return LB_STATUS_SUCCESS;
 
 	win = ecore_x_window_focus_get();

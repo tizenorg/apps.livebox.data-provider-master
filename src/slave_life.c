@@ -77,6 +77,8 @@ struct slave_node {
 
 	Ecore_Timer *ttl_timer; /* Time to live */
 	Ecore_Timer *activate_timer; /* Waiting hello packet for this time */
+	Ecore_Timer *relaunch_timer; /* Try to relaunch service app */
+	int relaunch_count;
 
 	struct timeval activated_at;
 };
@@ -170,6 +172,7 @@ static inline struct slave_node *create_slave_node(const char *name, int is_secu
 	slave->pid = (pid_t)-1;
 	slave->state = SLAVE_TERMINATED;
 	slave->network = network;
+	slave->relaunch_count = SLAVE_RELAUNCH_COUNT;
 
 	xmonitor_add_event_callback(XMONITOR_PAUSED, xmonitor_pause_cb, slave);
 	xmonitor_add_event_callback(XMONITOR_RESUMED, xmonitor_resume_cb, slave);
@@ -240,6 +243,9 @@ static inline void destroy_slave_node(struct slave_node *slave)
 
 	if (slave->activate_timer)
 		ecore_timer_del(slave->activate_timer);
+
+	if (slave->relaunch_timer)
+		ecore_timer_del(slave->relaunch_timer);
 
 	DbgFree(slave->abi);
 	DbgFree(slave->name);
@@ -376,6 +382,11 @@ static Eina_Bool activate_timer_cb(void *data)
 {
 	struct slave_node *slave = data;
 
+	if (slave->relaunch_timer) {
+		ecore_timer_del(slave->relaunch_timer);
+		slave->relaunch_timer = NULL;
+	}
+
 	slave->fault_count++;
 	invoke_fault_cb(slave);
 
@@ -395,6 +406,106 @@ static Eina_Bool activate_timer_cb(void *data)
 	slave = slave_deactivated(slave);
 	return ECORE_CALLBACK_CANCEL;
 }
+
+static inline void invoke_slave_fault_handler(struct slave_node *slave)
+{
+	slave->fault_count++;
+	invoke_fault_cb(slave);
+
+	slave_set_reactivation(slave, 0);
+	slave_set_reactivate_instances(slave, 0);
+
+	if (slave_pid(slave) > 0) {
+		int ret;
+		DbgPrint("Try to terminate PID: %d\n", slave_pid(slave));
+		ret = aul_terminate_pid(slave_pid(slave));
+		if (ret < 0)
+			ErrPrint("Terminate failed, pid %d (reason: %d)\n", slave_pid(slave), ret);
+	}
+}
+
+static Eina_Bool relaunch_timer_cb(void *data)
+{
+	struct slave_node *slave = data;
+	int ret = ECORE_CALLBACK_CANCEL;
+
+	if (!slave->activate_timer) {
+		ErrPrint("Activate timer is not valid\n");
+		slave->relaunch_timer = NULL;
+
+		invoke_slave_fault_handler(slave);
+	} else if (!slave->relaunch_count) {
+		ErrPrint("Relaunch count is exhahausted\n");
+		ecore_timer_del(slave->activate_timer);
+		slave->activate_timer = NULL;
+
+		slave->relaunch_timer = NULL;
+		invoke_slave_fault_handler(slave);
+	} else {
+		bundle *param;
+
+		param = bundle_create();
+		if (!param) {
+			ErrPrint("Failed to create a bundle\n");
+
+			ecore_timer_del(slave->activate_timer);
+			slave->activate_timer = NULL;
+
+			slave->relaunch_timer = NULL;
+
+			invoke_slave_fault_handler(slave);
+		} else {
+			bundle_add(param, BUNDLE_SLAVE_NAME, slave_name(slave));
+			bundle_add(param, BUNDLE_SLAVE_SECURED, slave->secured ? "true" : "false");
+			bundle_add(param, BUNDLE_SLAVE_ABI, slave->abi);
+
+			slave->pid = (pid_t)aul_launch_app(slave_pkgname(slave), param);
+
+			bundle_free(param);
+
+			switch (slave->pid) {
+			case AUL_R_ENOLAUNCHPAD:	/**< no launchpad */
+			case AUL_R_EILLACC:		/**< Illegal Access */
+			case AUL_R_LOCAL:		/**< Launch by himself */
+			case AUL_R_ETIMEOUT:		/**< Timeout */
+			case AUL_R_EINVAL:		/**< Invalid argument */
+			case AUL_R_OK:			/**< General success */
+			case AUL_R_ENOINIT:		/**< AUL handler NOT initialized */
+			case AUL_R_ERROR:		/**< General error */
+				CRITICAL_LOG("Failed to launch a new slave %s (%d)\n", slave_name(slave), slave->pid);
+				slave->pid = (pid_t)-1;
+				ecore_timer_del(slave->activate_timer);
+				slave->activate_timer = NULL;
+
+				slave->relaunch_timer = NULL;
+
+				invoke_slave_fault_handler(slave);
+				/* Waiting app-launch result */
+				break;
+			case AUL_R_ECOMM:		/**< Comunication Error */
+			case AUL_R_ETERMINATING:	/**< application terminating */
+			case AUL_R_ECANCELED:		/**< Operation canceled */
+				slave->relaunch_count--;
+
+				CRITICAL_LOG("Try relaunch again %s (%d), %d\n", slave_name(slave), slave->pid, slave->relaunch_count);
+				slave->pid = (pid_t)-1;
+				ret = ECORE_CALLBACK_RENEW;
+				ecore_timer_reset(slave->activate_timer);
+				/* Try again after a few secs later */
+				break;
+			default:
+				DbgPrint("Slave %s is launched with %d as %s\n", slave_pkgname(slave), slave->pid, slave_name(slave));
+				slave->relaunch_timer = NULL;
+				ecore_timer_reset(slave->activate_timer);
+				break;
+			}
+		}
+
+	}
+
+	return ret;
+}
+
 
 HAPI int slave_activate(struct slave_node *slave)
 {
@@ -421,6 +532,8 @@ HAPI int slave_activate(struct slave_node *slave)
 	} else {
 		bundle *param;
 
+		slave->relaunch_count = SLAVE_RELAUNCH_COUNT;
+
 		param = bundle_create();
 		if (!param) {
 			ErrPrint("Failed to create a bundle\n");
@@ -435,18 +548,35 @@ HAPI int slave_activate(struct slave_node *slave)
 
 		bundle_free(param);
 
-		if (slave->pid < 0) {
+		switch (slave->pid) {
+		case AUL_R_ENOLAUNCHPAD:	/**< no launchpad */
+		case AUL_R_EILLACC:		/**< Illegal Access */
+		case AUL_R_LOCAL:		/**< Launch by himself */
+		case AUL_R_ETIMEOUT:		/**< Timeout */
+		case AUL_R_EINVAL:		/**< Invalid argument */
+		case AUL_R_OK:			/**< General success */
+		case AUL_R_ENOINIT:		/**< AUL handler NOT initialized */
+		case AUL_R_ERROR:		/**< General error */
 			CRITICAL_LOG("Failed to launch a new slave %s (%d)\n", slave_name(slave), slave->pid);
-			if (slave->pid != AUL_R_ETIMEOUT && slave->pid != AUL_R_ECOMM) {
-				ErrPrint("failed, because of %d\n", slave->pid);
+			slave->pid = (pid_t)-1;
+			/* Waiting app-launch result */
+			break;
+		case AUL_R_ECOMM:		/**< Comunication Error */
+		case AUL_R_ETERMINATING:	/**< application terminating */
+		case AUL_R_ECANCELED:		/**< Operation canceled */
+			CRITICAL_LOG("Try relaunch this soon %s (%d)\n", slave_name(slave), slave->pid);
+			slave->relaunch_timer = ecore_timer_add(SLAVE_RELAUNCH_TIME, relaunch_timer_cb, slave);
+			if (!slave->relaunch_timer) {
+				CRITICAL_LOG("Failed to register a relaunch timer (%s)\n", slave_name(slave));
 				slave->pid = (pid_t)-1;
 				return LB_STATUS_ERROR_FAULT;
-			} else {
-				ErrPrint("But waiting \"hello\"\n");
-				slave->pid = (pid_t)-1;
 			}
+			/* Try again after a few secs later */
+			break;
+		default:
+			DbgPrint("Slave %s is launched with %d as %s\n", slave_pkgname(slave), slave->pid, slave_name(slave));
+			break;
 		}
-		DbgPrint("Slave %s is launched with %d as %s\n", slave_pkgname(slave), slave->pid, slave_name(slave));
 
 		slave->activate_timer = ecore_timer_add(SLAVE_ACTIVATE_TIME, activate_timer_cb, slave);
 		if (!slave->activate_timer)
@@ -529,6 +659,11 @@ HAPI int slave_activated(struct slave_node *slave)
 		slave->activate_timer = NULL;
 	}
 
+	if (slave->relaunch_timer) {
+		ecore_timer_del(slave->relaunch_timer);
+		slave->relaunch_timer = NULL;
+	}
+
 	return LB_STATUS_SUCCESS;
 }
 
@@ -605,6 +740,11 @@ HAPI struct slave_node *slave_deactivated(struct slave_node *slave)
 	if (slave->activate_timer) {
 		ecore_timer_del(slave->activate_timer);
 		slave->activate_timer = NULL;
+	}
+
+	if (slave->relaunch_timer) {
+		ecore_timer_del(slave->relaunch_timer);
+		slave->relaunch_timer = NULL;
 	}
 
 	reactivate = invoke_deactivate_cb(slave);

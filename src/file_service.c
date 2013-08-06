@@ -120,6 +120,8 @@ static inline struct request_item *create_request_item(struct tcb *tcb, int type
 		item->data.shm = (int)data;
 		break;
 	default:
+		ErrPrint("Invalid type of request\n");
+		free(item);
 		return NULL;
 	}
 
@@ -398,13 +400,9 @@ static int send_file(int handle, const struct request_item *item)
 	while (fsize > 0) {
 		if (fsize > PKT_CHUNKSZ) {
 			body->size = PKT_CHUNKSZ;
-			fsize -= PKT_CHUNKSZ;
 		} else {
 			body->size = fsize;
-			fsize = 0;
 		}
-
-		pktsz = sizeof(*body) + body->size;
 
 		ret = read(fd, body->data, body->size); 
 		if (ret < 0) {
@@ -412,6 +410,10 @@ static int send_file(int handle, const struct request_item *item)
 			ret = -EIO;
 			break;
 		}
+
+		body->size = ret;
+		fsize -= ret;
+		pktsz = sizeof(*body) + body->size;
 
 		/* Send BODY */
 		ret = com_core_send(handle, (void *)body, pktsz, 2.0f);

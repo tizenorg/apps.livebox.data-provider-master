@@ -1332,6 +1332,7 @@ static inline struct buffer *raw_open_file(const char *filename)
 	struct buffer *buffer;
 	int fd;
 	off_t off;
+	int ret;
 
 	fd = open(filename, O_RDONLY);
 	if (fd < 0) {
@@ -1373,7 +1374,8 @@ static inline struct buffer *raw_open_file(const char *filename)
 	buffer->refcnt = 0;
 	buffer->info = (void *)off;
 
-	if (read(fd, buffer->data, off) < 0) {
+	ret = read(fd, buffer->data, off);
+	if (ret < 0) {
 		ErrPrint("read: %s\n", strerror(errno));
 		free(buffer);
 

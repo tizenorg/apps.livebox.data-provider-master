@@ -68,8 +68,9 @@ static void free_fb(void *data, void *ptr)
 		return;
 	}
 
-	if (buffer_handler_fb(info->buffer) != ptr)
+	if (buffer_handler_fb(info->buffer) != ptr) {
 		ErrPrint("Buffer pointer is not matched\n");
+	}
 
 	(void)buffer_handler_unload(info->buffer);
 }

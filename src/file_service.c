@@ -257,8 +257,9 @@ static int service_thread_main(struct tcb *tcb, struct packet *packet, void *dat
 			 *
 			 * Client & Server must has to keep this communication sequence.
 			 */
-			if (strcmp(cmd, cmd_table[i].cmd))
+			if (strcmp(cmd, cmd_table[i].cmd)) {
 				continue;
+			}
 
 			item = NULL;
 			ret = cmd_table[i].request_handler(tcb, packet, &item);
@@ -269,8 +270,9 @@ static int service_thread_main(struct tcb *tcb, struct packet *packet, void *dat
 				break;
 			}
 
-			if (service_common_unicast_packet(tcb, reply) < 0)
+			if (service_common_unicast_packet(tcb, reply) < 0) {
 				ErrPrint("Unable to send reply packet\n");
+			}
 
 			packet_destroy(reply);
 
@@ -278,8 +280,9 @@ static int service_thread_main(struct tcb *tcb, struct packet *packet, void *dat
 			 * \note
 			 * After send the reply packet, file push thread can sending a file
 			 */
-			if (ret != LB_STATUS_SUCCESS || !item)
+			if (ret != LB_STATUS_SUCCESS || !item) {
 				break;
+			}
 
 			CRITICAL_SECTION_BEGIN(&s_info.request_list_lock);
 			s_info.request_list = eina_list_append(s_info.request_list, item);
@@ -382,10 +385,11 @@ static int send_file(int handle, const struct request_item *item)
 		ret = com_core_send(handle, (void *)body, sizeof(*body), 2.0f);
 		free(body);
 
-		if (ret < 0)
+		if (ret < 0) {
 			ret = -EFAULT;
-		else
+		} else {
 			ret = -EIO;
+		}
 
 		goto errout;
 	}
@@ -426,14 +430,16 @@ static int send_file(int handle, const struct request_item *item)
 	/* Send EOF */
 	body->size = -1;
 	ret = com_core_send(handle, (void *)body, sizeof(*body), 2.0f);
-	if (ret < 0)
+	if (ret < 0) {
 		ret = -EFAULT;
+	}
 
 	free(body);
 
 errout:
-	if (close(fd) < 0)
+	if (close(fd) < 0) {
 		ErrPrint("close: %s\n", strerror(errno));
+	}
 
 	return ret;
 }
@@ -450,14 +456,16 @@ static int send_buffer(int handle, const struct request_item *item)
 	int offset;
 	int type;
 
-	if (item->type == REQUEST_TYPE_SHM)
+	if (item->type == REQUEST_TYPE_SHM) {
 		type = BUFFER_TYPE_SHM;
-	else
+	} else {
 		type = BUFFER_TYPE_PIXMAP;
+	}
 
 	buffer = buffer_handler_raw_open(type, (void *)item->data.shm);
-	if (!buffer)
+	if (!buffer) {
 		return -EINVAL;
+	}
 
 	pktsz = sizeof(*head);
 
@@ -490,8 +498,9 @@ static int send_buffer(int handle, const struct request_item *item)
 	while (offset < size) {
 		body->size = size - offset;
 
-		if (body->size > PKT_CHUNKSZ)
+		if (body->size > PKT_CHUNKSZ) {
 			body->size = PKT_CHUNKSZ;
+		}
 
 		memcpy(body->data, data, body->size);
 		pktsz = sizeof(*body) + body->size;
@@ -588,10 +597,11 @@ static void *push_main(void *data)
 		 * It can be closed any time.
 		 * Even though we using it.
 		 */
-		if (item->type < REQUEST_TYPE_MAX && item->type >= 0)
+		if (item->type < REQUEST_TYPE_MAX && item->type >= 0) {
 			(void)send_data[item->type](conn_fd, item);
-		else
+		} else {
 			ErrPrint("Invalid type\n");
+		}
 
 		destroy_request_item(item);
 	}
@@ -626,8 +636,9 @@ int file_service_init(void)
 		ErrPrint("Unable to activate service thread\n");
 
 		status = pthread_mutex_destroy(&s_info.request_list_lock);
-		if (status != 0)
+		if (status != 0) {
 			ErrPrint("Destroy lock: %s\n", strerror(status));
+		}
 
 		CLOSE_PIPE(s_info.request_pipe);
 		return LB_STATUS_ERROR_FAULT;
@@ -641,8 +652,9 @@ int file_service_init(void)
 		s_info.svc_ctx = NULL;
 
 		status = pthread_mutex_destroy(&s_info.request_list_lock);
-		if (status != 0)
+		if (status != 0) {
 			ErrPrint("Destroy lock: %s\n", strerror(status));
+		}
 
 		CLOSE_PIPE(s_info.request_pipe);
 		return LB_STATUS_ERROR_FAULT;
@@ -665,8 +677,9 @@ int file_service_fini(void)
 	char ch;
 	void *retval;
 
-	if (!s_info.svc_ctx)
+	if (!s_info.svc_ctx) {
 		return LB_STATUS_ERROR_INVALID;
+	}
 
 	ch = PUSH_EXIT;
 	status = write(s_info.request_pipe[PIPE_WRITE], &ch, sizeof(ch));
@@ -674,13 +687,15 @@ int file_service_fini(void)
 		ErrPrint("write: %s\n", strerror(errno));
 		/* Forcely terminate the thread */
 		status = pthread_cancel(s_info.push_thid);
-		if (status != 0)
+		if (status != 0) {
 			ErrPrint("cancel: %s\n", strerror(status));
+		}
 	}
 
 	status = pthread_join(s_info.push_thid, &retval);
-	if (status != 0)
+	if (status != 0) {
 		ErrPrint("join: %s\n", strerror(status));
+	}
 
 	CRITICAL_SECTION_BEGIN(&s_info.request_list_lock);
 	EINA_LIST_FREE(s_info.request_list, item) {
@@ -692,8 +707,9 @@ int file_service_fini(void)
 	s_info.svc_ctx = NULL;
 
 	status = pthread_mutex_destroy(&s_info.request_list_lock);
-	if (status != 0)
+	if (status != 0) {
 		ErrPrint("destroy mutex: %s\n", strerror(status));
+	}
 
 	CLOSE_PIPE(s_info.request_pipe);
 

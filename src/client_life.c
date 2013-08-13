@@ -189,8 +189,9 @@ static inline void destroy_client_data(struct client_node *client)
 		DbgFree(item);
 	}
 
-	if (client->paused)
+	if (client->paused) {
 		s_info.nr_of_paused_clients--;
+	}
 
 	s_info.client_list = eina_list_remove(s_info.client_list, client);
 	DbgFree(client);
@@ -285,8 +286,9 @@ HAPI struct client_node *client_create(pid_t pid, int handle)
 
 HAPI struct client_node *client_ref(struct client_node *client)
 {
-	if (!client)
+	if (!client) {
 		return NULL;
+	}
 
 	client->refcnt++;
 	return client;
@@ -294,8 +296,9 @@ HAPI struct client_node *client_ref(struct client_node *client)
 
 HAPI struct client_node *client_unref(struct client_node *client)
 {
-	if (!client)
+	if (!client) {
 		return NULL;
+	}
 
 	if (client->refcnt == 0) {
 		ErrPrint("Client refcnt is not managed correctly\n");
@@ -327,8 +330,9 @@ HAPI struct client_node *client_find_by_pid(pid_t pid)
 	struct client_node *client;
 
 	EINA_LIST_FOREACH(s_info.client_list, l, client) {
-		if (client->pid == pid)
+		if (client->pid == pid) {
 			return client;
+		}
 	}
 
 	return NULL;
@@ -345,8 +349,9 @@ HAPI struct client_node *client_find_by_rpc_handle(int handle)
 	}
 
 	EINA_LIST_FOREACH(s_info.client_list, l, client) {
-		if (client_rpc_handle(client) == handle)
+		if (client_rpc_handle(client) == handle) {
 			return client;
+		}
 	}
 
 	return NULL;
@@ -370,8 +375,9 @@ HAPI int client_count(void)
 
 HAPI struct client_node *client_deactivated_by_fault(struct client_node *client)
 {
-	if (!client || client->faulted)
+	if (!client || client->faulted) {
 		return client;
+	}
 
 	ErrPrint("Client[%p] is faulted(%d), pid(%d)\n", client, client->refcnt, client->pid);
 	client->faulted = 1;
@@ -400,8 +406,9 @@ HAPI const int const client_is_faulted(const struct client_node *client)
 
 HAPI void client_reset_fault(struct client_node *client)
 {
-	if (client)
+	if (client) {
 		client->faulted = 0;
+	}
 }
 
 HAPI int client_event_callback_add(struct client_node *client, enum client_event event, int (*cb)(struct client_node *, void *), void *data)
@@ -524,8 +531,9 @@ HAPI void *client_data(struct client_node *client, const char *tag)
 	struct data_item *item;
 
 	EINA_LIST_FOREACH(client->data_list, l, item) {
-		if (!strcmp(item->tag, tag))
+		if (!strcmp(item->tag, tag)) {
 			return item->data;
+		}
 	}
 
 	return NULL;
@@ -553,8 +561,9 @@ HAPI void *client_del_data(struct client_node *client, const char *tag)
 
 HAPI void client_paused(struct client_node *client)
 {
-	if (client->paused)
+	if (client->paused) {
 		return;
+	}
 
 	client->paused = 1;
 	s_info.nr_of_paused_clients++;
@@ -562,8 +571,9 @@ HAPI void client_paused(struct client_node *client)
 
 HAPI void client_resumed(struct client_node *client)
 {
-	if (client->paused == 0)
+	if (client->paused == 0) {
 		return;
+	}
 
 	client->paused = 0;
 	s_info.nr_of_paused_clients--;
@@ -708,17 +718,21 @@ HAPI int client_is_subscribed(struct client_node *client, const char *cluster, c
 	Eina_List *l;
 
 	EINA_LIST_FOREACH(client->subscribe_list, l, item) {
-		if (!strcmp(item->cluster, "*"))
+		if (!strcmp(item->cluster, "*")) {
 			return 1;
+		}
 
-		if (strcasecmp(item->cluster, cluster))
+		if (strcasecmp(item->cluster, cluster)) {
 			continue;
+		}
 
-		if (!strcmp(item->category, "*"))
+		if (!strcmp(item->category, "*")) {
 			return 1;
+		}
 
-		if (!strcasecmp(item->category, category))
+		if (!strcasecmp(item->category, category)) {
 			return 1;
+		}
 	}
 
 	return 0;
@@ -730,16 +744,19 @@ HAPI int client_browse_list(const char *cluster, const char *category, int (*cb)
 	struct client_node *client;
 	int cnt;
 
-	if (!cb || !cluster || !category)
+	if (!cb || !cluster || !category) {
 		return LB_STATUS_ERROR_INVALID;
+	}
 
 	cnt = 0;
 	EINA_LIST_FOREACH(s_info.client_list, l, client) {
-		if (!client_is_subscribed(client, cluster, category))
+		if (!client_is_subscribed(client, cluster, category)) {
 			continue;
+		}
 
-		if (cb(client, data) < 0)
+		if (cb(client, data) < 0) {
 			return LB_STATUS_ERROR_CANCEL;
+		}
 
 		cnt++;
 	}

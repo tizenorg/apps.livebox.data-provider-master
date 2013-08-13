@@ -47,8 +47,9 @@ int errno;
 
 static void lcd_state_cb(keynode_t *node, void *user_data)
 {
-	if (!node)
+	if (!node) {
 		return;
+	}
 
 	xmonitor_handle_state_changes();
 }
@@ -80,8 +81,9 @@ static void power_off_cb(keynode_t *node, void *user_data)
 		int fd;
 
 		fd = creat("/tmp/.stop.provider", 0644);
-		if (fd < 0 || close(fd) < 0)
+		if (fd < 0 || close(fd) < 0) {
 			ErrPrint("stop.provider [%s]\n", strerror(errno));
+		}
 
 		vconf_set_bool(VCONFKEY_MASTER_STARTED, 0);
 		//exit(0);
@@ -97,8 +99,9 @@ static void region_changed_cb(keynode_t *node, void *user_data)
         char *r;
 
         region = vconf_get_str(VCONFKEY_REGIONFORMAT);
-        if (!region)
+        if (!region) {
 		return;
+	}
 
 	setenv("LC_CTYPE", region, 1);
 	setenv("LC_NUMERIC", region, 1);
@@ -113,8 +116,9 @@ static void region_changed_cb(keynode_t *node, void *user_data)
 	setenv("LC_IDENTIFICATION", region, 1);
 
 	r = setlocale(LC_ALL, "");
-	if (r == NULL)
+	if (r == NULL) {
 		ErrPrint("Failed to change region\n");
+	}
 
 	DbgFree(region);
 }
@@ -125,15 +129,17 @@ static void lang_changed_cb(keynode_t *node, void *user_data)
        	char *r;
 
         lang = vconf_get_str(VCONFKEY_LANGSET);
-        if (!lang)
+        if (!lang) {
 		return;
+	}
 
 	setenv("LANG", lang, 1);
 	setenv("LC_MESSAGES", lang, 1);
 
 	r = setlocale(LC_ALL, "");
-	if (!r)
+	if (!r) {
 		ErrPrint("Failed to change locale\n");
+	}
 
 	DbgPrint("Locale: %s\n", setlocale(LC_ALL, NULL));
 	DbgFree(lang);
@@ -155,12 +161,14 @@ static void ail_info_cb(keynode_t *node, void *user_data)
 	int enabled;
 
 	event = vconf_get_str(VCONFKEY_AIL_INFO_STATE);
-	if (!event)
+	if (!event) {
 		return;
+	}
 
 	len = strlen("update:");
-	if (!strncasecmp(event, "update:", len))
+	if (!strncasecmp(event, "update:", len)) {
 		goto out;
+	}
 
 	appid = event + len;
 	DbgPrint("AppId: [%s]\n", appid);
@@ -182,8 +190,9 @@ static void ail_info_cb(keynode_t *node, void *user_data)
 	EINA_LIST_FOREACH(pkg_list, l, info) {
 		inst_list = NULL;
 		pkgname = livebox_service_mainappid(package_name(info));
-		if (!pkgname)
+		if (!pkgname) {
 			continue;
+		}
 
 		if (strcmp(appid, pkgname)) {
 			DbgFree(pkgname);
@@ -207,24 +216,29 @@ HAPI int setting_init(void)
 	int ret;
 
 	ret = vconf_notify_key_changed(VCONFKEY_PM_STATE, lcd_state_cb, NULL);
-	if (ret < 0)
+	if (ret < 0) {
 		ErrPrint("Failed to add vconf for lock state: %d\n", ret);
+	}
 
 	ret = vconf_notify_key_changed(VCONFKEY_SYSMAN_POWER_OFF_STATUS, power_off_cb, NULL);
-	if (ret < 0)
+	if (ret < 0) {
 		ErrPrint("Failed to add vconf for power state: %d \n", ret);
+	}
 
 	ret = vconf_notify_key_changed(VCONFKEY_LANGSET, lang_changed_cb, NULL);
-	if (ret < 0)
+	if (ret < 0) {
 		ErrPrint("Failed to add vconf for lang change: %d\n", ret);
+	}
 
 	ret = vconf_notify_key_changed(VCONFKEY_REGIONFORMAT, region_changed_cb, NULL);
-	if (ret < 0)
+	if (ret < 0) {
 		ErrPrint("Failed to add vconf for region change: %d\n", ret);
+	}
 
 	ret = vconf_notify_key_changed(VCONFKEY_AIL_INFO_STATE, ail_info_cb, NULL);
-	if (ret < 0)
+	if (ret < 0) {
 		ErrPrint("Failed to add vconf for ail info state: %d\n", ret);
+	}
 
 	lang_changed_cb(NULL, NULL);
 	region_changed_cb(NULL, NULL);
@@ -236,24 +250,29 @@ HAPI int setting_fini(void)
 	int ret;
 
 	ret = vconf_ignore_key_changed(VCONFKEY_REGIONFORMAT, region_changed_cb);
-	if (ret < 0)
+	if (ret < 0) {
 		ErrPrint("Failed to ignore vconf key (%d)\n", ret);
+	}
 
 	ret = vconf_ignore_key_changed(VCONFKEY_LANGSET, lang_changed_cb);
-	if (ret < 0)
+	if (ret < 0) {
 		ErrPrint("Failed to ignore vconf key (%d)\n", ret);
+	}
 
 	ret = vconf_ignore_key_changed(VCONFKEY_PM_STATE, lcd_state_cb);
-	if (ret < 0)
+	if (ret < 0) {
 		ErrPrint("Failed to ignore vconf key (%d)\n", ret);
+	}
 
 	ret = vconf_ignore_key_changed(VCONFKEY_SYSMAN_POWER_OFF_STATUS, power_off_cb);
-	if (ret < 0)
+	if (ret < 0) {
 		ErrPrint("Failed to ignore vconf key (%d)\n", ret);
+	}
 
 	ret = vconf_ignore_key_changed(VCONFKEY_AIL_INFO_STATE, ail_info_cb);
-	if (ret < 0)
+	if (ret < 0) {
 		ErrPrint("Failed to ignore vconf key (%d)\n", ret);
+	}
 
 	return ret;
 }

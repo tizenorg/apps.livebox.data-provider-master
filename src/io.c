@@ -74,15 +74,17 @@ static inline int load_abi_table(void)
 	char pkgname[MAX_PKGNAME + 1];
 
 	fp = fopen("/usr/share/"PACKAGE"/abi.ini", "rt");
-	if (!fp)
+	if (!fp) {
 		return LB_STATUS_ERROR_IO;
+	}
 
 	state = INIT;
 	while ((ch = getc(fp)) != EOF && state != ERROR) {
 		switch (state) {
 		case INIT:
-			if (isspace(ch))
+			if (isspace(ch)) {
 				continue;
+			}
 			if (ch == '[') {
 				state = GROUP;
 				idx = 0;
@@ -110,8 +112,9 @@ static inline int load_abi_table(void)
 		case TAG:
 			if (ptr == NULL) {
 				if (idx == 0) {
-					if (isspace(ch))
+					if (isspace(ch)) {
 						continue;
+					}
 
 					/* New group started */
 					if (ch == '[') {
@@ -153,8 +156,9 @@ static inline int load_abi_table(void)
 			switch (tag_id) {
 			case PKGNAME:
 				if (idx == 0) { /* LTRIM */
-					if (isspace(ch))
+					if (isspace(ch)) {
 						continue;
+					}
 
 					pkgname[idx] = ch;
 					idx++;
@@ -163,8 +167,9 @@ static inline int load_abi_table(void)
 					pkgname[idx] = '\0';
 
 					ret = abi_add_entry(group, pkgname);
-					if (ret != 0)
+					if (ret != 0) {
 						ErrPrint("Failed to add %s for %s\n", pkgname, group);
+					}
 
 					state = TAG;
 					idx = 0;
@@ -193,8 +198,9 @@ static inline int load_abi_table(void)
 				int ret;
 				pkgname[idx] = '\0';
 				ret = abi_add_entry(group, pkgname);
-				if (ret != 0)
+				if (ret != 0) {
 					ErrPrint("Failed to add %s for %s\n", pkgname, group);
+				}
 			}
 			break;
 		default:
@@ -202,8 +208,9 @@ static inline int load_abi_table(void)
 		}
 	}
 
-	if (fclose(fp) != 0)
+	if (fclose(fp) != 0) {
 		ErrPrint("fclose: %s\n", strerror(errno));
+	}
 	return LB_STATUS_SUCCESS;
 }
 
@@ -302,8 +309,9 @@ static inline int build_provider_info(struct pkg_info *info)
 	package_set_secured(info, sqlite3_column_int(stmt, 2));
 
 	tmp = (const char *)sqlite3_column_text(stmt, 1);
-	if (tmp && strlen(tmp))
+	if (tmp && strlen(tmp)) {
 		package_set_abi(info, tmp);
+	}
 
 	package_set_lb_type(info, sqlite3_column_int(stmt, 3));
 	tmp = (const char *)sqlite3_column_text(stmt, 4);
@@ -311,8 +319,9 @@ static inline int build_provider_info(struct pkg_info *info)
 		package_set_lb_path(info, tmp);
 
 		tmp = (const char *)sqlite3_column_text(stmt, 5);
-		if (tmp && strlen(tmp))
+		if (tmp && strlen(tmp)) {
 			package_set_lb_group(info, tmp);
+		}
 	}
 
 	package_set_pd_type(info, sqlite3_column_int(stmt, 6));
@@ -321,23 +330,28 @@ static inline int build_provider_info(struct pkg_info *info)
 		package_set_pd_path(info, tmp);
 
 		tmp = (const char *)sqlite3_column_text(stmt, 8);
-		if (tmp && strlen(tmp))
+		if (tmp && strlen(tmp)) {
 			package_set_pd_group(info, tmp);
+		}
 	}
 
 	tmp = (const char *)sqlite3_column_text(stmt, 9);
-	if (tmp && strlen(tmp))
+	if (tmp && strlen(tmp)) {
 		package_set_libexec(info, tmp);
+	}
 
 	package_set_timeout(info, sqlite3_column_int(stmt, 10));
 
 	tmp = (const char *)sqlite3_column_text(stmt, 11);
-	if (tmp && strlen(tmp))
+	if (tmp && strlen(tmp)) {
 		package_set_period(info, atof(tmp));
+	}
 
 	tmp = (const char *)sqlite3_column_text(stmt, 12);
-	if (tmp && strlen(tmp))
+	if (tmp && strlen(tmp)) {
 		package_set_script(info, tmp);
+	}
+
 	package_set_pinup(info, sqlite3_column_int(stmt, 13));
 
 	sqlite3_reset(stmt);
@@ -416,8 +430,9 @@ static inline int load_context_option(struct context_item *item, int id)
 		}
 
 		ret = group_add_option(item, key, value);
-		if (ret < 0)
+		if (ret < 0) {
 			break;
+		}
 	}
 
 out:
@@ -462,8 +477,9 @@ static inline int load_context_item(struct context_info *info, int id)
 		}
 
 		ret = load_context_option(item, option_id);
-		if (ret < 0)
+		if (ret < 0) {
 			break;
+		}
 	}
 
 out:
@@ -550,8 +566,9 @@ static inline int build_group_info(struct pkg_info *info)
 				}
 			}
 
-			if (ctx_info)
+			if (ctx_info) {
 				package_add_ctx_info(info, ctx_info);
+			}
 		}
 	}
 
@@ -637,8 +654,9 @@ HAPI char *io_livebox_pkgname(const char *pkgname)
 	tmp = (char *)sqlite3_column_text(stmt, 0);
 	if (tmp && strlen(tmp)) {
 		pkgid = strdup(tmp);
-		if (!pkgid)
+		if (!pkgid) {
 			ErrPrint("Heap: %s\n", strerror(errno));
+		}
 	}
 
 out:
@@ -666,8 +684,9 @@ HAPI int io_crawling_liveboxes(int (*cb)(const char *pkgname, int prime, void *d
 
 			while (sqlite3_step(stmt) == SQLITE_ROW) {
 				pkgid = (const char *)sqlite3_column_text(stmt, 0);
-				if (!pkgid || !strlen(pkgid))
+				if (!pkgid || !strlen(pkgid)) {
 					continue;
+				}
 
 				prime = (int)sqlite3_column_int(stmt, 1);
 				if (cb(pkgid, prime, data) < 0) {
@@ -689,18 +708,21 @@ HAPI int io_crawling_liveboxes(int (*cb)(const char *pkgname, int prime, void *d
 		struct dirent *ent;
 
 		while ((ent = readdir(dir))) {
-			if (ent->d_name[0] == '.')
+			if (ent->d_name[0] == '.') {
 				continue;
+			}
 
 			if (cb(ent->d_name, -1, data) < 0) {
-				if (closedir(dir) < 0)
+				if (closedir(dir) < 0) {
 					ErrPrint("closedir: %s\n", strerror(errno));
+				}
 				return LB_STATUS_ERROR_CANCEL;
 			}
 		}
 
-		if (closedir(dir) < 0)
+		if (closedir(dir) < 0) {
 			ErrPrint("closedir: %s\n", strerror(errno));
+		}
 	}
 
 	return LB_STATUS_SUCCESS;
@@ -713,8 +735,9 @@ HAPI int io_update_livebox_package(const char *pkgname, int (*cb)(const char *lb
 	int prime;
 	int ret;
 
-	if (!cb || !pkgname)
+	if (!cb || !pkgname) {
 		return LB_STATUS_ERROR_INVALID;
+	}
 
 	if (!s_info.handle) {
 		ErrPrint("DB is not ready\n");
@@ -737,8 +760,9 @@ HAPI int io_update_livebox_package(const char *pkgname, int (*cb)(const char *lb
 	ret = 0;
 	while (sqlite3_step(stmt) == SQLITE_ROW) {
 		pkgid = (char *)sqlite3_column_text(stmt, 0);
-		if (!pkgid || !strlen(pkgid))
+		if (!pkgid || !strlen(pkgid)) {
 			continue;
+		}
 
 		prime = sqlite3_column_int(stmt, 1);
 
@@ -765,20 +789,24 @@ HAPI int io_load_package_db(struct pkg_info *info)
 	}
 
 	ret = build_provider_info(info);
-	if (ret < 0)
+	if (ret < 0) {
 		return ret;
+	}
 
 	ret = build_client_info(info);
-	if (ret < 0)
+	if (ret < 0) {
 		return ret;
+	}
 
 	ret = build_box_size_info(info);
-	if (ret < 0)
+	if (ret < 0) {
 		return ret;
+	}
 
 	ret = build_group_info(info);
-	if (ret < 0)
+	if (ret < 0) {
 		return ret;
+	}
 
 	return LB_STATUS_SUCCESS;
 }
@@ -808,16 +836,18 @@ static inline int db_init(void)
 		return LB_STATUS_ERROR_INVALID;
 	}
 
-	if (stat.st_size <= 0)
+	if (stat.st_size <= 0) {
 		DbgPrint("Size is %d (But use this ;)\n", stat.st_size);
+	}
 
 	return LB_STATUS_SUCCESS;
 }
 
 static inline int db_fini(void)
 {
-	if (!s_info.handle)
+	if (!s_info.handle) {
 		return LB_STATUS_SUCCESS;
+	}
 
 	db_util_close(s_info.handle);
 	s_info.handle = NULL;

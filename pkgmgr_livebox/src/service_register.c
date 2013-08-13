@@ -303,8 +303,9 @@ static inline int db_create_pkgmap(void)
 		return -EIO;
 	}
 
-	if (sqlite3_changes(s_info.handle) == 0)
+	if (sqlite3_changes(s_info.handle) == 0) {
 		ErrPrint("No changes to DB\n");
+	}
 
 	return 0;
 }
@@ -315,8 +316,9 @@ static inline int db_insert_pkgmap(const char *appid, const char *pkgid, const c
 	static const char *dml;
 	sqlite3_stmt *stmt;
 
-	if (!uiappid)
+	if (!uiappid) {
 		uiappid = ""; /*!< Could we replace this with Main AppId of this package? */
+	}
 
 	dml = "INSERT INTO pkgmap ( appid, pkgid, uiapp, prime ) VALUES (? ,?, ?, ?)";
 	ret = sqlite3_prepare_v2(s_info.handle, dml, -1, &stmt, NULL);
@@ -416,8 +418,9 @@ static inline int db_create_provider(void)
 		return -EIO;
 	}
 
-	if (sqlite3_changes(s_info.handle) == 0)
+	if (sqlite3_changes(s_info.handle) == 0) {
 		ErrPrint("No changes to DB\n");
+	}
 
 	return 0;
 }
@@ -469,32 +472,41 @@ static inline int db_insert_provider(struct livebox *livebox)
 	char *period = (char *)livebox->period;
 	char *script = (char *)livebox->script;
 
-	if (!abi)
+	if (!abi) {
 		abi = "c";
+	}
 
-	if (!box_src)
+	if (!box_src) {
 		box_src = "";
+	}
 
-	if (!box_group)
+	if (!box_group) {
 		box_group = "";
+	}
 
-	if (!pd_src)
+	if (!pd_src) {
 		pd_src = "";
+	}
 
-	if (!pd_group)
+	if (!pd_group) {
 		pd_group = "";
+	}
 
-	if (!libexec)
+	if (!libexec) {
 		libexec = "";
+	}
 
-	if (!timeout)
+	if (!timeout) {
 		timeout = "10";
+	}
 
-	if (!period)
+	if (!period) {
 		period = "0.0";
+	}
 
-	if (!script)
+	if (!script) {
 		script = "edje";
+	}
 
 	dml = "INSERT INTO provider ( pkgid, network, abi, secured, box_type, box_src, box_group, pd_type, pd_src, pd_group, libexec, timeout, period, script, pinup ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 	ret = sqlite3_prepare_v2(s_info.handle, dml, -1, &stmt, NULL);
@@ -634,8 +646,9 @@ static inline int db_create_client(void)
 		return -EIO;
 	}
 
-	if (sqlite3_changes(s_info.handle) == 0)
+	if (sqlite3_changes(s_info.handle) == 0) {
 		ErrPrint("No changes to DB\n");
+	}
 
 	return 0;
 }
@@ -774,8 +787,9 @@ static inline int db_create_i18n(void)
 		return -EIO;
 	}
 
-	if (sqlite3_changes(s_info.handle) == 0)
+	if (sqlite3_changes(s_info.handle) == 0) {
 		ErrPrint("No changes to DB\n");
+	}
 
 	return 0;
 }
@@ -861,8 +875,9 @@ static inline int db_remove_i18n(const char *pkgid)
 		ret = -EIO;
 	}
 
-	if (sqlite3_changes(s_info.handle) == 0)
+	if (sqlite3_changes(s_info.handle) == 0) {
 		DbgPrint("No changes\n");
+	}
 
 out:
 	sqlite3_reset(stmt);
@@ -882,8 +897,9 @@ static inline int db_create_group(void)
 		return -EIO;
 	}
 
-	if (sqlite3_changes(s_info.handle) == 0)
+	if (sqlite3_changes(s_info.handle) == 0) {
 		ErrPrint("No changes to DB\n");
+	}
 
 	return 0;
 }
@@ -1003,8 +1019,9 @@ static inline int db_remove_group(const char *pkgid)
 		ret = -EIO;
 	}
 
-	if (sqlite3_changes(s_info.handle) == 0)
+	if (sqlite3_changes(s_info.handle) == 0) {
 		DbgPrint("No changes\n");
+	}
 
 out:
 	sqlite3_reset(stmt);
@@ -1024,8 +1041,9 @@ static inline int db_create_groupmap(void)
 		return -EIO;
 	}
 
-	if (sqlite3_changes(s_info.handle) == 0)
+	if (sqlite3_changes(s_info.handle) == 0) {
 		ErrPrint("No changes to DB\n");
+	}
 
 	return 0;
 }
@@ -1155,8 +1173,9 @@ static inline int db_remove_groupmap(const char *pkgid)
 		ret = -EIO;
 	}
 
-	if (sqlite3_changes(s_info.handle) == 0)
+	if (sqlite3_changes(s_info.handle) == 0) {
 		DbgPrint("No changes\n");
+	}
 
 out:
 	sqlite3_reset(stmt);
@@ -1178,8 +1197,9 @@ static inline int db_create_option(void)
 		return -EIO;
 	}
 
-	if (sqlite3_changes(s_info.handle) == 0)
+	if (sqlite3_changes(s_info.handle) == 0) {
 		ErrPrint("No changes to DB\n");
+	}
 
 	return 0;
 }
@@ -1263,8 +1283,9 @@ static inline int db_remove_option(const char *pkgid)
 		ret = -EIO;
 	}
 
-	if (sqlite3_changes(s_info.handle) == 0)
+	if (sqlite3_changes(s_info.handle) == 0) {
 		DbgPrint("No changes\n");
+	}
 
 out:
 	sqlite3_reset(stmt);
@@ -1285,8 +1306,9 @@ static inline int db_create_box_size(void)
 		return -EIO;
 	}
 
-	if (sqlite3_changes(s_info.handle) == 0)
+	if (sqlite3_changes(s_info.handle) == 0) {
 		ErrPrint("No changes to DB\n");
+	}
 
 	return 0;
 }
@@ -1379,8 +1401,9 @@ static inline int db_remove_box_size(const char *pkgid)
 		ret = -EIO;
 	}
 
-	if (sqlite3_changes(s_info.handle) == 0)
+	if (sqlite3_changes(s_info.handle) == 0) {
 		DbgPrint("No changes\n");
+	}
 
 out:
 	sqlite3_reset(stmt);
@@ -1470,16 +1493,18 @@ static inline int db_init(void)
 		return -EINVAL;
 	}
 
-	if (!stat.st_size)
+	if (!stat.st_size) {
 		db_create_table();
+	}
 
 	return 0;
 }
 
 static inline int db_fini(void)
 {
-	if (!s_info.handle)
+	if (!s_info.handle) {
 		return 0;
+	}
 
 	db_util_close(s_info.handle);
 	s_info.handle = NULL;
@@ -1775,14 +1800,15 @@ static inline void update_box(struct livebox *livebox, xmlNodePtr node)
 			ErrPrint("Type is NIL\n");
 			livebox->lb_type = LB_TYPE_FILE;
 		} else {
-			if (!xmlStrcasecmp(type, (const xmlChar *)"text"))
+			if (!xmlStrcasecmp(type, (const xmlChar *)"text")) {
 				livebox->lb_type = LB_TYPE_TEXT;
-			else if (!xmlStrcasecmp(type, (const xmlChar *)"buffer"))
+			} else if (!xmlStrcasecmp(type, (const xmlChar *)"buffer")) {
 				livebox->lb_type = LB_TYPE_BUFFER;
-			else if (!xmlStrcasecmp(type, (const xmlChar *)"script"))
+			} else if (!xmlStrcasecmp(type, (const xmlChar *)"script")) {
 				livebox->lb_type = LB_TYPE_SCRIPT;
-			else /* Default */
+			} else { /* Default */
 				livebox->lb_type = LB_TYPE_FILE;
+			}
 
 			xmlFree(type);
 		}
@@ -2099,12 +2125,13 @@ static inline void update_pd(struct livebox *livebox, xmlNodePtr node)
 			return;
 		}
 
-		if (!xmlStrcasecmp(type, (const xmlChar *)"text"))
+		if (!xmlStrcasecmp(type, (const xmlChar *)"text")) {
 			livebox->pd_type = PD_TYPE_TEXT;
-		else if (!xmlStrcasecmp(type, (const xmlChar *)"buffer"))
+		} else if (!xmlStrcasecmp(type, (const xmlChar *)"buffer")) {
 			livebox->pd_type = PD_TYPE_BUFFER;
-		else
+		} else {
 			livebox->pd_type = PD_TYPE_SCRIPT;
+		}
 
 		xmlFree(type);
 	}
@@ -2175,99 +2202,116 @@ static inline int db_insert_livebox(struct livebox *livebox, const char *appid)
 
 	begin_transaction();
 	ret = db_insert_pkgmap(appid, (char *)livebox->pkgid, (char *)livebox->uiapp, livebox->primary);
-	if (ret < 0)
+	if (ret < 0) {
 		goto errout;
+	}
 
 	ret = db_insert_provider(livebox);
-	if (ret < 0)
+	if (ret < 0) {
 		goto errout;
+	}
 
 	ret = db_insert_client(livebox);
-	if (ret < 0)
+	if (ret < 0) {
 		goto errout;
+	}
 
 	dlist_foreach(livebox->i18n_list, l, i18n) {
 		ret = db_insert_i18n((char *)livebox->pkgid, (char *)i18n->lang, (char *)i18n->name, (char *)i18n->icon);
-		if (ret < 0)
+		if (ret < 0) {
 			goto errout;
+		}
 	}
 
 	if (livebox->size_list & LB_SIZE_TYPE_1x1) {
 		ret = db_insert_box_size((char *)livebox->pkgid, LB_SIZE_TYPE_1x1, (char *)livebox->preview[0], livebox->touch_effect[0], livebox->need_frame[0]);
-		if (ret < 0)
+		if (ret < 0) {
 			goto errout;
+		}
 	}
 
 	if (livebox->size_list & LB_SIZE_TYPE_2x1) {
 		ret = db_insert_box_size((char *)livebox->pkgid, LB_SIZE_TYPE_2x1, (char *)livebox->preview[1], livebox->touch_effect[1], livebox->need_frame[1]);
-		if (ret < 0)
+		if (ret < 0) {
 			goto errout;
+		}
 	}
 
 	if (livebox->size_list & LB_SIZE_TYPE_2x2) {
 		ret = db_insert_box_size((char *)livebox->pkgid, LB_SIZE_TYPE_2x2, (char *)livebox->preview[2], livebox->touch_effect[2], livebox->need_frame[2]);
-		if (ret < 0)
+		if (ret < 0) {
 			goto errout;
+		}
 	}
 
 	if (livebox->size_list & LB_SIZE_TYPE_4x1) {
 		ret = db_insert_box_size((char *)livebox->pkgid, LB_SIZE_TYPE_4x1, (char *)livebox->preview[3], livebox->touch_effect[3], livebox->need_frame[3]);
-		if (ret < 0)
+		if (ret < 0) {
 			goto errout;
+		}
 	}
 
 	if (livebox->size_list & LB_SIZE_TYPE_4x2) {
 		ret = db_insert_box_size((char *)livebox->pkgid, LB_SIZE_TYPE_4x2, (char *)livebox->preview[4], livebox->touch_effect[4], livebox->need_frame[4]);
-		if (ret < 0)
+		if (ret < 0) {
 			goto errout;
+		}
 	}
 
 	if (livebox->size_list & LB_SIZE_TYPE_4x3) {
 		ret = db_insert_box_size((char *)livebox->pkgid, LB_SIZE_TYPE_4x3, (char *)livebox->preview[5], livebox->touch_effect[5], livebox->need_frame[5]);
-		if (ret < 0)
+		if (ret < 0) {
 			goto errout;
+		}
 	}
 
 	if (livebox->size_list & LB_SIZE_TYPE_4x4) {
 		ret = db_insert_box_size((char *)livebox->pkgid, LB_SIZE_TYPE_4x4, (char *)livebox->preview[6], livebox->touch_effect[6], livebox->need_frame[6]);
-		if (ret < 0)
+		if (ret < 0) {
 			goto errout;
+		}
 	}
 
 	if (livebox->size_list & LB_SIZE_TYPE_4x5) {
 		ret = db_insert_box_size((char *)livebox->pkgid, LB_SIZE_TYPE_4x5, (char *)livebox->preview[7], livebox->touch_effect[7], livebox->need_frame[7]);
-		if (ret < 0)
+		if (ret < 0) {
 			goto errout;
+		}
 	}
 
 	if (livebox->size_list & LB_SIZE_TYPE_4x6) {
 		ret = db_insert_box_size((char *)livebox->pkgid, LB_SIZE_TYPE_4x6, (char *)livebox->preview[8], livebox->touch_effect[8], livebox->need_frame[8]);
-		if (ret < 0)
+		if (ret < 0) {
 			goto errout;
+		}
 	}
 
 	if (livebox->size_list & LB_SIZE_TYPE_EASY_1x1) {
 		ret = db_insert_box_size((char *)livebox->pkgid, LB_SIZE_TYPE_EASY_1x1, (char *)livebox->preview[9], livebox->touch_effect[9], livebox->need_frame[9]);
-		if (ret < 0)
+		if (ret < 0) {
 			goto errout;
+		}
 	}
 
 	if (livebox->size_list & LB_SIZE_TYPE_EASY_3x1) {
 		ret = db_insert_box_size((char *)livebox->pkgid, LB_SIZE_TYPE_EASY_3x1, (char *)livebox->preview[10], livebox->touch_effect[10], livebox->need_frame[10]);
-		if (ret < 0)
+		if (ret < 0) {
 			goto errout;
+		}
 	}
 
 	if (livebox->size_list & LB_SIZE_TYPE_EASY_3x3) {
 		ret = db_insert_box_size((char *)livebox->pkgid, LB_SIZE_TYPE_EASY_3x3, (char *)livebox->preview[11], livebox->touch_effect[11], livebox->need_frame[11]);
-		if (ret < 0)
+		if (ret < 0) {
 			goto errout;
+		}
 	}
 
 	if (livebox->size_list & LB_SIZE_TYPE_0x0) {
 		ret = db_insert_box_size((char *)livebox->pkgid, LB_SIZE_TYPE_0x0, (char *)livebox->preview[12], livebox->touch_effect[12], livebox->need_frame[12]);
-		if (ret < 0)
+		if (ret < 0) {
 			goto errout;
+		}
 	}
 
 	dlist_foreach(livebox->group_list, l, group) {
@@ -2296,18 +2340,21 @@ static inline int db_insert_livebox(struct livebox *livebox, const char *appid)
 		}
 
 		ret = db_insert_groupmap(id, (char *)livebox->pkgid, (char *)group->ctx_item);
-		if (ret < 0)
+		if (ret < 0) {
 			goto errout;
+		}
 
 		/* REUSE "id" from here , option ID */
 		id = db_get_option_id(id, (char *)livebox->pkgid, (char *)group->ctx_item);
-		if (id < 0)
+		if (id < 0) {
 			goto errout;
+		}
 
 		dlist_foreach(group->option_list, il, option) {
 			ret = db_insert_option((char *)livebox->pkgid, id, (char *)option->key, (char *)option->value);
-			if (ret < 0)
+			if (ret < 0) {
 				goto errout;
+			}
 		}
 	}
 
@@ -2359,8 +2406,9 @@ static inline int do_install(xmlNodePtr node, const char *appid)
 
 	if (xmlHasProp(node, (const xmlChar *)"script")) {
 		livebox->script = xmlGetProp(node, (const xmlChar *)"script");
-		if (!livebox->script)
+		if (!livebox->script) {
 			ErrPrint("script is NIL\n");
+		}
 	}
 
 	if (xmlHasProp(node, (const xmlChar *)"nodisplay")) {
@@ -2377,14 +2425,16 @@ static inline int do_install(xmlNodePtr node, const char *appid)
 
 	if (xmlHasProp(node, (const xmlChar *)"period")) {
 		livebox->period = xmlGetProp(node, (const xmlChar *)"period");
-		if (!livebox->period)
+		if (!livebox->period) {
 			ErrPrint("Period is NIL\n");
+		}
 	}
 
 	if (xmlHasProp(node, (const xmlChar *)"timeout")) {
 		livebox->timeout = xmlGetProp(node, (const xmlChar *)"timeout");
-		if (!livebox->timeout)
+		if (!livebox->timeout) {
 			ErrPrint("Timeout is NIL\n");
+		}
 	}
 
 	if (xmlHasProp(node, (const xmlChar *)"secured")) {
@@ -2446,8 +2496,9 @@ static inline int do_install(xmlNodePtr node, const char *appid)
 	}
 
 	for (node = node->children; node; node = node->next) {
-		if (!xmlStrcmp(node->name, (const xmlChar *)"text"))
+		if (!xmlStrcmp(node->name, (const xmlChar *)"text")) {
 			continue;
+		}
 
 		DbgPrint("Nodename: %s\n", node->name);
 		if (!xmlStrcasecmp(node->name, (const xmlChar *)"label")) {
@@ -2499,6 +2550,190 @@ static inline int do_install(xmlNodePtr node, const char *appid)
 	return db_insert_livebox(livebox, appid);
 }
 
+static inline int do_uninstall(xmlNodePtr node, const char *appid)
+{
+	xmlChar *pkgid;
+	int ret;
+
+	if (!xmlHasProp(node, (const xmlChar *)"appid")) {
+		ErrPrint("Missing appid\n");
+		return -EINVAL;
+	}
+
+	pkgid = xmlGetProp(node, (const xmlChar *)"appid");
+	if (!validate_pkgid(appid, (char *)pkgid)) {
+		ErrPrint("Invalid package\n");
+		xmlFree(pkgid);
+		return -EINVAL;
+	}
+
+	begin_transaction();
+	ret = db_remove_box_size((char *)pkgid);
+	if (ret < 0) {
+		goto errout;
+	}
+
+	ret = db_remove_i18n((char *)pkgid);
+	if (ret < 0) {
+		goto errout;
+	}
+
+	ret = db_remove_client((char *)pkgid);
+	if (ret < 0) {
+		goto errout;
+	}
+
+	ret = db_remove_provider((char *)pkgid);
+	if (ret < 0) {
+		goto errout;
+	}
+
+	ret = db_remove_option((char *)pkgid);
+	DbgPrint("Remove option: %d\n", ret);
+
+	ret = db_remove_groupmap((char *)pkgid);
+	DbgPrint("Remove groupmap: %d\n", ret);
+
+	ret = db_remove_group((char *)pkgid);
+	if (ret < 0) {
+		goto errout;
+	}
+
+	ret = db_remove_pkgmap((char *)pkgid);
+	if (ret < 0) {
+		goto errout;
+	}
+
+	commit_transaction();
+	xmlFree(pkgid);
+
+	return 0;
+
+errout:
+	rollback_transaction();
+	xmlFree(pkgid);
+	return ret;
+}
+
+static inline int pkglist_get_via_callback(const char *appid, void (*cb)(const char *appid, const char *pkgid, int prime, void *data), void *data)
+{
+	const char *dml = "SELECT pkgid, prime FROM pkgmap WHERE appid = ?";
+	int ret;
+	sqlite3_stmt *stmt;
+	const char *pkgid;
+	int prime;
+	int cnt = 0;
+
+	if (!cb || !appid || !strlen(appid)) {
+		return -EINVAL;
+	}
+
+	if (!s_info.handle) {
+		if (db_init() < 0) {
+			ErrPrint("Failed to init DB\n");
+			return -EIO;
+		}
+	}
+
+	ret = sqlite3_prepare_v2(s_info.handle, dml, -1, &stmt, NULL);
+	if (ret != SQLITE_OK) {
+		ErrPrint("Failed to prepare the intial DML(%s)\n", sqlite3_errmsg(s_info.handle));
+		return -EIO;
+	}
+
+	ret = -EIO;
+	if (sqlite3_bind_text(stmt, 1, appid, -1, SQLITE_TRANSIENT) != SQLITE_OK) {
+		ErrPrint("Failed to bind a cluster - %s\n", sqlite3_errmsg(s_info.handle));
+		goto out;
+	}
+
+	while (sqlite3_step(stmt) == SQLITE_ROW) {
+		pkgid = (const char *)sqlite3_column_text(stmt, 0);
+		if (!pkgid || !strlen(pkgid)) {
+			continue;
+		}
+
+		prime = sqlite3_column_int(stmt, 1);
+		cb(appid, pkgid, prime, data);
+		cnt++;
+	}
+
+out:
+	sqlite3_reset(stmt);
+	sqlite3_clear_bindings(stmt);
+	sqlite3_finalize(stmt);
+	return cnt;
+}
+
+static void clear_all_pkg(const char *appid, const char *pkgid, int prime, void *data)
+{
+	int ret;
+
+	ret = db_remove_box_size((char *)pkgid);
+	if (ret < 0) {
+		ErrPrint("Remove box size: %d\n", ret);
+	}
+
+	ret = db_remove_i18n((char *)pkgid);
+	if (ret < 0) {
+		ErrPrint("Remove i18n: %d\n", ret);
+	}
+
+	ret = db_remove_client((char *)pkgid);
+	if (ret < 0) {
+		ErrPrint("Remove client: %d\n", ret);
+	}
+
+	ret = db_remove_provider((char *)pkgid);
+	if (ret < 0) {
+		ErrPrint("Remove provider: %d\n", ret);
+	}
+
+	ret = db_remove_option((char *)pkgid);
+	if (ret < 0) {
+		ErrPrint("Remove option: %d\n", ret);
+	}
+
+	ret = db_remove_groupmap((char *)pkgid);
+	if (ret < 0) {
+		ErrPrint("Remove groupmap: %d\n", ret);
+	}
+
+	ret = db_remove_group((char *)pkgid);
+	if (ret < 0) {
+		ErrPrint("Remove group: %d\n", ret);
+	}
+
+	ret = db_remove_pkgmap((char *)pkgid);
+	if (ret < 0) {
+		ErrPrint("Remove pkgmap: %d\n", ret);
+	}
+}
+
+int PKGMGR_PARSER_PLUGIN_PRE_INSTALL(const char *appid)
+{
+	int cnt;
+
+	if (!s_info.handle) {
+		if (db_init() < 0) {
+			ErrPrint("Failed to init DB\n");
+			return -EIO;
+		}
+	}
+
+	begin_transaction();
+	cnt = pkglist_get_via_callback(appid, clear_all_pkg, NULL);
+	commit_transaction();
+
+	DbgPrint("Package[%s] is not deleted: %d\n", appid, cnt);
+	return 0;
+}
+
+int PKGMGR_PARSER_PLUGIN_POST_INSTALL(const char *appid)
+{
+	return 0;
+}
+
 int PKGMGR_PARSER_PLUGIN_INSTALL(xmlDocPtr docPtr, const char *appid)
 {
 	xmlNodePtr node;
@@ -2528,63 +2763,28 @@ int PKGMGR_PARSER_PLUGIN_INSTALL(xmlDocPtr docPtr, const char *appid)
 	return 0;
 }
 
-static inline int do_uninstall(xmlNodePtr node, const char *appid)
+int PKGMGR_PARSER_PLUGIN_PRE_UPGRADE(const char *appid)
 {
-	xmlChar *pkgid;
-	int ret;
+	int cnt;
 
-	if (!xmlHasProp(node, (const xmlChar *)"appid")) {
-		ErrPrint("Missing appid\n");
-		return -EINVAL;
-	}
-
-	pkgid = xmlGetProp(node, (const xmlChar *)"appid");
-	if (!validate_pkgid(appid, (char *)pkgid)) {
-		ErrPrint("Invalid package\n");
-		xmlFree(pkgid);
-		return -EINVAL;
+	if (!s_info.handle) {
+		if (db_init() < 0) {
+			ErrPrint("Failed to init DB\n");
+			return -EIO;
+		}
 	}
 
 	begin_transaction();
-	ret = db_remove_box_size((char *)pkgid);
-	if (ret < 0)
-		goto errout;
-
-	ret = db_remove_i18n((char *)pkgid);
-	if (ret < 0)
-		goto errout;
-
-	ret = db_remove_client((char *)pkgid);
-	if (ret < 0)
-		goto errout;
-
-	ret = db_remove_provider((char *)pkgid);
-	if (ret < 0)
-		goto errout;
-
-	ret = db_remove_option((char *)pkgid);
-	DbgPrint("Remove option: %d\n", ret);
-
-	ret = db_remove_groupmap((char *)pkgid);
-	DbgPrint("Remove groupmap: %d\n", ret);
-
-	ret = db_remove_group((char *)pkgid);
-	if (ret < 0)
-		goto errout;
-
-	ret = db_remove_pkgmap((char *)pkgid);
-	if (ret < 0)
-		goto errout;
-
+	cnt = pkglist_get_via_callback(appid, clear_all_pkg, NULL);
 	commit_transaction();
-	xmlFree(pkgid);
 
+	DbgPrint("Package %s is deleted: %d\n", appid, cnt);
 	return 0;
+}
 
-errout:
-	rollback_transaction();
-	xmlFree(pkgid);
-	return ret;
+int PKGMGR_PARSER_PLUGIN_POST_UPGRADE(const char *appid)
+{
+	return 0;
 }
 
 int PKGMGR_PARSER_PLUGIN_UPGRADE(xmlDocPtr docPtr, const char *appid)
@@ -2607,7 +2807,6 @@ int PKGMGR_PARSER_PLUGIN_UPGRADE(xmlDocPtr docPtr, const char *appid)
 
 	for (node = node->children; node; node = node->next) {
 		if (!xmlStrcasecmp(node->name, (const xmlChar *)"livebox")) {
-			ret = do_uninstall(node, appid);
 			ret = do_install(node, appid);
 			DbgPrint("Returns: %d\n", ret);
 		}
@@ -2616,10 +2815,14 @@ int PKGMGR_PARSER_PLUGIN_UPGRADE(xmlDocPtr docPtr, const char *appid)
 	return 0;
 }
 
-int PKGMGR_PARSER_PLUGIN_UNINSTALL(xmlDocPtr docPtr, const char *appid)
+int PKGMGR_PARSER_PLUGIN_PRE_UNINSTALL(const char *appid)
 {
-	xmlNodePtr node;
-	int ret;
+	return 0;
+}
+
+int PKGMGR_PARSER_PLUGIN_POST_UNINSTALL(const char *appid)
+{
+	int cnt;
 
 	if (!s_info.handle) {
 		if (db_init() < 0) {
@@ -2628,19 +2831,17 @@ int PKGMGR_PARSER_PLUGIN_UNINSTALL(xmlDocPtr docPtr, const char *appid)
 		}
 	}
 
-	node = xmlDocGetRootElement(docPtr);
-	if (!node) {
-		ErrPrint("Invalid document\n");
-		return -EINVAL;
-	}
+	begin_transaction();
+	cnt = pkglist_get_via_callback(appid, clear_all_pkg, NULL);
+	commit_transaction();
 
-	for (node = node->children; node; node = node->next) {
-		if (!xmlStrcasecmp(node->name, (const xmlChar *)"livebox")) {
-			ret = do_uninstall(node, appid);
-			DbgPrint("Returns: %d\n", ret);
-		}
-	}
+	DbgPrint("Package %s is deleted: %d\n", appid, cnt);
+	return 0;
+}
 
+int PKGMGR_PARSER_PLUGIN_UNINSTALL(xmlDocPtr docPtr, const char *appid)
+{
+	/* Doesn't need to do anything from here, we already dealt it with this */
 	return 0;
 }
 

@@ -170,12 +170,14 @@ static inline void timer_thaw(struct inst_info *inst)
 	delay = util_time_delay_for_compensation(period) - pending;
 	ecore_timer_delay(inst->update_timer, delay);
 
-	if (inst->sleep_at == 0.0f)
+	if (inst->sleep_at == 0.0f) {
 		return;
+	}
 
 	sleep_time = util_timestamp() - inst->sleep_at;
-	if (sleep_time > pending)
+	if (sleep_time > pending) {
 		(void)update_timer_cb(inst);
+	}
 
 	inst->sleep_at = 0.0f;
 }
@@ -185,8 +187,9 @@ static inline void timer_freeze(struct inst_info *inst)
 	struct timeval tv;
 	ecore_timer_freeze(inst->update_timer);
 
-	if (ecore_timer_interval_get(inst->update_timer) <= 1.0f)
+	if (ecore_timer_interval_get(inst->update_timer) <= 1.0f) {
 		return;
+	}
 
 	if (gettimeofday(&tv, NULL) < 0) {
 		ErrPrint("gettimeofday: %s\n", strerror(errno));
@@ -282,10 +285,11 @@ static inline void instance_send_update_mode_event(struct inst_info *inst, int a
 	pkgname = package_name(inst->info);
 
 	packet = packet_create_noack("update_mode", "ssii", pkgname, inst->id, status, active_mode);
-	if (packet)
+	if (packet) {
 		CLIENT_SEND_EVENT(inst, packet);
-	else
+	} else {
 		ErrPrint("Failed to send update mode event\n");
+	}
 }
 
 static inline void instance_send_resized_event(struct inst_info *inst, int is_pd, int w, int h, int status)
@@ -303,18 +307,20 @@ static inline void instance_send_resized_event(struct inst_info *inst, int is_pd
 	pkgname = package_name(inst->info);
 
 	lb_type = package_lb_type(inst->info);
-	if (lb_type == LB_TYPE_SCRIPT)
+	if (lb_type == LB_TYPE_SCRIPT) {
 		id = fb_id(script_handler_fb(inst->lb.canvas.script));
-	else if (lb_type == LB_TYPE_BUFFER)
+	} else if (lb_type == LB_TYPE_BUFFER) {
 		id = buffer_handler_id(inst->lb.canvas.buffer);
-	else
+	} else {
 		id = "";
+	}
 
 	packet = packet_create_noack("size_changed", "sssiiii", pkgname, inst->id, id, is_pd, w, h, status);
-	if (packet)
+	if (packet) {
 		CLIENT_SEND_EVENT(inst, packet);
-	else
+	} else {
 		ErrPrint("Failed to send size changed event\n");
+	}
 }
 
 static void update_mode_cb(struct slave_node *slave, const struct packet *packet, void *data)
@@ -338,8 +344,9 @@ static void update_mode_cb(struct slave_node *slave, const struct packet *packet
 		return;
 	}
 
-	if (ret == LB_STATUS_SUCCESS)
+	if (ret == LB_STATUS_SUCCESS) {
 		cbdata->inst->active_update = cbdata->active_update;
+	}
 
 	instance_send_update_mode_event(cbdata->inst, cbdata->active_update, ret);
 
@@ -357,26 +364,29 @@ HAPI int instance_unicast_created_event(struct inst_info *inst, struct client_no
 
 	if (!client) {
 		client = inst->client;
-		if (!client)
+		if (!client) {
 			return LB_STATUS_SUCCESS;
+		}
 	}
 
 	lb_type = package_lb_type(inst->info);
 	pd_type = package_pd_type(inst->info);
 
-	if (lb_type == LB_TYPE_SCRIPT)
+	if (lb_type == LB_TYPE_SCRIPT) {
 		lb_file = fb_id(script_handler_fb(inst->lb.canvas.script));
-	else if (lb_type == LB_TYPE_BUFFER)
+	} else if (lb_type == LB_TYPE_BUFFER) {
 		lb_file = buffer_handler_id(inst->lb.canvas.buffer);
-	else
+	} else {
 		lb_file = "";
+	}
 
-	if (pd_type == PD_TYPE_SCRIPT)
+	if (pd_type == PD_TYPE_SCRIPT) {
 		pd_file = fb_id(script_handler_fb(inst->pd.canvas.script));
-	else if (pd_type == PD_TYPE_BUFFER)
+	} else if (pd_type == PD_TYPE_BUFFER) {
 		pd_file = buffer_handler_id(inst->pd.canvas.buffer);
-	else
+	} else {
 		pd_file = "";
+	}
 
 	packet = packet_create_noack("created", "dsssiiiisssssdiiiiidsi",
 			inst->timestamp,
@@ -405,8 +415,9 @@ static int update_client_list(struct client_node *client, void *data)
 {
 	struct inst_info *inst = data;
 
-	if (!instance_has_client(inst, client))
+	if (!instance_has_client(inst, client)) {
 		instance_add_client(inst, client);
+	}
 
 	return LB_STATUS_SUCCESS;
 }
@@ -422,22 +433,25 @@ static int instance_broadcast_created_event(struct inst_info *inst)
 	lb_type = package_lb_type(inst->info);
 	pd_type = package_pd_type(inst->info);
 
-	if (lb_type == LB_TYPE_SCRIPT)
+	if (lb_type == LB_TYPE_SCRIPT) {
 		lb_file = fb_id(script_handler_fb(inst->lb.canvas.script));
-	else if (lb_type == LB_TYPE_BUFFER)
+	} else if (lb_type == LB_TYPE_BUFFER) {
 		lb_file = buffer_handler_id(inst->lb.canvas.buffer);
-	else
+	} else {
 		lb_file = "";
+	}
 
-	if (pd_type == PD_TYPE_SCRIPT)
+	if (pd_type == PD_TYPE_SCRIPT) {
 		pd_file = fb_id(script_handler_fb(inst->pd.canvas.script));
-	else if (pd_type == PD_TYPE_BUFFER)
+	} else if (pd_type == PD_TYPE_BUFFER) {
 		pd_file = buffer_handler_id(inst->pd.canvas.buffer);
-	else
+	} else {
 		pd_file = "";
+	}
 
-	if (!inst->client)
+	if (!inst->client) {
 		client_browse_list(inst->cluster, inst->category, update_client_list, inst);
+	}
 
 	packet = packet_create_noack("created", "dsssiiiisssssdiiiiidsi", 
 			inst->timestamp,
@@ -468,8 +482,9 @@ HAPI int instance_unicast_deleted_event(struct inst_info *inst, struct client_no
 
 	if (!client) {
 		client = inst->client;
-		if (!client)
+		if (!client) {
 			return LB_STATUS_ERROR_INVALID;
+		}
 	}
 
 	packet = packet_create_noack("deleted", "ssd", package_name(inst->info), inst->id, inst->timestamp);
@@ -544,8 +559,9 @@ HAPI int instance_event_callback_add(struct inst_info *inst, enum instance_event
 {
 	struct event_item *item;
 
-	if (!event_cb)
+	if (!event_cb) {
 		return LB_STATUS_ERROR_INVALID;
+	}
 
 	switch (type) {
 	case INSTANCE_EVENT_DESTROY:
@@ -609,8 +625,9 @@ static inline void destroy_instance(struct inst_info *inst)
 
 	DbgPrint("Instance is destroyed (%p), slave(%p)\n", inst, slave);
 
-	if (inst->pd.need_to_send_close_event)
+	if (inst->pd.need_to_send_close_event) {
 		send_pd_destroyed_to_client(inst, 0);
+	}
 
 	if (lb_type == LB_TYPE_SCRIPT) {
 		script_handler_unload(inst->lb.canvas.script, 0);
@@ -633,8 +650,9 @@ static inline void destroy_instance(struct inst_info *inst)
 		client_unref(inst->client);
 	}
 
-	if (inst->update_timer)
+	if (inst->update_timer) {
 		ecore_timer_del(inst->update_timer);
+	}
 
 	EINA_LIST_FREE(inst->data_list, tag_item) {
 		DbgPrint("Tagged item[%s] %p\n", tag_item->tag, tag_item->data);
@@ -704,10 +722,11 @@ static inline int fork_package(struct inst_info *inst, const char *pkgname)
 	if (package_secured(info)) {
 		if (inst->lb.period > 0.0f) {
 			inst->update_timer = util_timer_add(inst->lb.period, update_timer_cb, inst);
-			if (!inst->update_timer)
+			if (!inst->update_timer) {
 				ErrPrint("Failed to add an update timer for instance %s\n", inst->id);
-			else
+			} else {
 				timer_freeze(inst); /* Freeze the update timer as default */
+			}
 		} else {
 			inst->update_timer = NULL;
 		}
@@ -803,8 +822,9 @@ HAPI struct inst_info *instance_create(struct client_node *client, double timest
 
 HAPI struct inst_info *instance_ref(struct inst_info *inst)
 {
-	if (!inst)
+	if (!inst) {
 		return NULL;
+	}
 
 	inst->refcnt++;
 	return inst;
@@ -812,8 +832,9 @@ HAPI struct inst_info *instance_ref(struct inst_info *inst)
 
 HAPI struct inst_info *instance_unref(struct inst_info *inst)
 {
-	if (!inst)
+	if (!inst) {
 		return NULL;
+	}
 
 	if (inst->refcnt == 0) {
 		ErrPrint("Instance refcnt is not valid\n");
@@ -1132,8 +1153,9 @@ static void activate_cb(struct slave_node *slave, const struct packet *packet, v
 			new_inst = instance_create(inst->client, util_timestamp(), package_name(inst->info),
 							inst->content, inst->cluster, inst->category,
 							inst->lb.period, 0, 0);
-			if (!new_inst)
+			if (!new_inst) {
 				ErrPrint("Failed to create a new instance\n");
+			}
 		} else {
 			ErrPrint("Not enough space\n");
 		}
@@ -1163,33 +1185,37 @@ static void activate_cb(struct slave_node *slave, const struct packet *packet, v
 			 */
 			inst->is_pinned_up = is_pinned_up;
 			if (package_lb_type(inst->info) == LB_TYPE_SCRIPT) {
-				if (inst->lb.width == 0 && inst->lb.height == 0)
+				if (inst->lb.width == 0 && inst->lb.height == 0) {
 					livebox_service_get_size(LB_SIZE_TYPE_1x1, &inst->lb.width, &inst->lb.height);
+				}
 
 				inst->lb.canvas.script = script_handler_create(inst,
 								package_lb_path(inst->info),
 								package_lb_group(inst->info),
 								inst->lb.width, inst->lb.height);
 
-				if (!inst->lb.canvas.script)
+				if (!inst->lb.canvas.script) {
 					ErrPrint("Failed to create LB\n");
-				else
+				} else {
 					script_handler_load(inst->lb.canvas.script, 0);
+				}
 			} else if (package_lb_type(inst->info) == LB_TYPE_BUFFER) {
 				instance_create_lb_buffer(inst);
 			}
 
 			if (package_pd_type(inst->info) == PD_TYPE_SCRIPT) {
-				if (inst->pd.width == 0 && inst->pd.height == 0)
+				if (inst->pd.width == 0 && inst->pd.height == 0) {
 					instance_set_pd_size(inst, package_pd_width(inst->info), package_pd_height(inst->info));
+				}
 
 				inst->pd.canvas.script = script_handler_create(inst,
 								package_pd_path(inst->info),
 								package_pd_group(inst->info),
 								inst->pd.width, inst->pd.height);
 
-				if (!inst->pd.canvas.script)
+				if (!inst->pd.canvas.script) {
 					ErrPrint("Failed to create PD\n");
+				}
 			} else if (package_pd_type(inst->info) == PD_TYPE_BUFFER) {
 				instance_create_pd_buffer(inst);
 			}
@@ -1214,13 +1240,15 @@ out:
 
 HAPI int instance_create_pd_buffer(struct inst_info *inst)
 {
-	if (inst->pd.width == 0 && inst->pd.height == 0)
+	if (inst->pd.width == 0 && inst->pd.height == 0) {
 		instance_set_pd_size(inst, package_pd_width(inst->info), package_pd_height(inst->info));
+	}
 
 	if (!inst->pd.canvas.buffer) {
 		inst->pd.canvas.buffer = buffer_handler_create(inst, s_info.env_buf_type, inst->pd.width, inst->pd.height, sizeof(int));
-		if (!inst->pd.canvas.buffer)
+		if (!inst->pd.canvas.buffer) {
 			ErrPrint("Failed to create PD Buffer\n");
+		}
 	}
 
 	return !!inst->pd.canvas.buffer;
@@ -1228,8 +1256,9 @@ HAPI int instance_create_pd_buffer(struct inst_info *inst)
 
 HAPI int instance_create_lb_buffer(struct inst_info *inst)
 {
-	if (inst->lb.width == 0 && inst->lb.height == 0)
+	if (inst->lb.width == 0 && inst->lb.height == 0) {
 		livebox_service_get_size(LB_SIZE_TYPE_1x1, &inst->lb.width, &inst->lb.height);
+	}
 
 	if (!inst->lb.canvas.buffer) {
 		/*!
@@ -1238,8 +1267,9 @@ HAPI int instance_create_lb_buffer(struct inst_info *inst)
 		 * In this case, create the buffer from here.
 		 */
 		inst->lb.canvas.buffer = buffer_handler_create(inst, s_info.env_buf_type, inst->lb.width, inst->lb.height, sizeof(int));
-		if (!inst->lb.canvas.buffer)
+		if (!inst->lb.canvas.buffer) {
 			ErrPrint("Failed to create LB\n");
+		}
 	}
 
 	return !!inst->lb.canvas.buffer;
@@ -1317,8 +1347,9 @@ static inline void release_resource_for_closing_pd(struct pkg_info *info, struct
 {
 	if (!client) {
 		client = inst->pd.owner;
-		if (!client)
+		if (!client) {
 			return;
+		}
 	}
 
 	/*!
@@ -1359,16 +1390,18 @@ HAPI int instance_state_reset(struct inst_info *inst)
 		return LB_STATUS_ERROR_INVALID;
 	}
 
-	if (inst->state == INST_DESTROYED)
+	if (inst->state == INST_DESTROYED) {
 		goto out;
+	}
 
 	lb_type = package_lb_type(inst->info);
 	pd_type = package_pd_type(inst->info);
 
-	if (lb_type == LB_TYPE_SCRIPT && inst->lb.canvas.script)
+	if (lb_type == LB_TYPE_SCRIPT && inst->lb.canvas.script) {
 		script_handler_unload(inst->lb.canvas.script, 0);
-	else if (lb_type == LB_TYPE_BUFFER && inst->lb.canvas.buffer)
+	} else if (lb_type == LB_TYPE_BUFFER && inst->lb.canvas.buffer) {
 		buffer_handler_unload(inst->lb.canvas.buffer);
+	}
 
 	if (pd_type == PD_TYPE_SCRIPT && inst->pd.canvas.script) {
 		inst->pd.is_opened_for_reactivate = script_handler_is_loaded(inst->pd.canvas.script);
@@ -1677,8 +1710,9 @@ HAPI void instance_lb_updated(const char *pkgname, const char *id)
 	struct inst_info *inst;
 
 	inst = package_find_instance_by_id(pkgname, id);
-	if (!inst)
+	if (!inst) {
 		return;
+	}
 
 	instance_lb_updated_by_instance(inst);
 }
@@ -1700,22 +1734,25 @@ HAPI void instance_lb_updated_by_instance(struct inst_info *inst)
 	}
 
 	lb_type = package_lb_type(inst->info);
-	if (lb_type == LB_TYPE_SCRIPT)
+	if (lb_type == LB_TYPE_SCRIPT) {
 		id = fb_id(script_handler_fb(inst->lb.canvas.script));
-	else if (lb_type == LB_TYPE_BUFFER)
+	} else if (lb_type == LB_TYPE_BUFFER) {
 		id = buffer_handler_id(inst->lb.canvas.buffer);
-	else
+	} else {
 		id = "";
+	}
 
-	if (inst->content)
+	if (inst->content) {
 		content = inst->content;
-	else
+	} else {
 		content = "";
+	}
 
-	if (inst->title)
+	if (inst->title) {
 		title = inst->title;
-	else
+	} else {
 		title = "";
+	}
 
 	packet = packet_create_noack("lb_updated", "sssiidss",
 			package_name(inst->info), inst->id, id,
@@ -1733,8 +1770,9 @@ HAPI int instance_hold_scroll(struct inst_info *inst, int hold)
 	struct packet *packet;
 
 	DbgPrint("HOLD: (%s) %d\n", inst->id, hold);
-	if (inst->scroll_locked == hold)
+	if (inst->scroll_locked == hold) {
 		return LB_STATUS_ERROR_ALREADY;
+	}
 
 	packet = packet_create_noack("scroll", "ssi", package_name(inst->info), inst->id, hold);
 	if (!packet) {
@@ -1766,16 +1804,18 @@ HAPI void instance_pd_updated_by_instance(struct inst_info *inst, const char *de
 
 		if (descfile) {
 			inst->pd.pended_update_desc = strdup(descfile);
-			if (!inst->pd.pended_update_desc)
+			if (!inst->pd.pended_update_desc) {
 				ErrPrint("Heap: %s\n", strerror(errno));
+			}
 		}
 
 		inst->pd.pended_update_cnt++;
 		return;
 	}
 
-	if (!descfile)
+	if (!descfile) {
 		descfile = inst->id;
+	}
 
 	switch (package_pd_type(inst->info)) {
 	case PD_TYPE_SCRIPT:
@@ -1806,8 +1846,9 @@ HAPI void instance_pd_updated(const char *pkgname, const char *id, const char *d
 	struct inst_info *inst;
 
 	inst = package_find_instance_by_id(pkgname, id);
-	if (!inst)
+	if (!inst) {
 		return;
+	}
 
 	instance_pd_updated_by_instance(inst, descfile);
 }
@@ -1860,14 +1901,16 @@ HAPI void instance_set_lb_info(struct inst_info *inst, double priority, const ch
 
 	if (content && strlen(content)) {
 		_content = strdup(content);
-		if (!_content)
+		if (!_content) {
 			ErrPrint("Heap: %s\n", strerror(errno));
+		}
 	}
 
 	if (title && strlen(title)) {
 		_title = strdup(title);
-		if (!_title)
+		if (!_title) {
 			ErrPrint("Heap: %s\n", strerror(errno));
+		}
 	}
 
 	if (_content) {
@@ -1880,14 +1923,16 @@ HAPI void instance_set_lb_info(struct inst_info *inst, double priority, const ch
 		inst->title = _title;
 	}
 
-	if (priority >= 0.0f && priority <= 1.0f)
+	if (priority >= 0.0f && priority <= 1.0f) {
 		inst->lb.priority = priority;
+	}
 }
 
 HAPI void instance_set_lb_size(struct inst_info *inst, int w, int h)
 {
-	if (inst->lb.width != w || inst->lb.height != h)
+	if (inst->lb.width != w || inst->lb.height != h) {
 		instance_send_resized_event(inst, IS_LB, w, h, LB_STATUS_SUCCESS);
+	}
 
 	inst->lb.width = w;
 	inst->lb.height = h;
@@ -1895,8 +1940,9 @@ HAPI void instance_set_lb_size(struct inst_info *inst, int w, int h)
 
 HAPI void instance_set_pd_size(struct inst_info *inst, int w, int h)
 {
-	if (inst->pd.width != w || inst->pd.height != h)
+	if (inst->pd.width != w || inst->pd.height != h) {
 		instance_send_resized_event(inst, IS_PD, w, h, LB_STATUS_SUCCESS);
+	}
 
 	inst->pd.width = w;
 	inst->pd.height = h;
@@ -1955,10 +2001,11 @@ out:
 	 */
 	result = packet_create_noack("pinup", "iisss", ret, cbdata->inst->is_pinned_up,
 							package_name(cbdata->inst->info), cbdata->inst->id, cbdata->inst->content);
-	if (result)
+	if (result) {
 		(void)CLIENT_SEND_EVENT(cbdata->inst, result);
-	else
+	} else {
 		ErrPrint("Failed to build a packet for %s\n", package_name(cbdata->inst->info));
+	}
 
 	instance_unref(cbdata->inst);
 	DbgFree(cbdata);
@@ -1979,15 +2026,18 @@ HAPI int instance_set_pinup(struct inst_info *inst, int pinup)
 		return LB_STATUS_ERROR_FAULT;
 	}
 
-	if (!package_pinup(inst->info))
+	if (!package_pinup(inst->info)) {
 		return LB_STATUS_ERROR_INVALID;
+	}
 
-	if (pinup == inst->is_pinned_up)
+	if (pinup == inst->is_pinned_up) {
 		return LB_STATUS_ERROR_INVALID;
+	}
 
 	cbdata = malloc(sizeof(*cbdata));
-	if (!cbdata)
+	if (!cbdata) {
 		return LB_STATUS_ERROR_MEMORY;
+	}
 
 	cbdata->inst = instance_ref(inst);
 	cbdata->pinup = pinup;
@@ -2005,8 +2055,9 @@ HAPI int instance_set_pinup(struct inst_info *inst, int pinup)
 
 HAPI int instance_freeze_updator(struct inst_info *inst)
 {
-	if (!inst->update_timer)
+	if (!inst->update_timer) {
 		return LB_STATUS_ERROR_INVALID;
+	}
 
 	timer_freeze(inst);
 	return LB_STATUS_SUCCESS;
@@ -2014,14 +2065,17 @@ HAPI int instance_freeze_updator(struct inst_info *inst)
 
 HAPI int instance_thaw_updator(struct inst_info *inst)
 {
-	if (!inst->update_timer)
+	if (!inst->update_timer) {
 		return LB_STATUS_ERROR_INVALID;
+	}
 
-	if (client_is_all_paused() || setting_is_lcd_off())
+	if (client_is_all_paused() || setting_is_lcd_off()) {
 		return LB_STATUS_ERROR_INVALID;
+	}
 
-	if (inst->visible == LB_HIDE_WITH_PAUSE)
+	if (inst->visible == LB_HIDE_WITH_PAUSE) {
 		return LB_STATUS_ERROR_INVALID;
+	}
 
 	timer_thaw(inst);
 	return LB_STATUS_SUCCESS;
@@ -2034,15 +2088,17 @@ HAPI enum livebox_visible_state instance_visible_state(struct inst_info *inst)
 
 HAPI int instance_set_visible_state(struct inst_info *inst, enum livebox_visible_state state)
 {
-	if (inst->visible == state)
+	if (inst->visible == state) {
 		return LB_STATUS_SUCCESS;
+	}
 
 	switch (state) {
 	case LB_SHOW:
 	case LB_HIDE:
 		if (inst->visible == LB_HIDE_WITH_PAUSE) {
-			if (resume_livebox(inst) == 0)
+			if (resume_livebox(inst) == 0) {
 				inst->visible = state;
+			}
 
 			instance_thaw_updator(inst);
 		} else {
@@ -2051,8 +2107,9 @@ HAPI int instance_set_visible_state(struct inst_info *inst, enum livebox_visible
 		break;
 
 	case LB_HIDE_WITH_PAUSE:
-		if (pause_livebox(inst) == 0)
+		if (pause_livebox(inst) == 0) {
 			inst->visible = LB_HIDE_WITH_PAUSE;
+		}
 
 		instance_freeze_updator(inst);
 		break;
@@ -2188,17 +2245,19 @@ static void set_period_cb(struct slave_node *slave, const struct packet *packet,
 		goto out;
 	}
 
-	if (ret == 0)
+	if (ret == 0) {
 		cbdata->inst->lb.period = cbdata->period;
-	else
+	} else {
 		ErrPrint("Failed to set period %d\n", ret);
+	}
 
 out:
 	result = packet_create_noack("period_changed", "idss", ret, cbdata->inst->lb.period, package_name(cbdata->inst->info), cbdata->inst->id);
-	if (result)
+	if (result) {
 		(void)CLIENT_SEND_EVENT(cbdata->inst, result);
-	else
+	} else {
 		ErrPrint("Failed to build a packet for %s\n", package_name(cbdata->inst->info));
+	}
 
 	instance_unref(cbdata->inst);
 	DbgFree(cbdata);
@@ -2226,17 +2285,19 @@ static Eina_Bool timer_updator_cb(void *data)
 		}
 	} else if (inst->lb.period > 0.0f) {
 		inst->update_timer = util_timer_add(inst->lb.period, update_timer_cb, inst);
-		if (!inst->update_timer)
+		if (!inst->update_timer) {
 			ErrPrint("Failed to add an update timer for instance %s\n", inst->id);
-		else
+		} else {
 			timer_freeze(inst); /* Freeze the update timer as default */
+		}
 	}
 
 	result = packet_create_noack("period_changed", "idss", 0, inst->lb.period, package_name(inst->info), inst->id);
-	if (result)
+	if (result) {
 		(void)CLIENT_SEND_EVENT(inst, result);
-	else
+	} else {
 		ErrPrint("Failed to build a packet for %s\n", package_name(inst->info));
+	}
 
 	instance_unref(inst);
 	return ECORE_CALLBACK_CANCEL;
@@ -2280,8 +2341,9 @@ HAPI int instance_set_period(struct inst_info *inst, double period)
 		 *
 		 * So update its timer at here.
 		 */
-		if (!ecore_timer_add(DELAY_TIME, timer_updator_cb, cbdata))
+		if (!ecore_timer_add(DELAY_TIME, timer_updator_cb, cbdata)) {
 			timer_updator_cb(cbdata);
+		}
 		return LB_STATUS_SUCCESS;
 	}
 
@@ -2331,20 +2393,23 @@ HAPI int instance_signal_emit(struct inst_info *inst, const char *signal, const 
 	pkg = instance_package(inst);
 	pkgname = package_name(pkg);
 	id = instance_id(inst);
-	if (!pkgname || !id)
+	if (!pkgname || !id) {
 		return LB_STATUS_ERROR_INVALID;
+	}
 
 	slave = package_slave(pkg);
-	if (!slave)
+	if (!slave) {
 		return LB_STATUS_ERROR_INVALID;
+	}
 
 	packet = packet_create_noack("script", "ssssddddddi",
 			pkgname, id,
 			signal, part,
 			sx, sy, ex, ey,
 			x, y, down);
-	if (!packet)
+	if (!packet) {
 		return LB_STATUS_ERROR_FAULT;
+	}
 
 	return slave_rpc_request_only(slave, pkgname, packet, 0); 
 }
@@ -2408,10 +2473,11 @@ out:
 	result = packet_create_noack("group_changed", "ssiss",
 				package_name(cbdata->inst->info), cbdata->inst->id, ret,
 				cbdata->inst->cluster, cbdata->inst->category);
-	if (!result)
+	if (!result) {
 		ErrPrint("Failed to build a packet %s\n", package_name(cbdata->inst->info));
-	else
+	} else {
 		(void)CLIENT_SEND_EVENT(cbdata->inst, result);
+	}
 
 	instance_unref(cbdata->inst);
 	DbgFree(cbdata);
@@ -2774,10 +2840,13 @@ HAPI void instance_slave_set_pd_pos(struct inst_info *inst, double x, double y)
 
 HAPI void instance_slave_get_pd_pos(struct inst_info *inst, double *x, double *y)
 {
-	if (x)
+	if (x) {
 		*x = inst->pd.x;
-	if (y)
+	}
+
+	if (y) {
 		*y = inst->pd.y;
+	}
 }
 
 HAPI int instance_slave_open_pd(struct inst_info *inst, struct client_node *client)
@@ -2856,12 +2925,14 @@ HAPI int instance_slave_open_pd(struct inst_info *inst, struct client_node *clie
 	 */
 	if (package_pd_type(info) == PD_TYPE_BUFFER) {
 		instance_ref(inst);
-		if (client_event_callback_add(client, CLIENT_EVENT_DEACTIVATE, pd_buffer_close_cb, inst) < 0)
+		if (client_event_callback_add(client, CLIENT_EVENT_DEACTIVATE, pd_buffer_close_cb, inst) < 0) {
 			instance_unref(inst);
+		}
 	} else if (package_pd_type(info) == PD_TYPE_SCRIPT) {
 		instance_ref(inst);
-		if (client_event_callback_add(client, CLIENT_EVENT_DEACTIVATE, pd_script_close_cb, inst) < 0)
+		if (client_event_callback_add(client, CLIENT_EVENT_DEACTIVATE, pd_script_close_cb, inst) < 0) {
 			instance_unref(inst);
+		}
 	}
 
 	inst->pd.owner = client;
@@ -3018,10 +3089,11 @@ HAPI void *instance_client_list(struct inst_info *inst)
 
 HAPI int instance_init(void)
 {
-	if (!strcasecmp(PROVIDER_METHOD, "shm"))
+	if (!strcasecmp(PROVIDER_METHOD, "shm")) {
 		s_info.env_buf_type = BUFFER_TYPE_SHM;
-	else if (!strcasecmp(PROVIDER_METHOD, "pixmap"))
+	} else if (!strcasecmp(PROVIDER_METHOD, "pixmap")) {
 		s_info.env_buf_type = BUFFER_TYPE_PIXMAP;
+	}
 	/* Default method is BUFFER_TYPE_FILE */
 
 	return LB_STATUS_SUCCESS;
@@ -3038,8 +3110,9 @@ static inline struct tag_item *find_tag_item(struct inst_info *inst, const char 
 	Eina_List *l;
 
 	EINA_LIST_FOREACH(inst->data_list, l, item) {
-		if (!strcmp(item->tag, tag))
+		if (!strcmp(item->tag, tag)) {
 			return item;
+		}
 	}
 
 	return NULL;
@@ -3084,8 +3157,9 @@ HAPI void *instance_del_data(struct inst_info *inst, const char *tag)
 	void *data;
 
 	item = find_tag_item(inst, tag);
-	if (!item)
+	if (!item) {
 		return NULL;
+	}
 
 	inst->data_list = eina_list_remove(inst->data_list, item);
 	data = item->data;
@@ -3100,8 +3174,9 @@ HAPI void *instance_get_data(struct inst_info *inst, const char *tag)
 	struct tag_item *item;
 
 	item = find_tag_item(inst, tag);
-	if (!item)
+	if (!item) {
 		return NULL;
+	}
 
 	return item->data;
 }

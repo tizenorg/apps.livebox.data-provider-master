@@ -89,7 +89,6 @@ static void _handler_insert_badge(struct tcb *tcb, struct packet *packet, void *
 
 		if (pkgname != NULL && writable_pkg != NULL && caller != NULL) {
 			ret = badge_db_insert(pkgname, writable_pkg, caller);
-
 		} else {
 			ret = BADGE_ERROR_INVALID_DATA;
 		}
@@ -136,7 +135,6 @@ static void _handler_delete_badge(struct tcb *tcb, struct packet *packet, void *
 
 		if (pkgname != NULL && caller != NULL) {
 			ret = badge_db_delete(pkgname, caller);
-
 		} else {
 			ret = BADGE_ERROR_INVALID_DATA;
 		}
@@ -184,7 +182,6 @@ static void _handler_set_badge_count(struct tcb *tcb, struct packet *packet, voi
 
 		if (pkgname != NULL && caller != NULL) {
 			ret = badge_db_set_count(pkgname, caller, count);
-
 		} else {
 			ret = BADGE_ERROR_INVALID_DATA;
 		}
@@ -232,7 +229,6 @@ static void _handler_set_display_option(struct tcb *tcb, struct packet *packet, 
 
 		if (pkgname != NULL && caller != NULL) {
 			ret = badge_db_set_display_option(pkgname, caller, is_display);
-
 		} else {
 			ret = BADGE_ERROR_INVALID_DATA;
 		}
@@ -379,8 +375,9 @@ static int service_thread_main(struct tcb *tcb, struct packet *packet, void *dat
 	case PACKET_REQ:
 		/* Need to send reply packet */
 		for (i = 0; service_req_table[i].cmd; i++) {
-			if (strcmp(service_req_table[i].cmd, command))
+			if (strcmp(service_req_table[i].cmd, command)) {
 				continue;
+			}
 
 #if ENABLE_BS_ACCESS_CONTROL
 			if (_is_valid_permission(tcb_fd(tcb), &(service_req_table[i])) == 1) {
@@ -454,8 +451,9 @@ HAPI int badge_service_init(void)
 
 HAPI int badge_service_fini(void)
 {
-	if (!s_info.svc_ctx)
+	if (!s_info.svc_ctx) {
 		return LB_STATUS_ERROR_INVALID;
+	}
 
 	service_common_destroy(s_info.svc_ctx);
 	s_info.svc_ctx = NULL;

@@ -40,8 +40,9 @@ HAPI unsigned long util_string_hash(const char *str)
 {
 	unsigned long ret = 0;
 
-	while (*str)
+	while (*str) {
 		ret += (unsigned long)(*str++);
+	}
 
 	ret %= 371773;
 	return ret;
@@ -67,8 +68,9 @@ HAPI int util_check_ext(const char *filename, const char *check_ptr)
 
 	name_len = strlen(filename);
 	while (--name_len >= 0 && *check_ptr) {
-		if (filename[name_len] != *check_ptr)
+		if (filename[name_len] != *check_ptr) {
 			return LB_STATUS_ERROR_INVALID;
+		}
 
 		check_ptr ++;
 	}
@@ -134,8 +136,9 @@ HAPI int util_validate_livebox_package(const char *pkgname)
 		return LB_STATUS_ERROR_INVALID;
 	}
 
-	if (!check_native_livebox(pkgname) || !check_web_livebox(pkgname))
+	if (!check_native_livebox(pkgname) || !check_web_livebox(pkgname)) {
 		return LB_STATUS_SUCCESS;
+	}
 
 	return LB_STATUS_ERROR_INVALID;
 }
@@ -146,8 +149,9 @@ HAPI int util_unlink(const char *filename)
 	int desclen;
 	int ret;
 
-	if (!filename)
+	if (!filename) {
 		return LB_STATUS_ERROR_INVALID;
+	}
 
 	desclen = strlen(filename) + 6; /* .desc */
 	descfile = malloc(desclen);
@@ -183,8 +187,9 @@ HAPI const char *util_basename(const char *name)
 {
 	int length;
 	length = name ? strlen(name) : 0;
-	if (!length)
+	if (!length) {
 		return ".";
+	}
 
 	while (--length > 0 && name[length] != '/');
 
@@ -243,8 +248,9 @@ HAPI char *util_replace_string(const char *src, const char *pattern, const char 
 		STATE_END
 	} state;
 
-	if (!src || !pattern)
+	if (!src || !pattern) {
 		return NULL;
+	}
 
 	out_sz = strlen(src);
 	ret = strdup(src);
@@ -339,8 +345,9 @@ HAPI const char *util_uri_to_path(const char *uri)
 	int len;
 
 	len = strlen(SCHEMA_FILE);
-	if (strncasecmp(uri, SCHEMA_FILE, len))
+	if (strncasecmp(uri, SCHEMA_FILE, len)) {
 		return NULL;
+	}
 
 	return uri + len;
 }
@@ -382,8 +389,9 @@ HAPI void *util_timer_add(double interval, Eina_Bool (*cb)(void *data), void *da
 	double delay;
 
 	timer = ecore_timer_add(interval, cb, data);
-	if (!timer)
+	if (!timer) {
 		return NULL;
+	}
 
 	delay = util_time_delay_for_compensation(interval) - interval;
 	ecore_timer_delay(timer, delay);
@@ -417,8 +425,9 @@ HAPI char *util_get_file_kept_in_safe(const char *id)
 	/*!
 	 * TODO: Remove me
 	 */
-	if (OVERWRITE_CONTENT)
+	if (OVERWRITE_CONTENT) {
 		return strdup(path);
+	}
 
 	len = strlen(path);
 	base_idx = len - 1;
@@ -462,11 +471,13 @@ HAPI int util_unlink_files(const char *folder)
 	}
 
 	while ((entry = readdir(handle))) {
-		if (!strcmp(entry->d_name, "."))
+		if (!strcmp(entry->d_name, ".")) {
 			continue;
+		}
 
-		if (!strcmp(entry->d_name, ".."))
+		if (!strcmp(entry->d_name, "..")) {
 			continue;
+		}
 
 		len = strlen(folder) + strlen(entry->d_name) + 3;
 		abspath = calloc(1, len);
@@ -476,13 +487,16 @@ HAPI int util_unlink_files(const char *folder)
 		}
 		snprintf(abspath, len - 1, "%s/%s", folder, entry->d_name);
 
-		if (unlink(abspath) < 0)
+		if (unlink(abspath) < 0) {
 			DbgPrint("unlink: %s\n", strerror(errno));
+		}
 
 		free(abspath);
 	}
 
-	closedir(handle);
+	if (closedir(handle) < 0) {
+		ErrPrint("closedir: %s\n", strerror(errno));
+	}
 	return LB_STATUS_SUCCESS;
 }
 

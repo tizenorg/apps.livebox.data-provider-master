@@ -42,22 +42,30 @@ static int evt_cb(int handle, void *data)
 	slave = slave_find_by_rpc_handle(handle);
 	if (slave) {
 		if (slave_pid(slave) != (pid_t)-1) {
-			if (slave_state(slave) == SLAVE_REQUEST_TO_TERMINATE)
+			if (slave_state(slave) == SLAVE_REQUEST_TO_TERMINATE) {
 				slave = slave_deactivated(slave);
-			else if (slave_state(slave) != SLAVE_TERMINATED)
+			} else if (slave_state(slave) != SLAVE_TERMINATED) {
 				slave = slave_deactivated_by_fault(slave);
+			}
 		}
 
-		DbgPrint("Slave pointer: %p (0 means deleted)\n", slave);
+		if (!slave) {
+			DbgPrint("Slave is deleted\n");
+		}
+
 		return 0;
 	}
 
 	client = client_find_by_rpc_handle(handle);
 	if (client) {
-		if (client_pid(client) != (pid_t)-1)
+		if (client_pid(client) != (pid_t)-1) {
 			client = client_deactivated_by_fault(client);
+		}
 
-		DbgPrint("Client pointer: %p (0 means deleted)\n", client);
+		if (!client) {
+			DbgPrint("Client is deleted\n");
+		}
+
 		return 0;
 	}
 

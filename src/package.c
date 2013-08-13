@@ -152,8 +152,9 @@ static int slave_activated_cb(struct slave_node *slave, void *data)
 	cnt = 0;
 	EINA_LIST_FOREACH_SAFE(info->inst_list, l, n, inst) {
 		ret = instance_recover_state(inst);
-		if (!ret)
+		if (!ret) {
 			continue;
+		}
 
 		instance_thaw_updator(inst);
 		cnt++;
@@ -223,8 +224,9 @@ static int xmonitor_paused_cb(void *data)
 	struct inst_info *inst;
 	Eina_List *l;
 
-	if (slave_state(info->slave) != SLAVE_TERMINATED)
+	if (slave_state(info->slave) != SLAVE_TERMINATED) {
 		return 0;
+	}
 
 	EINA_LIST_FOREACH(info->inst_list, l, inst) {
 		instance_freeze_updator(inst);
@@ -239,8 +241,9 @@ static int xmonitor_resumed_cb(void *data)
 	struct inst_info *inst;
 	Eina_List *l;
 
-	if (slave_state(info->slave) != SLAVE_TERMINATED)
+	if (slave_state(info->slave) != SLAVE_TERMINATED) {
 		return 0;
+	}
 
 	EINA_LIST_FOREACH(info->inst_list, l, inst) {
 		instance_thaw_updator(inst);
@@ -444,10 +447,11 @@ static inline int load_conf(struct pkg_info *info)
 	info->network = parser_network(parser);
 
 	info->lb.period = parser_period(parser);
-	if (info->lb.period < 0.0f)
+	if (info->lb.period < 0.0f) {
 		info->lb.period = 0.0f;
-	else if (info->lb.period > 0.0f && info->lb.period < MINIMUM_PERIOD)
+	} else if (info->lb.period > 0.0f && info->lb.period < MINIMUM_PERIOD) {
 		info->lb.period = MINIMUM_PERIOD;
+	}
 
 	info->lb.size_list = parser_size(parser);
 
@@ -477,8 +481,9 @@ static inline int load_conf(struct pkg_info *info)
 	parser_get_pdsize(parser, &info->pd.width, &info->pd.height);
 
 	group = parser_group_str(parser);
-	if (group && group_add_livebox(group, info->pkgname) < 0)
+	if (group && group_add_livebox(group, info->pkgname) < 0) {
 		ErrPrint("Failed to build cluster tree for %s{%s}\n", info->pkgname, group);
+	}
 
 	parser_unload(parser);
 	return LB_STATUS_SUCCESS;
@@ -555,8 +560,9 @@ HAPI char *package_lb_pkgname(const char *pkgname)
 
 	lb_pkgname = io_livebox_pkgname(pkgname);
 	if (!lb_pkgname) {
-		if (util_validate_livebox_package(pkgname) < 0)
+		if (util_validate_livebox_package(pkgname) < 0) {
 			return NULL;
+		}
 
 		lb_pkgname = strdup(pkgname);
 		if (!lb_pkgname) {
@@ -585,12 +591,14 @@ HAPI struct pkg_info *package_find(const char *pkgname)
 	Eina_List *l;
 	struct pkg_info *info;
 
-	if (!pkgname)
+	if (!pkgname) {
 		return NULL;
+	}
 
 	EINA_LIST_FOREACH(s_info.pkg_list, l, info) {
-		if (!strcmp(info->pkgname, pkgname))
+		if (!strcmp(info->pkgname, pkgname)) {
 			return info;
+		}
 	}
 
 	return NULL;
@@ -609,8 +617,9 @@ HAPI struct inst_info *package_find_instance_by_id(const char *pkgname, const ch
 	}
 
 	EINA_LIST_FOREACH(info->inst_list, l, inst) {
-		if (!strcmp(instance_id(inst), id))
+		if (!strcmp(instance_id(inst), id)) {
 			return inst;
+		}
 	}
 
 	return NULL;
@@ -629,8 +638,9 @@ HAPI struct inst_info *package_find_instance_by_timestamp(const char *pkgname, d
 	}
 
 	EINA_LIST_FOREACH(info->inst_list, l, inst) {
-		if (instance_timestamp(inst) == timestamp)
+		if (instance_timestamp(inst) == timestamp) {
 			return inst;
+		}
 	}
 
 	return NULL;
@@ -638,8 +648,9 @@ HAPI struct inst_info *package_find_instance_by_timestamp(const char *pkgname, d
 
 HAPI int package_dump_fault_info(struct pkg_info *info)
 {
-	if (!info->fault_info)
+	if (!info->fault_info) {
 		return LB_STATUS_ERROR_NOT_EXIST;
+	}
 
 	CRITICAL_LOG("=============\n");
 	CRITICAL_LOG("faulted at %lf\n", info->fault_info->timestamp);
@@ -651,8 +662,9 @@ HAPI int package_dump_fault_info(struct pkg_info *info)
 
 HAPI int package_get_fault_info(struct pkg_info *info, double *timestamp, const char **filename, const char **function)
 {
-	if (!info->fault_info)
+	if (!info->fault_info) {
 		return LB_STATUS_ERROR_NOT_EXIST;
+	}
 
 	*timestamp = info->fault_info->timestamp;
 	*filename = info->fault_info->filename;
@@ -673,10 +685,12 @@ HAPI int package_set_fault_info(struct pkg_info *info, double timestamp, const c
 	}
 
 	fault->timestamp = timestamp;
-	if (!filename)
+	if (!filename) {
 		filename = "unknown";
-	if (!function)
+	}
+	if (!function) {
 		function = "unknown";
+	}
 
 	fault->filename = strdup(filename);
 	if (!fault->filename) {
@@ -700,8 +714,9 @@ HAPI int package_set_fault_info(struct pkg_info *info, double timestamp, const c
 
 HAPI int package_clear_fault(struct pkg_info *info)
 {
-	if (!info->fault_info)
+	if (!info->fault_info) {
 		return LB_STATUS_ERROR_INVALID;
+	}
 	
 	package_dump_fault_info(info);
 
@@ -793,8 +808,9 @@ HAPI int package_set_abi(struct pkg_info *info, const char *abi)
 
 HAPI const char * const package_lb_path(const struct pkg_info *info)
 {
-	if (info->lb.type != LB_TYPE_SCRIPT)
+	if (info->lb.type != LB_TYPE_SCRIPT) {
 		return NULL;
+	}
 
 	return info->lb.info.script.path;
 }
@@ -803,8 +819,9 @@ HAPI int package_set_lb_path(struct pkg_info *info, const char *path)
 {
 	char *tmp;
 
-	if (info->lb.type != LB_TYPE_SCRIPT)
+	if (info->lb.type != LB_TYPE_SCRIPT) {
 		return LB_STATUS_ERROR_INVALID;
+	}
 
 	tmp = strdup(path);
 	if (!tmp) {
@@ -819,8 +836,9 @@ HAPI int package_set_lb_path(struct pkg_info *info, const char *path)
 
 HAPI const char * const package_lb_group(const struct pkg_info *info)
 {
-	if (info->lb.type != LB_TYPE_SCRIPT)
+	if (info->lb.type != LB_TYPE_SCRIPT) {
 		return NULL;
+	}
 
 	return info->lb.info.script.group;
 }
@@ -829,8 +847,9 @@ HAPI int package_set_lb_group(struct pkg_info *info, const char *group)
 {
 	char *tmp;
 
-	if (info->lb.type != LB_TYPE_SCRIPT)
+	if (info->lb.type != LB_TYPE_SCRIPT) {
 		return LB_STATUS_ERROR_INVALID;
+	}
 
 	tmp = strdup(group);
 	if (!tmp) {
@@ -845,8 +864,9 @@ HAPI int package_set_lb_group(struct pkg_info *info, const char *group)
 
 HAPI const char * const package_pd_path(const struct pkg_info *info)
 {
-	if (info->pd.type != PD_TYPE_SCRIPT)
+	if (info->pd.type != PD_TYPE_SCRIPT) {
 		return NULL;
+	}
 
 	return info->pd.info.script.path;
 }
@@ -855,8 +875,9 @@ HAPI int package_set_pd_path(struct pkg_info *info, const char *path)
 {
 	char *tmp;
 
-	if (info->pd.type != PD_TYPE_SCRIPT)
+	if (info->pd.type != PD_TYPE_SCRIPT) {
 		return LB_STATUS_ERROR_INVALID;
+	}
 
 	tmp = strdup(path);
 	if (!tmp) {
@@ -871,8 +892,9 @@ HAPI int package_set_pd_path(struct pkg_info *info, const char *path)
 
 HAPI const char * const package_pd_group(const struct pkg_info *info)
 {
-	if (info->pd.type != PD_TYPE_SCRIPT)
+	if (info->pd.type != PD_TYPE_SCRIPT) {
 		return NULL;
+	}
 
 	return info->pd.info.script.group;
 }
@@ -881,8 +903,9 @@ HAPI int package_set_pd_group(struct pkg_info *info, const char *group)
 {
 	char *tmp;
 
-	if (info->pd.type != PD_TYPE_SCRIPT)
+	if (info->pd.type != PD_TYPE_SCRIPT) {
 		return LB_STATUS_ERROR_INVALID;
+	}
 
 	tmp = strdup(group);
 	if (!tmp) {
@@ -912,8 +935,9 @@ HAPI const char * const package_auto_launch(const struct pkg_info *info)
 
 HAPI void package_set_auto_launch(struct pkg_info *info, const char *auto_launch)
 {
-	if (!auto_launch)
+	if (!auto_launch) {
 		auto_launch = "";
+	}
 
 	info->lb.auto_launch = strdup(auto_launch);
 	if (!info->lb.auto_launch) {
@@ -1096,8 +1120,9 @@ HAPI int package_add_instance(struct pkg_info *info, struct inst_info *inst)
 			int ret;
 
 			ret = assign_new_slave(info);
-			if (ret < 0)
+			if (ret < 0) {
 				return ret;
+			}
 		} else {
 			DbgPrint("Slave %s is used for %s\n", slave_name(info->slave), info->pkgname);
 		}
@@ -1133,8 +1158,9 @@ HAPI int package_del_instance(struct pkg_info *info, struct inst_info *inst)
 {
 	info->inst_list = eina_list_remove(info->inst_list, inst);
 
-	if (info->inst_list)
+	if (info->inst_list) {
 		return LB_STATUS_SUCCESS;
+	}
 
 	if (info->slave) {
 		slave_unload_package(info->slave);
@@ -1155,8 +1181,9 @@ HAPI int package_del_instance(struct pkg_info *info, struct inst_info *inst)
 		info->slave = NULL;
 	}
 
-	if (info->is_uninstalled)
+	if (info->is_uninstalled) {
 		package_destroy(info);
+	}
 
 	return LB_STATUS_SUCCESS;
 }
@@ -1281,7 +1308,11 @@ static int io_install_cb(const char *pkgname, int prime, void *data)
 		reload_package_info(info);
 	} else {
 		info = package_create(pkgname);
-		DbgPrint("Package %s is%sbuilt\n", pkgname, info ? " " : " not ");
+		if (!info) {
+			ErrPrint("Failed to build an info: %s\n", pkgname);
+		} else {
+			DbgPrint("Package %s is built\n", pkgname);
+		}
 	}
 
 	return 0;
@@ -1291,8 +1322,9 @@ static int install_cb(const char *pkgname, enum pkgmgr_status status, double val
 {
 	int ret;
 
-	if (status != PKGMGR_STATUS_END)
+	if (status != PKGMGR_STATUS_END) {
 		return 0;
+	}
 
 	ret = io_update_livebox_package(pkgname, io_install_cb, NULL);
 	return 0;
@@ -1319,8 +1351,9 @@ static int io_update_cb(const char *pkgname, int prime, void *data)
 
 	DbgPrint("Livebox package %s is updated\n", pkgname);
 	info = package_find(pkgname);
-	if (!info)
+	if (!info) {
 		return 0;
+	}
 
 	reload_package_info(info);
 	return 0;
@@ -1329,8 +1362,9 @@ static int io_update_cb(const char *pkgname, int prime, void *data)
 static int update_cb(const char *pkgname, enum pkgmgr_status status, double value, void *data)
 {
 	int ret;
-	if (status != PKGMGR_STATUS_END)
+	if (status != PKGMGR_STATUS_END) {
 		return 0;
+	}
 
 	ret = io_update_livebox_package(pkgname, io_update_cb, NULL);
 	return 0;
@@ -1343,8 +1377,9 @@ static int crawling_liveboxes(const char *pkgname, int prime, void *data)
 	} else {
 		struct pkg_info *info;
 		info = package_create(pkgname);
-		if (info)
+		if (info) {
 			DbgPrint("[%s] information is built prime(%d)\n", pkgname, prime);
+		}
 	}
 
 	return 0;
@@ -1395,12 +1430,14 @@ HAPI const char *package_find_by_secured_slave(struct slave_node *slave)
 	Eina_List *l;
 	struct pkg_info *info;
 
-	if (!slave_is_secured(slave))
+	if (!slave_is_secured(slave)) {
 		return NULL;
+	}
 
 	EINA_LIST_FOREACH(s_info.pkg_list, l, info) {
-		if (info->slave == slave)
+		if (info->slave == slave) {
 			return info->pkgname;
+		}
 	}
 
 	return NULL;
@@ -1424,11 +1461,13 @@ HAPI int package_alter_instances_to_client(struct client_node *client, enum alte
 
 	EINA_LIST_FOREACH(s_info.pkg_list, l, info) {
 		EINA_LIST_FOREACH(info->inst_list, i_l, inst) {
-			if (instance_client(inst))
+			if (instance_client(inst)) {
 				continue;
+			}
 
-			if (!client_is_subscribed(client, instance_cluster(inst), instance_category(inst)))
+			if (!client_is_subscribed(client, instance_cluster(inst), instance_category(inst))) {
 				continue;
+			}
 
 			switch (instance_state(inst)) {
 			case INST_INIT:
@@ -1508,8 +1547,9 @@ HAPI int package_is_enabled(const char *appid)
 		return 0;
 	}
 
-	if (ail_appinfo_get_bool(ai, AIL_PROP_X_SLP_ENABLED_BOOL, &enabled) != AIL_ERROR_OK)
+	if (ail_appinfo_get_bool(ai, AIL_PROP_X_SLP_ENABLED_BOOL, &enabled) != AIL_ERROR_OK) {
 		enabled = false;
+	}
 
 	ail_destroy_appinfo(ai);
 

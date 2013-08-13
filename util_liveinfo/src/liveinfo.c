@@ -291,6 +291,7 @@ static inline void ls(void)
 static void send_slave_list(void)
 {
 	struct packet *packet;
+	int ret;
 
 	if (s_info.cmd != NOP) {
 		printf("Previous command is not finished\n");
@@ -303,8 +304,13 @@ static void send_slave_list(void)
 		return;
 	}
 
-	com_core_packet_send_only(s_info.fd, packet);
+	ret = com_core_packet_send_only(s_info.fd, packet);
 	packet_destroy(packet);
+	if (ret < 0) {
+		printf("Failed to send a packet: %d\n", ret);
+		return;
+	}
+
 	s_info.cmd = SLAVE_LIST;
 	s_info.age++;
 }
@@ -316,6 +322,7 @@ static void send_slave_list(void)
 static void send_command(const char *cmd, const char *var, const char *val)
 {
 	struct packet *packet;
+	int ret;
 
 	if (s_info.cmd != NOP) {
 		printf("Previous command is not finished\n");
@@ -323,8 +330,18 @@ static void send_command(const char *cmd, const char *var, const char *val)
 	}
 
 	packet = packet_create_noack("master_ctrl", "sss", cmd, var, val);
-	com_core_packet_send_only(s_info.fd, packet);
+	if (!packet) {
+		printf("Failed to create a ctrl packet\n");
+		return;
+	}
+
+	ret = com_core_packet_send_only(s_info.fd, packet);
 	packet_destroy(packet);
+	if (ret < 0) {
+		printf("Failed to send packet ctrl\n");
+		return;
+	}
+
 	s_info.cmd = MASTER_CTRL;
 	s_info.age++;
 }
@@ -385,6 +402,7 @@ static int pkglist_cb(const char *appid, const char *lbid, int is_prime, void *d
 static void send_pkg_list(void)
 {
 	struct packet *packet;
+	int ret;
 
 	if (s_info.cmd != NOP) {
 		printf("Previous command is not finished\n");
@@ -397,8 +415,13 @@ static void send_pkg_list(void)
 		return;
 	}
 
-	com_core_packet_send_only(s_info.fd, packet);
+	ret = com_core_packet_send_only(s_info.fd, packet);
 	packet_destroy(packet);
+	if (ret < 0) {
+		printf("Failed to create a packet\n");
+		return;
+	}
+
 	s_info.cmd = PKG_LIST;
 	s_info.age++;
 
@@ -411,6 +434,7 @@ static void send_inst_delete(void)
 	struct node *parent;
 	const char *name;
 	struct instance *inst;
+	int ret;
 
 	if (s_info.cmd != NOP) {
 		printf("Previous command is not finished\n");
@@ -443,8 +467,13 @@ static void send_inst_delete(void)
 		return;
 	}
 
-	com_core_packet_send_only(s_info.fd, packet);
+	ret = com_core_packet_send_only(s_info.fd, packet);
 	packet_destroy(packet);
+	if (ret < 0) {
+		printf("Failed to send a packet: %d\n", ret);
+		return;
+	}
+
 	s_info.cmd = INST_CTRL;
 	s_info.age++;
 }
@@ -452,6 +481,7 @@ static void send_inst_delete(void)
 static void send_inst_list(const char *pkgname)
 {
 	struct packet *packet;
+	int ret;
 
 	if (s_info.cmd != NOP) {
 		printf("Previous command is not finished\n");
@@ -464,8 +494,13 @@ static void send_inst_list(const char *pkgname)
 		return;
 	}
 
-	com_core_packet_send_only(s_info.fd, packet);
+	ret = com_core_packet_send_only(s_info.fd, packet);
 	packet_destroy(packet);
+	if (ret < 0) {
+		printf("Failed to send a packet: %d\n", ret);
+		return;
+	}
+
 	s_info.cmd = INST_LIST;
 	s_info.age++;
 }

@@ -60,10 +60,17 @@ HAPI int const fault_is_occured(void)
 static void clear_log_file(struct slave_node *slave)
 {
 	char filename[BUFSIZ];
+	int ret;
 
-	snprintf(filename, sizeof(filename), "%s/slave.%d", SLAVE_LOG_PATH, slave_pid(slave));
+	ret = snprintf(filename, sizeof(filename) - 1, "%s/slave.%d", SLAVE_LOG_PATH, slave_pid(slave));
+	if (ret == sizeof(filename) - 1) {
+		filename[sizeof(filename) - 1] = '\0';
+		ErrPrint("filename buffer is overflowed\n");
+	}
 
-	unlink(filename);
+	if (unlink(filename) < 0) {
+		ErrPrint("unlink: %s\n", strerror(errno));
+	}
 }
 
 static char *check_log_file(struct slave_node *slave)
@@ -83,8 +90,10 @@ static char *check_log_file(struct slave_node *slave)
 	}
 
 	ptr = fgets(pkgname, sizeof(pkgname), fp);
-	if (fclose(fp) != 0)
+	if (fclose(fp) != 0) {
 		ErrPrint("fclose: %s\n", strerror(errno));
+	}
+
 	if (ptr != pkgname) {
 		ErrPrint("Invalid log\n");
 		return NULL;
@@ -104,8 +113,9 @@ static char *check_log_file(struct slave_node *slave)
 	}
 		
 	ptr[i] = '\0'; /*!< Truncate tailer ".so" */
-	if (unlink(filename) < 0)
+	if (unlink(filename) < 0) {
 		ErrPrint("Failed to unlink %s\n", filename);
+	}
 
 	return strdup(ptr);
 }
@@ -114,12 +124,14 @@ HAPI void fault_unicast_info(struct client_node *client, const char *pkgname, co
 {
 	struct packet *packet;
 
-	if (!client || !pkgname || !filename || !func)
+	if (!client || !pkgname || !filename || !func) {
 		return;
+	}
 
 	packet = packet_create_noack("fault_package", "sss", pkgname, filename, func);
-	if (!packet)
+	if (!packet) {
 		return;
+	}
 
 	client_rpc_async_request(client, packet);
 }
@@ -151,12 +163,14 @@ HAPI int fault_info_set(struct slave_node *slave, const char *pkgname, const cha
 	int ret;
 
 	pkg = package_find(pkgname);
-	if (!pkg)
+	if (!pkg) {
 		return LB_STATUS_ERROR_NOT_EXIST;
+	}
 
 	ret = package_set_fault_info(pkg, util_timestamp(), id, func);
-	if (ret < 0)
+	if (ret < 0) {
 		return LB_STATUS_ERROR_FAULT;
+	}
 
 	dump_fault_info(slave_name(slave), slave_pid(slave), pkgname, id, func);
 	ErrPrint("Set fault %s(%d)\n", !ret ? "Success" : "Failed", ret);
@@ -198,8 +212,9 @@ HAPI int fault_check_pkgs(struct slave_node *slave)
 			s_info.fault_mark_count = 0;
 			clear_log_file(slave);
 			EINA_LIST_REVERSE_FOREACH_SAFE(s_info.call_list, l, n, info) {
-				if (info->slave != slave)
+				if (info->slave != slave) {
 					continue;
+				}
 
 				s_info.call_list = eina_list_remove_list(s_info.call_list, l);
 
@@ -231,8 +246,9 @@ HAPI int fault_check_pkgs(struct slave_node *slave)
 			s_info.fault_mark_count = 0;
 			clear_log_file(slave);
 			EINA_LIST_REVERSE_FOREACH_SAFE(s_info.call_list, l, n, info) {
-				if (info->slave != slave)
+				if (info->slave != slave) {
 					continue;
+				}
 
 				s_info.call_list = eina_list_remove_list(s_info.call_list, l);
 
@@ -295,8 +311,9 @@ HAPI int fault_func_call(struct slave_node *slave, const char *pkgname, const ch
 	struct fault_info *info;
 
 	info = malloc(sizeof(*info));
-	if (!info)
+	if (!info) {
 		return LB_STATUS_ERROR_MEMORY;
+	}
 
 	info->slave = slave;
 
@@ -335,17 +352,21 @@ HAPI int fault_func_ret(struct slave_node *slave, const char *pkgname, const cha
 	Eina_List *l;
 
 	EINA_LIST_FOREACH(s_info.call_list, l, info) {
-		if (info->slave != slave)
+		if (info->slave != slave) {
 			continue;
+		}
 
-		if (strcmp(info->pkgname, pkgname))
+		if (strcmp(info->pkgname, pkgname)) {
 			continue;
+		}
 
-		if (strcmp(info->filename, filename))
+		if (strcmp(info->filename, filename)) {
 			continue;
+		}
 
-		if (strcmp(info->func, func))
+		if (strcmp(info->func, func)) {
 			continue;
+		}
 
 		s_info.call_list = eina_list_remove_list(s_info.call_list, l);
 		DbgFree(info->filename);

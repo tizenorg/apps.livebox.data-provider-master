@@ -89,8 +89,9 @@ HAPI int event_fini(void)
 {
 	int ret;
 	ret = pthread_mutex_destroy(&s_info.event_list_lock);
-	if (ret != 0)
+	if (ret != 0) {
 		ErrPrint("Mutex destroy failed: %s\n", strerror(ret));
+	}
 	return LB_STATUS_SUCCESS;
 }
 
@@ -251,8 +252,9 @@ static void *event_thread_main(void *data)
 		if (FD_ISSET(s_info.tcb_pipe[PIPE_READ], &set)) {
 			char event_ch;
 
-			if (read(s_info.tcb_pipe[PIPE_READ], &event_ch, sizeof(event_ch)) != sizeof(event_ch))
+			if (read(s_info.tcb_pipe[PIPE_READ], &event_ch, sizeof(event_ch)) != sizeof(event_ch)) {
 				ErrPrint("Unable to read TCB_PIPE: %s\n", strerror(errno));
+			}
 
 			ret = LB_STATUS_ERROR_CANCEL;
 			break;
@@ -281,10 +283,11 @@ static Eina_Bool event_read_cb(void *data, Ecore_Fd_Handler *handler)
 
 	CRITICAL_SECTION_BEGIN(&s_info.event_list_lock);
 	item = eina_list_nth(s_info.event_list, 0);
-	if (item)
+	if (item) {
 		s_info.event_list = eina_list_remove(s_info.event_list, item);
-	else
+	} else {
 		ErrPrint("Unable to get event\n");
+	}
 	CRITICAL_SECTION_END(&s_info.event_list_lock);
 
 	if (item && s_info.event_cb) {
@@ -324,17 +327,20 @@ HAPI int event_activate(int x, int y, int (*event_cb)(enum event_state state, st
 		return LB_STATUS_ERROR_IO;
 	}
 
-	if (fcntl(s_info.handle, F_SETFD, FD_CLOEXEC) < 0)
+	if (fcntl(s_info.handle, F_SETFD, FD_CLOEXEC) < 0) {
 		ErrPrint("Error: %s\n", strerror(errno));
+	}
 
-	if (fcntl(s_info.handle, F_SETFL, O_NONBLOCK) < 0)
+	if (fcntl(s_info.handle, F_SETFL, O_NONBLOCK) < 0) {
 		ErrPrint("Error: %s\n", strerror(errno));
+	}
 
 	status = pipe2(s_info.evt_pipe, O_NONBLOCK | O_CLOEXEC);
 	if (status < 0) {
 		ErrPrint("Unable to prepare evt pipe: %s\n", strerror(errno));
-		if (close(s_info.handle) < 0)
+		if (close(s_info.handle) < 0) {
 			ErrPrint("Failed to close handle: %s\n", strerror(errno));
+		}
 		s_info.handle = -1;
 		return LB_STATUS_ERROR_FAULT;
 	}
@@ -342,8 +348,9 @@ HAPI int event_activate(int x, int y, int (*event_cb)(enum event_state state, st
 	status = pipe2(s_info.tcb_pipe, O_NONBLOCK | O_CLOEXEC);
 	if (status < 0) {
 		ErrPrint("Unable to prepare tcb pipe: %s\n", strerror(errno));
-		if (close(s_info.handle) < 0)
+		if (close(s_info.handle) < 0) {
 			ErrPrint("Failed to close handle: %s\n", strerror(errno));
+		}
 		s_info.handle = -1;
 		CLOSE_PIPE(s_info.evt_pipe);
 		return LB_STATUS_ERROR_FAULT;
@@ -351,8 +358,9 @@ HAPI int event_activate(int x, int y, int (*event_cb)(enum event_state state, st
 
 	s_info.event_handler = ecore_main_fd_handler_add(s_info.evt_pipe[PIPE_READ], ECORE_FD_READ, event_read_cb, NULL, NULL, NULL);
 	if (!s_info.event_handler) {
-		if (close(s_info.handle) < 0)
+		if (close(s_info.handle) < 0) {
 			ErrPrint("Failed to close handle: %s\n", strerror(errno));
+		}
 		s_info.handle = -1;
 
 		CLOSE_PIPE(s_info.tcb_pipe);
@@ -366,8 +374,9 @@ HAPI int event_activate(int x, int y, int (*event_cb)(enum event_state state, st
 		ecore_main_fd_handler_del(s_info.event_handler);
 		s_info.event_handler = NULL;
 
-		if (close(s_info.handle) < 0)
+		if (close(s_info.handle) < 0) {
 			ErrPrint("close: %s\n", strerror(errno));
+		}
 		s_info.handle = -1;
 
 		CLOSE_PIPE(s_info.tcb_pipe);
@@ -396,20 +405,23 @@ HAPI int event_deactivate(void)
 		return LB_STATUS_SUCCESS;
 	}
 
-	if (write(s_info.tcb_pipe[PIPE_WRITE], &event_ch, sizeof(event_ch)) != sizeof(event_ch))
+	if (write(s_info.tcb_pipe[PIPE_WRITE], &event_ch, sizeof(event_ch)) != sizeof(event_ch)) {
 		ErrPrint("Unable to write tcb_pipe: %s\n", strerror(errno));
+	}
 
 	status = pthread_join(s_info.tid, &ret);
-	if (status != 0)
+	if (status != 0) {
 		ErrPrint("Failed to join a thread: %s\n", strerror(errno));
-	else
+	} else {
 		DbgPrint("Thread returns: %d\n", (int)ret);
+	}
 
 	ecore_main_fd_handler_del(s_info.event_handler);
 	s_info.event_handler = NULL;
 
-	if (close(s_info.handle) < 0)
+	if (close(s_info.handle) < 0) {
 		ErrPrint("Unable to release the fd: %s\n", strerror(errno));
+	}
 
 	s_info.handle = -1;
 	DbgPrint("Event handler deactivated\n");
@@ -432,8 +444,9 @@ HAPI int event_deactivate(void)
 	if (s_info.event_state != EVENT_STATE_DEACTIVATE) {
 		s_info.event_state = EVENT_STATE_DEACTIVATE;
 
-		if (s_info.event_cb)
+		if (s_info.event_cb) {
 			s_info.event_cb(s_info.event_state, &s_info.event_data, s_info.cbdata);
+		}
 	}
 
 	s_info.event_data.x = -1;

@@ -4,6 +4,6 @@
 #	DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/master.edc
 #)
 #ADD_DEPENDENCIES(${PROJECT_NAME} master.edj)
-#INSTALL(FILES master.edj DESTINATION "/opt/apps/org.tizen.${PROJECT_NAME}/res/edje")
+#INSTALL(FILES master.edj DESTINATION "/opt/apps/com.samsung.${PROJECT_NAME}/res/edje")
 
 # End of a file

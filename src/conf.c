@@ -112,8 +112,9 @@ static void use_sw_backend_handler(char *buffer)
 static void provider_method_handler(char *buffer)
 {
 	g_conf.provider_method = strdup(buffer);
-	if (!g_conf.provider_method)
+	if (!g_conf.provider_method) {
 		ErrPrint("Heap: %s\n", strerror(errno));
+	}
 }
 
 static void debug_mode_handler(char *buffer)
@@ -133,196 +134,225 @@ static void com_core_thread_handler(char *buffer)
 
 static void base_width_handler(char *buffer)
 {
-	if (sscanf(buffer, "%d", &g_conf.base_width) != 1)
+	if (sscanf(buffer, "%d", &g_conf.base_width) != 1) {
 		ErrPrint("Failed to parse the base_width\n");
+	}
 }
 
 static void base_height_handler(char *buffer)
 {
-	if (sscanf(buffer, "%d", &g_conf.base_height) != 1)
+	if (sscanf(buffer, "%d", &g_conf.base_height) != 1) {
 		ErrPrint("Failed to parse the base_height\n");
+	}
 }
 
 static void minimum_period_handler(char *buffer)
 {
-	if (sscanf(buffer, "%lf", &g_conf.minimum_period) != 1)
+	if (sscanf(buffer, "%lf", &g_conf.minimum_period) != 1) {
 		ErrPrint("Failed to parse the minimum_period\n");
+	}
 	DbgPrint("Minimum period: %lf\n", g_conf.minimum_period);
 }
 
 static void script_handler(char *buffer)
 {
 	g_conf.default_conf.script = strdup(buffer);
-	if (!g_conf.default_conf.script)
+	if (!g_conf.default_conf.script) {
 		ErrPrint("Heap: %s\n", strerror(errno));
+	}
 }
 
 static void default_abi_handler(char *buffer)
 {
 	g_conf.default_conf.abi = strdup(buffer);
-	if (!g_conf.default_conf.abi)
+	if (!g_conf.default_conf.abi) {
 		ErrPrint("Heap: %s\n", strerror(errno));
+	}
 }
 
 static void default_group_handler(char *buffer)
 {
 	g_conf.default_conf.pd_group = strdup(buffer);
-	if (!g_conf.default_conf.pd_group)
+	if (!g_conf.default_conf.pd_group) {
 		ErrPrint("Heap: %s\n", strerror(errno));
+	}
 }
 
 static void default_period_handler(char *buffer)
 {
-	if (sscanf(buffer, "%lf", &g_conf.default_conf.period) != 1)
+	if (sscanf(buffer, "%lf", &g_conf.default_conf.period) != 1) {
 		ErrPrint("Failed to parse the default_period\n");
+	}
 	DbgPrint("Default Period: %lf\n", g_conf.default_conf.period);
 }
 
 static void default_packet_time_handler(char *buffer)
 {
-	if (sscanf(buffer, "%lf", &g_conf.default_packet_time) != 1)
+	if (sscanf(buffer, "%lf", &g_conf.default_packet_time) != 1) {
 		ErrPrint("Failed to parse the default_packet_time\n");
+	}
 	DbgPrint("Default packet time: %lf\n", g_conf.default_packet_time);
 }
 
 static void default_content_handler(char *buffer)
 {
 	g_conf.default_content = strdup(buffer);
-	if (!g_conf.default_content)
+	if (!g_conf.default_content) {
 		ErrPrint("Heap: %s\n", strerror(errno));
+	}
 }
 
 static void default_title_handler(char *buffer)
 {
 	g_conf.default_title = strdup(buffer);
-	if (!g_conf.default_title)
+	if (!g_conf.default_title) {
 		ErrPrint("Heap: %s\n", strerror(errno));
+	}
 }
 
 static void minimum_space_handler(char *buffer)
 {
-	if (sscanf(buffer, "%lu", &g_conf.minimum_space) != 1)
+	if (sscanf(buffer, "%lu", &g_conf.minimum_space) != 1) {
 		ErrPrint("Failed to parse the minimum_space\n");
+	}
 }
 
 static void replace_tag_handler(char *buffer)
 {
 	g_conf.replace_tag = strdup(buffer);
-	if (!g_conf.replace_tag)
+	if (!g_conf.replace_tag) {
 		ErrPrint("Heap: %s\n", strerror(errno));
+	}
 }
 
 static void slave_ttl_handler(char *buffer)
 {
-	if (sscanf(buffer, "%lf", &g_conf.slave_ttl) != 1)
+	if (sscanf(buffer, "%lf", &g_conf.slave_ttl) != 1) {
 		ErrPrint("Failed to parse the slave_ttl\n");
+	}
 	DbgPrint("Slave TTL: %lf\n", g_conf.slave_ttl);
 }
 
 static void slave_activate_time_handler(char *buffer)
 {
-	if (sscanf(buffer, "%lf", &g_conf.slave_activate_time) != 1)
+	if (sscanf(buffer, "%lf", &g_conf.slave_activate_time) != 1) {
 		ErrPrint("Failed to parse the slave_activate_time\n");
+	}
 	DbgPrint("Slave activate time: %lf\n", g_conf.slave_activate_time);
 }
 
 static void slave_relaunch_time_handler(char *buffer)
 {
-	if (sscanf(buffer, "%lf", &g_conf.slave_relaunch_time) != 1)
+	if (sscanf(buffer, "%lf", &g_conf.slave_relaunch_time) != 1) {
 		ErrPrint("Failed to parse the slave_activate_time\n");
+	}
 	DbgPrint("Slave relaunch time: %lf\n", g_conf.slave_relaunch_time);
 }
 
 static void slave_relaunch_count_handler(char *buffer)
 {
-	if (sscanf(buffer, "%d", &g_conf.slave_relaunch_count) != 1)
+	if (sscanf(buffer, "%d", &g_conf.slave_relaunch_count) != 1) {
 		ErrPrint("Failed to parse the max_log_line\n");
+	}
 }
 
 static void max_log_line_handler(char *buffer)
 {
-	if (sscanf(buffer, "%d", &g_conf.max_log_line) != 1)
+	if (sscanf(buffer, "%d", &g_conf.max_log_line) != 1) {
 		ErrPrint("Failed to parse the max_log_line\n");
+	}
 }
 
 static void max_log_file_handler(char *buffer)
 {
-	if (sscanf(buffer, "%d", &g_conf.max_log_file) != 1)
+	if (sscanf(buffer, "%d", &g_conf.max_log_file) != 1) {
 		ErrPrint("Failed to parse the max_log_file\n");
+	}
 }
 
 static void sqlite_flush_max_handler(char *buffer)
 {
-	if (sscanf(buffer, "%lu", &g_conf.sqlite_flush_max) != 1)
+	if (sscanf(buffer, "%lu", &g_conf.sqlite_flush_max) != 1) {
 		ErrPrint("Failed to parse the sqlite_flush_max\n");
+	}
 }
 
 static void db_path_handler(char *buffer)
 {
 	g_conf.path.db = strdup(buffer);
-	if (!g_conf.path.db)
+	if (!g_conf.path.db) {
 		ErrPrint("Heap: %s\n", strerror(errno));
+	}
 }
 
 static void reader_path_handler(char *buffer)
 {
 	g_conf.path.reader = strdup(buffer);
-	if (!g_conf.path.reader)
+	if (!g_conf.path.reader) {
 		ErrPrint("Heap: %s\n", strerror(errno));
+	}
 }
 
 static void always_path_handler(char *buffer)
 {
 	g_conf.path.always = strdup(buffer);
-	if (!g_conf.path.always)
+	if (!g_conf.path.always) {
 		ErrPrint("Heap: %s\n", strerror(errno));
+	}
 }
 
 static void log_path_handler(char *buffer)
 {
 	g_conf.path.slave_log = strdup(buffer);
-	if (!g_conf.path.slave_log)
+	if (!g_conf.path.slave_log) {
 		ErrPrint("Heap: %s\n", strerror(errno));
+	}
 }
 
 static void script_port_path_handler(char *buffer)
 {
 	g_conf.path.script_port = strdup(buffer);
-	if (!g_conf.path.script_port)
+	if (!g_conf.path.script_port) {
 		ErrPrint("Heap: %s\n", strerror(errno));
+	}
 }
 
 static void share_path_handler(char *buffer)
 {
 	g_conf.path.image = strdup(buffer);
-	if (!g_conf.path.image)
+	if (!g_conf.path.image) {
 		ErrPrint("Heap: %s\n", strerror(errno));
+	}
 }
 
 static void input_path_handler(char *buffer)
 {
 	g_conf.path.input = strdup(buffer);
-	if (!g_conf.path.input)
+	if (!g_conf.path.input) {
 		ErrPrint("Heap: %s\n", strerror(errno));
+	}
 }
 
 static void ping_time_handler(char *buffer)
 {
-	if (sscanf(buffer, "%lf", &g_conf.ping_time) != 1)
+	if (sscanf(buffer, "%lf", &g_conf.ping_time) != 1) {
 		ErrPrint("Failed to parse the ping_time\n");
+	}
 	DbgPrint("Default ping time: %lf\n", g_conf.ping_time);
 }
 
 static void slave_max_loader(char *buffer)
 {
-	if (sscanf(buffer, "%d", &g_conf.slave_max_load) != 1)
+	if (sscanf(buffer, "%d", &g_conf.slave_max_load) != 1) {
 		ErrPrint("Failed to parse the slave_max_load\n");
+	}
 }
 
 static void pd_request_timeout_handler(char *buffer)
 {
-	if (sscanf(buffer, "%lf", &g_conf.pd_request_timeout) != 1)
+	if (sscanf(buffer, "%lf", &g_conf.pd_request_timeout) != 1) {
 		ErrPrint("Failed to parse the request_timeout\n");
+	}
 	DbgPrint("Default PD request timeout: %lf\n", g_conf.pd_request_timeout);
 }
 
@@ -546,10 +576,11 @@ HAPI int conf_loader(void)
 			}
 			break;
 		case SPACE:
-			if (c == '=')
+			if (c == '=') {
 				state = VALUE;
-			else if (!isspace(c))
+			} else if (!isspace(c)) {
 				state = ERROR;
+			}
 			break;
 		case VALUE:
 			if (c == '"') {
@@ -558,8 +589,9 @@ HAPI int conf_loader(void)
 					state = END;
 				} else if (buffer_idx != 0) {
 					buffer[buffer_idx++] = c;
-					if (buffer_idx >= sizeof(buffer))
+					if (buffer_idx >= sizeof(buffer)) {
 						state = ERROR;
+					}
 				} else {
 					quote = 1;
 				}
@@ -568,8 +600,9 @@ HAPI int conf_loader(void)
 					/* Ignore */
 				} else if (quote == 1) {
 					buffer[buffer_idx++] = c;
-					if (buffer_idx >= sizeof(buffer))
+					if (buffer_idx >= sizeof(buffer)) {
 						state = ERROR;
+					}
 				} else {
 					buffer[buffer_idx] = '\0';
 					ungetc(c, fp);
@@ -577,24 +610,28 @@ HAPI int conf_loader(void)
 				}
 			} else {
 				buffer[buffer_idx++] = c;
-				if (buffer_idx >= sizeof(buffer))
+				if (buffer_idx >= sizeof(buffer)) {
 					state = ERROR;
+				}
 			}
 			break;
 		case TOKEN:
 			if (c == '=') {
-				if (token_idx < 0)
+				if (token_idx < 0) {
 					state = ERROR;
-				else
+				} else {
 					state = VALUE;
+				}
 			} else if (isspace(c)) {
-				if (token_idx < 0)
+				if (token_idx < 0) {
 					break;
+				}
 
-				if (token_handler[token_idx].name[ch_idx] != '\0')
+				if (token_handler[token_idx].name[ch_idx] != '\0') {
 					state = ERROR;
-				else
+				} else {
 					state = SPACE;
+				}
 			} else  {
 				if (token_idx < 0) {
 					/* Now start to find a token! */
@@ -610,10 +647,11 @@ HAPI int conf_loader(void)
 
 					token_idx++;
 
-					if (token_handler[token_idx].name == NULL)
+					if (token_handler[token_idx].name == NULL) {
 						state = ERROR;
-					else
+					} else {
 						ch_idx = 0;
+					}
 				}
 			}
 			break;
@@ -656,8 +694,9 @@ HAPI int conf_loader(void)
 		linelen++;
 	 } while (c != EOF);
 
-	if (fclose(fp) != 0)
+	if (fclose(fp) != 0) {
 		ErrPrint("fclose: %s\n", strerror(errno));
+	}
 	return LB_STATUS_SUCCESS;
 }
 

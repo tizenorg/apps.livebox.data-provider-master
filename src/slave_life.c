@@ -116,7 +116,9 @@ static Eina_Bool slave_ttl_cb(void *data)
 	slave_set_reactivate_instances(slave, 1);
 
 	slave = slave_deactivate(slave);
-	DbgPrint("Slave is deactivated(%p)\n", slave);
+	if (!slave) {
+		DbgPrint("Slave is deleted\n");
+	}
 
 	/*! To recover all instances state it is activated again */
 	return ECORE_CALLBACK_CANCEL;
@@ -238,14 +240,17 @@ static inline void destroy_slave_node(struct slave_node *slave)
 
 	s_info.slave_list = eina_list_remove(s_info.slave_list, slave);
 
-	if (slave->ttl_timer)
+	if (slave->ttl_timer) {
 		ecore_timer_del(slave->ttl_timer);
+	}
 
-	if (slave->activate_timer)
+	if (slave->activate_timer) {
 		ecore_timer_del(slave->activate_timer);
+	}
 
-	if (slave->relaunch_timer)
+	if (slave->relaunch_timer) {
 		ecore_timer_del(slave->relaunch_timer);
+	}
 
 	DbgFree(slave->abi);
 	DbgFree(slave->name);
@@ -260,8 +265,9 @@ static inline struct slave_node *find_slave(const char *name)
 	Eina_List *l;
 
 	EINA_LIST_FOREACH(s_info.slave_list, l, slave) {
-		if (!strcmp(slave->name, name))
+		if (!strcmp(slave->name, name)) {
 			return slave;
+		}
 	}
 	
 	return NULL;
@@ -269,19 +275,22 @@ static inline struct slave_node *find_slave(const char *name)
 
 HAPI int slave_expired_ttl(struct slave_node *slave)
 {
-	if (!slave)
+	if (!slave) {
 		return 0;
+	}
 
-	if (!slave->secured)
+	if (!slave->secured) {
 		return 0;
+	}
 
 	return !!slave->ttl_timer;
 }
 
 HAPI struct slave_node *slave_ref(struct slave_node *slave)
 {
-	if (!slave)
+	if (!slave) {
 		return NULL;
+	}
 
 	slave->refcnt++;
 	return slave;
@@ -289,8 +298,9 @@ HAPI struct slave_node *slave_ref(struct slave_node *slave)
 
 HAPI struct slave_node *slave_unref(struct slave_node *slave)
 {
-	if (!slave)
+	if (!slave) {
 		return NULL;
+	}
 
 	if (slave->refcnt == 0) {
 		ErrPrint("Slave refcnt is not valid\n");
@@ -317,14 +327,16 @@ HAPI struct slave_node *slave_create(const char *name, int is_secured, const cha
 
 	slave = find_slave(name);
 	if (slave) {
-		if (slave->secured != is_secured)
+		if (slave->secured != is_secured) {
 			ErrPrint("Exists slave and creating slave's security flag is not matched\n");
+		}
 		return slave;
 	}
 
 	slave = create_slave_node(name, is_secured, abi, pkgname, network);
-	if (!slave)
+	if (!slave) {
 		return NULL;
+	}
 
 	slave_ref(slave);
 	slave_rpc_init(slave);
@@ -398,8 +410,9 @@ static Eina_Bool activate_timer_cb(void *data)
 		int ret;
 		DbgPrint("Try to terminate PID: %d\n", slave_pid(slave));
 		ret = aul_terminate_pid(slave_pid(slave));
-		if (ret < 0)
+		if (ret < 0) {
 			ErrPrint("Terminate failed, pid %d (reason: %d)\n", slave_pid(slave), ret);
+		}
 	}
 
 	CRITICAL_LOG("Slave is not activated in %lf sec (slave: %s)\n", SLAVE_ACTIVATE_TIME, slave_name(slave));
@@ -419,8 +432,9 @@ static inline void invoke_slave_fault_handler(struct slave_node *slave)
 		int ret;
 		DbgPrint("Try to terminate PID: %d\n", slave_pid(slave));
 		ret = aul_terminate_pid(slave_pid(slave));
-		if (ret < 0)
+		if (ret < 0) {
 			ErrPrint("Terminate failed, pid %d (reason: %d)\n", slave_pid(slave), ret);
+		}
 	}
 }
 
@@ -464,12 +478,10 @@ static Eina_Bool relaunch_timer_cb(void *data)
 			bundle_free(param);
 
 			switch (slave->pid) {
+			//case AUL_R_EHIDDENFORGUEST:	/**< App hidden for guest mode */
 			case AUL_R_ENOLAUNCHPAD:	/**< no launchpad */
 			case AUL_R_EILLACC:		/**< Illegal Access */
-			case AUL_R_LOCAL:		/**< Launch by himself */
-			case AUL_R_ETIMEOUT:		/**< Timeout */
 			case AUL_R_EINVAL:		/**< Invalid argument */
-			case AUL_R_OK:			/**< General success */
 			case AUL_R_ENOINIT:		/**< AUL handler NOT initialized */
 			case AUL_R_ERROR:		/**< General error */
 				CRITICAL_LOG("Failed to launch a new slave %s (%d)\n", slave_name(slave), slave->pid);
@@ -482,6 +494,7 @@ static Eina_Bool relaunch_timer_cb(void *data)
 				invoke_slave_fault_handler(slave);
 				/* Waiting app-launch result */
 				break;
+			case AUL_R_ETIMEOUT:		/**< Timeout */
 			case AUL_R_ECOMM:		/**< Comunication Error */
 			case AUL_R_ETERMINATING:	/**< application terminating */
 			case AUL_R_ECANCELED:		/**< Operation canceled */
@@ -493,6 +506,8 @@ static Eina_Bool relaunch_timer_cb(void *data)
 				ecore_timer_reset(slave->activate_timer);
 				/* Try again after a few secs later */
 				break;
+			case AUL_R_LOCAL:		/**< Launch by himself */
+			case AUL_R_OK:			/**< General success */
 			default:
 				DbgPrint("Slave %s is launched with %d as %s\n", slave_pkgname(slave), slave->pid, slave_name(slave));
 				slave->relaunch_timer = NULL;
@@ -519,8 +534,9 @@ HAPI int slave_activate(struct slave_node *slave)
 	 * about it is alive? or not.
 	 */
 	if (slave_pid(slave) != (pid_t)-1) {
-		if (slave_state(slave) == SLAVE_REQUEST_TO_TERMINATE)
+		if (slave_state(slave) == SLAVE_REQUEST_TO_TERMINATE) {
 			slave_set_reactivation(slave, 1);
+		}
 		return LB_STATUS_ERROR_ALREADY;
 	} else if (slave_state(slave) == SLAVE_REQUEST_TO_LAUNCH) {
 		DbgPrint("Slave is already launched: but the AUL is timed out\n");
@@ -549,12 +565,10 @@ HAPI int slave_activate(struct slave_node *slave)
 		bundle_free(param);
 
 		switch (slave->pid) {
+		//case AUL_R_EHIDDENFORGUEST:	/**< App hidden for guest mode */
 		case AUL_R_ENOLAUNCHPAD:	/**< no launchpad */
 		case AUL_R_EILLACC:		/**< Illegal Access */
-		case AUL_R_LOCAL:		/**< Launch by himself */
-		case AUL_R_ETIMEOUT:		/**< Timeout */
 		case AUL_R_EINVAL:		/**< Invalid argument */
-		case AUL_R_OK:			/**< General success */
 		case AUL_R_ENOINIT:		/**< AUL handler NOT initialized */
 		case AUL_R_ERROR:		/**< General error */
 			CRITICAL_LOG("Failed to launch a new slave %s (%d)\n", slave_name(slave), slave->pid);
@@ -564,6 +578,7 @@ HAPI int slave_activate(struct slave_node *slave)
 		case AUL_R_ECOMM:		/**< Comunication Error */
 		case AUL_R_ETERMINATING:	/**< application terminating */
 		case AUL_R_ECANCELED:		/**< Operation canceled */
+		case AUL_R_ETIMEOUT:		/**< Timeout */
 			CRITICAL_LOG("Try relaunch this soon %s (%d)\n", slave_name(slave), slave->pid);
 			slave->relaunch_timer = ecore_timer_add(SLAVE_RELAUNCH_TIME, relaunch_timer_cb, slave);
 			if (!slave->relaunch_timer) {
@@ -573,14 +588,17 @@ HAPI int slave_activate(struct slave_node *slave)
 			}
 			/* Try again after a few secs later */
 			break;
+		case AUL_R_LOCAL:		/**< Launch by himself */
+		case AUL_R_OK:			/**< General success */
 		default:
 			DbgPrint("Slave %s is launched with %d as %s\n", slave_pkgname(slave), slave->pid, slave_name(slave));
 			break;
 		}
 
 		slave->activate_timer = ecore_timer_add(SLAVE_ACTIVATE_TIME, activate_timer_cb, slave);
-		if (!slave->activate_timer)
+		if (!slave->activate_timer) {
 			ErrPrint("Failed to register an activate timer\n");
+		}
 	}
 
 	slave->state = SLAVE_REQUEST_TO_LAUNCH;
@@ -598,8 +616,9 @@ HAPI int slave_give_more_ttl(struct slave_node *slave)
 {
 	double delay;
 
-	if (!slave->secured || !slave->ttl_timer)
+	if (!slave->secured || !slave->ttl_timer) {
 		return LB_STATUS_ERROR_INVALID;
+	}
 
 	delay = SLAVE_TTL - ecore_timer_pending_get(slave->ttl_timer);
 	ecore_timer_delay(slave->ttl_timer, delay);
@@ -608,8 +627,9 @@ HAPI int slave_give_more_ttl(struct slave_node *slave)
 
 HAPI int slave_freeze_ttl(struct slave_node *slave)
 {
-	if (!slave->secured || !slave->ttl_timer)
+	if (!slave->secured || !slave->ttl_timer) {
 		return LB_STATUS_ERROR_INVALID;
+	}
 
 	ecore_timer_freeze(slave->ttl_timer);
 	return LB_STATUS_SUCCESS;
@@ -619,8 +639,9 @@ HAPI int slave_thaw_ttl(struct slave_node *slave)
 {
 	double delay;
 
-	if (!slave->secured || !slave->ttl_timer)
+	if (!slave->secured || !slave->ttl_timer) {
 		return LB_STATUS_ERROR_INVALID;
+	}
 
 	ecore_timer_thaw(slave->ttl_timer);
 
@@ -633,14 +654,16 @@ HAPI int slave_activated(struct slave_node *slave)
 {
 	slave->state = SLAVE_RESUMED;
 
-	if (xmonitor_is_paused())
+	if (xmonitor_is_paused()) {
 		slave_pause(slave);
+	}
 
 	if (slave->secured == 1) {
 		DbgPrint("Slave deactivation timer is added (%s - %lf)\n", slave_name(slave), SLAVE_TTL);
 		slave->ttl_timer = ecore_timer_add(SLAVE_TTL, slave_ttl_cb, slave);
-		if (!slave->ttl_timer)
+		if (!slave->ttl_timer) {
 			ErrPrint("Failed to create a TTL timer\n");
+		}
 	}
 
 	invoke_activate_cb(slave);
@@ -760,8 +783,9 @@ HAPI struct slave_node *slave_deactivated(struct slave_node *slave)
 
 		DbgPrint("Need to reactivate a slave\n");
 		ret = slave_activate(slave);
-		if (ret < 0 && ret != LB_STATUS_ERROR_ALREADY)
+		if (ret < 0 && ret != LB_STATUS_ERROR_ALREADY) {
 			ErrPrint("Failed to reactivate a slave\n");
+		}
 	} else if (slave_loaded_instance(slave) == 0) {
 		/*!
 		 * \note
@@ -783,8 +807,9 @@ HAPI struct slave_node *slave_deactivated_by_fault(struct slave_node *slave)
 
 	if (!slave_is_activated(slave)) {
 		DbgPrint("Deactivating in progress\n");
-		if (slave_loaded_instance(slave) == 0)
+		if (slave_loaded_instance(slave) == 0) {
 			slave = slave_unref(slave);
+		}
 
 		return slave;
 	}
@@ -1029,8 +1054,9 @@ HAPI void *slave_data(struct slave_node *slave, const char *tag)
 	Eina_List *l;
 
 	EINA_LIST_FOREACH(slave->data_list, l, priv) {
-		if (!strcmp(priv->tag, tag))
+		if (!strcmp(priv->tag, tag)) {
 			return priv->data;
+		}
 	}
 
 	return NULL;
@@ -1042,8 +1068,9 @@ HAPI struct slave_node *slave_find_by_pid(pid_t pid)
 	struct slave_node *slave;
 
 	EINA_LIST_FOREACH(s_info.slave_list, l, slave) {
-		if (slave_pid(slave) == pid)
+		if (slave_pid(slave) == pid) {
 			return slave;
+		}
 	}
 
 	return NULL;
@@ -1055,8 +1082,9 @@ HAPI struct slave_node *slave_find_by_name(const char *name)
 	struct slave_node *slave;
 
 	EINA_LIST_FOREACH(s_info.slave_list, l, slave) {
-		if (!strcmp(slave_name(slave), name))
+		if (!strcmp(slave_name(slave), name)) {
 			return slave;
+		}
 	}
 
 	return NULL;
@@ -1068,8 +1096,9 @@ HAPI struct slave_node *slave_find_available(const char *abi, int secured, int n
 	struct slave_node *slave;
 
 	EINA_LIST_FOREACH(s_info.slave_list, l, slave) {
-		if (slave->secured != secured)
+		if (slave->secured != secured) {
 			continue;
+		}
 
 		if (slave->state == SLAVE_REQUEST_TO_TERMINATE && slave->loaded_instance == 0) {
 			/*!
@@ -1084,8 +1113,9 @@ HAPI struct slave_node *slave_find_available(const char *abi, int secured, int n
 			continue;
 		}
 
-		if (strcasecmp(slave->abi, abi))
+		if (strcasecmp(slave->abi, abi)) {
 			continue;
+		}
 
 		if (slave->secured) {
 			if (slave->loaded_package == 0) {
@@ -1095,8 +1125,9 @@ HAPI struct slave_node *slave_find_available(const char *abi, int secured, int n
 		} else if (slave->network == network) {
 			DbgPrint("slave[%s] loaded_package[%d] net: [%d]\n", slave_name(slave), slave->loaded_package, slave->network);
 			if (!strcasecmp(abi, DEFAULT_ABI)) {
-				if (slave->loaded_package < SLAVE_MAX_LOAD)
+				if (slave->loaded_package < SLAVE_MAX_LOAD) {
 					return slave;
+				}
 			} else {
 				return slave;
 			}
@@ -1133,8 +1164,9 @@ HAPI struct slave_node *slave_find_by_rpc_handle(int handle)
 	}
 
 	EINA_LIST_FOREACH(s_info.slave_list, l, slave) {
-		if (slave_rpc_handle(slave) == handle)
+		if (slave_rpc_handle(slave) == handle) {
 			return slave;
+		}
 	}
 
 	/* Not found */
@@ -1213,8 +1245,9 @@ HAPI const pid_t const slave_pid(const struct slave_node *slave)
 
 HAPI int slave_set_pid(struct slave_node *slave, pid_t pid)
 {
-	if (!slave)
+	if (!slave) {
 		return LB_STATUS_ERROR_INVALID;
+	}
 
 	DbgPrint("Slave PID is updated to %d from %d\n", pid, slave_pid(slave));
 
@@ -1418,8 +1451,9 @@ HAPI int const slave_fault_count(const struct slave_node *slave)
 
 HAPI double const slave_ttl(const struct slave_node *slave)
 {
-	if (!slave->ttl_timer)
+	if (!slave->ttl_timer) {
 		return 0.0f;
+	}
 
 	return ecore_timer_pending_get(slave->ttl_timer);
 }
@@ -1465,8 +1499,9 @@ HAPI int slave_deactivate_all(int reactivate, int reactivate_instances)
 		slave_set_reactivate_instances(slave, reactivate_instances);
 		slave_set_reactivation(slave, reactivate);
 
-		if (!slave_deactivate(slave))
+		if (!slave_deactivate(slave)) {
 			s_info.slave_list = eina_list_remove(s_info.slave_list, slave);
+		}
 
 		cnt++;
 	}

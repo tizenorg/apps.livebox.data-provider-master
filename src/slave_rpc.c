@@ -111,8 +111,9 @@ static inline struct command *pop_command(void)
 	struct command *command;
 
 	command = eina_list_nth(s_info.command_list, 0);
-	if (!command)
+	if (!command) {
 		return NULL;
+	}
 
 	s_info.command_list = eina_list_remove(s_info.command_list, command);
 	return command;
@@ -133,15 +134,17 @@ static int slave_async_cb(pid_t pid, int handle, const struct packet *packet, vo
 	 */
 	if (!slave_is_activated(command->slave)) {
 		ErrPrint("Slave is not activated (accidently dead)\n");
-		if (command->ret_cb)
+		if (command->ret_cb) {
 			command->ret_cb(command->slave, packet, command->cbdata);
+		}
 		goto out;
 	}
 
 	if (!packet) {
 		DbgPrint("packet == NULL\n");
-		if (command->ret_cb)
+		if (command->ret_cb) {
 			command->ret_cb(command->slave, packet, command->cbdata);
+		}
 
 		/*
 		 * \NOTE
@@ -154,8 +157,9 @@ static int slave_async_cb(pid_t pid, int handle, const struct packet *packet, vo
 		goto out;
 	}
 
-	if (command->ret_cb)
+	if (command->ret_cb) {
 		command->ret_cb(command->slave, packet, command->cbdata);
+	}
 
 out:
 	destroy_command(command);
@@ -239,8 +243,9 @@ static Eina_Bool command_consumer_cb(void *data)
 	return ECORE_CALLBACK_RENEW;
 
 errout:
-	if (command->ret_cb)
+	if (command->ret_cb) {
 		command->ret_cb(command->slave, NULL, command->cbdata);
+	}
 
 	destroy_command(command);
 	return ECORE_CALLBACK_RENEW;
@@ -250,8 +255,9 @@ static inline void prepend_command(struct command *command)
 {
 	s_info.command_list = eina_list_prepend(s_info.command_list, command);
 
-	if (s_info.command_consuming_timer)
+	if (s_info.command_consuming_timer) {
 		return;
+	}
 
 	s_info.command_consuming_timer = ecore_timer_add(PACKET_TIME, command_consumer_cb, NULL);
 	if (!s_info.command_consuming_timer) {
@@ -265,8 +271,9 @@ static inline void push_command(struct command *command)
 {
 	s_info.command_list = eina_list_append(s_info.command_list, command);
 
-	if (s_info.command_consuming_timer)
+	if (s_info.command_consuming_timer) {
 		return;
+	}
 
 	s_info.command_consuming_timer = ecore_timer_add(PACKET_TIME, command_consumer_cb, NULL);
 	if (!s_info.command_consuming_timer) {
@@ -302,16 +309,18 @@ static int slave_deactivate_cb(struct slave_node *slave, void *data)
 	if (rpc->handle < 0) {
 		EINA_LIST_FREE(rpc->pending_list, command) {
 			assert(command->slave == slave);
-			if (command->ret_cb)
+			if (command->ret_cb) {
 				command->ret_cb(command->slave, NULL, command->cbdata);
+			}
 			destroy_command(command);
 		}
 	} else {
 		EINA_LIST_FOREACH_SAFE(s_info.command_list, l, n, command) {
 			if (command->slave == slave) {
 				s_info.command_list = eina_list_remove(s_info.command_list, command);
-				if (command->ret_cb)
+				if (command->ret_cb) {
 					command->ret_cb(command->slave, NULL, command->cbdata);
+				}
 				destroy_command(command);
 			}
 		}
@@ -360,7 +369,10 @@ static Eina_Bool ping_timeout_cb(void *data)
 	 */
 	DbgPrint("Slave PING TIMEOUT: %s(%d) : %p\n", slave_name(slave), slave_pid(slave), slave);
 	slave = slave_deactivated_by_fault(slave);
-	DbgPrint("Slave: %p\n", slave);
+	if (!slave) {
+		DbgPrint("Slave is deleted\n");
+	}
+
 	return ECORE_CALLBACK_CANCEL;
 }
 
@@ -373,8 +385,9 @@ HAPI int slave_rpc_async_request(struct slave_node *slave, const char *pkgname, 
 	if (!command) {
 		ErrPrint("Failed to create command\n");
 
-		if (ret_cb)
+		if (ret_cb) {
 			ret_cb(slave, NULL, data);
+		}
 
 		packet_unref(packet);
 		return LB_STATUS_ERROR_MEMORY;
@@ -387,8 +400,9 @@ HAPI int slave_rpc_async_request(struct slave_node *slave, const char *pkgname, 
 	rpc = slave_data(slave, "rpc");
 	if (!rpc) {
 		ErrPrint("Slave has no RPC\n");
-		if (ret_cb)
+		if (ret_cb) {
 			ret_cb(slave, NULL, data);
+		}
 		destroy_command(command);
 		return LB_STATUS_ERROR_FAULT;
 	}
@@ -401,26 +415,29 @@ HAPI int slave_rpc_async_request(struct slave_node *slave, const char *pkgname, 
 			ret = slave_activate(slave);
 			if (ret < 0 && ret != LB_STATUS_ERROR_ALREADY) {
 
-				if (ret_cb)
+				if (ret_cb) {
 					ret_cb(slave, NULL, data);
+				}
 
 				destroy_command(command);
 				return ret;
 			}
 		}
 
-		if (urgent)
+		if (urgent) {
 			rpc->pending_list = eina_list_prepend(rpc->pending_list, command);
-		else
+		} else {
 			rpc->pending_list = eina_list_append(rpc->pending_list, command);
+		}
 
 		return LB_STATUS_SUCCESS;
 	}
 
-	if (urgent)
+	if (urgent) {
 		prepend_command(command);
-	else
+	} else {
 		push_command(command);
+	}
 
 	return LB_STATUS_SUCCESS;
 }
@@ -462,18 +479,20 @@ HAPI int slave_rpc_request_only(struct slave_node *slave, const char *pkgname, s
 			}
 		}
 
-		if (urgent)
+		if (urgent) {
 			rpc->pending_list = eina_list_prepend(rpc->pending_list, command);
-		else
+		} else {
 			rpc->pending_list = eina_list_append(rpc->pending_list, command);
+		}
 
 		return LB_STATUS_SUCCESS;
 	}
 
-	if (urgent)
+	if (urgent) {
 		prepend_command(command);
-	else
+	} else {
 		push_command(command);
+	}
 
 	return LB_STATUS_SUCCESS;
 }
@@ -484,17 +503,20 @@ HAPI int slave_rpc_update_handle(struct slave_node *slave, int handle)
 	struct command *command;
 
 	rpc = slave_data(slave, "rpc");
-	if (!rpc)
+	if (!rpc) {
 		return LB_STATUS_ERROR_INVALID;
+	}
 
 	DbgPrint("SLAVE: New handle assigned for %d, %d\n", slave_pid(slave), handle);
 	rpc->handle = handle;
-	if (rpc->pong_timer)
+	if (rpc->pong_timer) {
 		ecore_timer_del(rpc->pong_timer);
+	}
 
 	rpc->pong_timer = ecore_timer_add(DEFAULT_PING_TIME, ping_timeout_cb, slave);
-	if (!rpc->pong_timer)
+	if (!rpc->pong_timer) {
 		ErrPrint("Failed to add ping timer\n");
+	}
 
 	/*!
 	 * \note
@@ -540,13 +562,15 @@ HAPI int slave_rpc_fini(struct slave_node *slave)
 	struct slave_rpc *rpc;
 
 	rpc = slave_del_data(slave, "rpc");
-	if (!rpc)
+	if (!rpc) {
 		return LB_STATUS_ERROR_INVALID;
+	}
 
 	slave_event_callback_del(slave, SLAVE_EVENT_DEACTIVATE, slave_deactivate_cb, NULL);
 
-	if (rpc->pong_timer)
+	if (rpc->pong_timer) {
 		ecore_timer_del(rpc->pong_timer);
+	}
 
 	DbgFree(rpc);
 	return LB_STATUS_SUCCESS;

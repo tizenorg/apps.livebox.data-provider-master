@@ -1,6 +1,6 @@
 Name: data-provider-master
 Summary: Master service provider for liveboxes.
-Version: 0.25.3
+Version: 0.25.5
 Release: 1
 Group: HomeTF/Livebox
 License: Flora License
@@ -55,9 +55,9 @@ export FFLAGS="${FFLAGS} -DTIZEN_ENGINEER_MODE"
 %endif
 
 %if 0%{?sec_product_feature_livebox_shm}
-	cmake . -DCMAKE_INSTALL_PREFIX=%{_prefix} -DPRODUCT=baltic
+	%cmake . -DPRODUCT=baltic
 %else
-	cmake . -DCMAKE_INSTALL_PREFIX=%{_prefix} -DPRODUCT=private
+	%cmake . -DPRODUCT=private
 %endif
 
 CFLAGS="${CFLAGS} -Wall -Winline -Werror" LDFLAGS="${LDFLAGS}" make %{?jobs:-j%jobs}

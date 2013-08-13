@@ -473,8 +473,9 @@ static int service_thread_main(struct tcb *tcb, struct packet *packet, void *dat
 		DbgPrint("%p REQ: Command: [%s]\n", tcb, command);
 
 		for (i = 0; service_req_table[i].cmd; i++) {
-			if (strcmp(service_req_table[i].cmd, command))
+			if (strcmp(service_req_table[i].cmd, command)) {
 				continue;
+			}
 
 #if ENABLE_NS_ACCESS_CONTROL
 			if (_is_valid_permission(tcb_fd(tcb), &(service_req_table[i])) == 1) {
@@ -550,8 +551,9 @@ HAPI int notification_service_init(void)
 
 HAPI int notification_service_fini(void)
 {
-	if (!s_info.svc_ctx)
+	if (!s_info.svc_ctx) {
 		return LB_STATUS_ERROR_INVALID;
+	}
 
 	service_common_destroy(s_info.svc_ctx);
 	s_info.svc_ctx = NULL;

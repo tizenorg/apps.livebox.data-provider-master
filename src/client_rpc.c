@@ -92,8 +92,9 @@ static inline struct command *pop_command(void)
 	struct command *command;
 
 	command = eina_list_nth(s_info.command_list, 0);
-	if (!command)
+	if (!command) {
 		return NULL;
+	}
 
 	s_info.command_list = eina_list_remove(s_info.command_list, command);
 	return command;
@@ -133,8 +134,9 @@ static Eina_Bool command_consumer_cb(void *data)
 	}
 
 	ret = com_core_packet_send_only(rpc->handle, command->packet);
-	if (ret < 0)
+	if (ret < 0) {
 		ErrPrint("Failed to send packet %d\n", ret);
+	}
 
 out:
 	destroy_command(command);
@@ -145,8 +147,9 @@ static inline void push_command(struct command *command)
 {
 	s_info.command_list = eina_list_append(s_info.command_list, command);
 
-	if (s_info.command_consumer)
+	if (s_info.command_consumer) {
 		return;
+	}
 
 	s_info.command_consumer = ecore_timer_add(PACKET_TIME, command_consumer_cb, NULL);
 	if (!s_info.command_consumer) {
@@ -161,8 +164,9 @@ HAPI int client_rpc_async_request(struct client_node *client, struct packet *pac
 	struct command *command;
 	struct client_rpc *rpc;
 
-	if (!client || !packet)
+	if (!client || !packet) {
 		return LB_STATUS_ERROR_INVALID;
+	}
 
 	if (client_is_faulted(client)) {
 		ErrPrint("Client[%p] is faulted\n", client);
@@ -171,8 +175,9 @@ HAPI int client_rpc_async_request(struct client_node *client, struct packet *pac
 	}
 
 	rpc = client_data(client, RPC_TAG);
-	if (!rpc)
+	if (!rpc) {
 		ErrPrint("Client[%p] is not ready for communication (%s)\n", client, packet_command(packet));
+	}
 
 	command = create_command(client, packet);
 	if (!command) {
@@ -243,8 +248,9 @@ HAPI int client_rpc_fini(struct client_node *client)
 	struct client_rpc *rpc;
 
 	rpc = client_del_data(client, RPC_TAG);
-	if (!rpc)
+	if (!rpc) {
 		return LB_STATUS_ERROR_INVALID;
+	}
 
 	client_event_callback_del(client, CLIENT_EVENT_DEACTIVATE, deactivated_cb, NULL);
 	DbgFree(rpc);

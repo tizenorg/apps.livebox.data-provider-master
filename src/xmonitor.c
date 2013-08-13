@@ -75,8 +75,9 @@ static inline void touch_paused_file(void)
 	int fd;
 	fd = creat(PAUSED_FILE, 0644);
 	if (fd >= 0) {
-		if (close(fd) < 0)
+		if (close(fd) < 0) {
 			ErrPrint("close: %s\n", strerror(errno));
+		}
 	} else {
 		ErrPrint("Create .live.paused: %s\n", strerror(errno));
 	}
@@ -84,8 +85,9 @@ static inline void touch_paused_file(void)
 
 static inline void remove_paused_file(void)
 {
-	if (unlink(PAUSED_FILE) < 0)
+	if (unlink(PAUSED_FILE) < 0) {
 		ErrPrint("Unlink .live.paused: %s\n", strerror(errno));
+	}
 }
 
 static inline int get_pid(Ecore_X_Window win)
@@ -133,15 +135,17 @@ HAPI void xmonitor_handle_state_changes(void)
 	struct event_item *item;
 
 	paused = client_is_all_paused() || setting_is_lcd_off();
-	if (s_info.paused == paused)
+	if (s_info.paused == paused) {
 		return;
+	}
 
 	s_info.paused = paused;
 
 	if (s_info.paused) {
 		EINA_LIST_FOREACH(s_info.pause_list, l, item) {
-			if (item->cb)
+			if (item->cb) {
 				item->cb(item->user_data);
+			}
 		}
 
 		touch_paused_file();
@@ -152,8 +156,9 @@ HAPI void xmonitor_handle_state_changes(void)
 		remove_paused_file();
 
 		EINA_LIST_FOREACH(s_info.resume_list, l, item) {
-			if (item->cb)
+			if (item->cb) {
 				item->cb(item->user_data);
+			}
 		}
 	}
 }
@@ -164,8 +169,9 @@ HAPI int xmonitor_update_state(int target_pid)
 	struct client_node *client;
 	int pid;
 
-	if (!USE_XMONITOR || target_pid < 0)
+	if (!USE_XMONITOR || target_pid < 0) {
 		return LB_STATUS_SUCCESS;
+	}
 
 	win = ecore_x_window_focus_get();
 
@@ -211,16 +217,19 @@ static Eina_Bool client_cb(void *data, int type, void *event)
 	int pid;
 
 	pid = get_pid(info->win);
-	if (pid <= 0)
+	if (pid <= 0) {
 		return ECORE_CALLBACK_PASS_ON;
+	}
 
 	client = client_find_by_pid(pid);
-	if (!client)
+	if (!client) {
 		return ECORE_CALLBACK_PASS_ON;
+	}
 
 	name = ecore_x_atom_name_get(info->message_type);
-	if (!name)
+	if (!name) {
 		return ECORE_CALLBACK_PASS_ON;
+	}
 
 	if (!strcmp(name, "_X_ILLUME_DEACTIVATE_WINDOW")) {
 		xmonitor_pause(client);
@@ -264,10 +273,11 @@ static inline void sniff_all_windows(void)
 
 	win_stack = NULL;
 
-	if (new_item->wins)
+	if (new_item->wins) {
 		win_stack = eina_list_append(win_stack, new_item);
-	else
+	} else {
 		DbgFree(new_item);
+	}
 
 	while ((item = eina_list_nth(win_stack, 0))) {
 		win_stack = eina_list_remove(win_stack, item);
@@ -345,8 +355,9 @@ static inline void disable_xmonitor(void)
 
 static inline int enable_xmonitor(void)
 {
-	if (ecore_x_composite_query() == EINA_FALSE)
+	if (ecore_x_composite_query() == EINA_FALSE) {
 		DbgPrint("====> COMPOSITOR IS NOT ENABLED\n");
+	}
 
 	s_info.create_handler =
 		ecore_event_handler_add(ECORE_X_EVENT_WINDOW_CREATE,
@@ -387,23 +398,26 @@ HAPI int xmonitor_init(void)
 	if (USE_XMONITOR) {
 		int ret;
 		ret = enable_xmonitor();
-		if (ret < 0)
+		if (ret < 0) {
 			return ret;
+		}
 	}
 
 	s_info.paused = client_is_all_paused() || setting_is_lcd_off();
-	if (s_info.paused)
+	if (s_info.paused) {
 		touch_paused_file();
-	else
+	} else {
 		remove_paused_file();
+	}
 
 	return LB_STATUS_SUCCESS;
 }
 
 HAPI void xmonitor_fini(void)
 {
-	if (USE_XMONITOR)
+	if (USE_XMONITOR) {
 		disable_xmonitor();
+	}
 }
 
 HAPI int xmonitor_add_event_callback(enum xmonitor_event event, int (*cb)(void *user_data), void *user_data)

@@ -215,8 +215,9 @@ HAPI struct cluster *group_find_cluster(const char *name)
 	struct cluster *cluster;
 
 	EINA_LIST_FOREACH(s_info.cluster_list, l, cluster) {
-		if (!strcasecmp(cluster->name, name))
+		if (!strcasecmp(cluster->name, name)) {
 			return cluster;
+		}
 	}
 
 	return NULL;
@@ -296,8 +297,9 @@ HAPI int group_destroy_category(struct category *category)
 	struct cluster *cluster;
 
 	cluster = category->cluster;
-	if (cluster)
+	if (cluster) {
 		cluster->category_list = eina_list_remove(cluster->category_list, category);
+	}
 
 	destroy_category(category);
 	return LB_STATUS_SUCCESS;
@@ -309,8 +311,9 @@ HAPI struct category *group_find_category(struct cluster *cluster, const char *n
 	Eina_List *l;
 
 	EINA_LIST_FOREACH(cluster->category_list, l, category) {
-		if (!strcasecmp(category->name, name))
+		if (!strcasecmp(category->name, name)) {
 			return category;
+		}
 	}
 
 	return NULL;
@@ -376,8 +379,9 @@ HAPI int group_context_item_add_data(struct context_item *item, const char *tag,
 	struct context_item_data *tmp;
 
 	tmp = malloc(sizeof(*tmp));
-	if (!tmp)
+	if (!tmp) {
 		return LB_STATUS_ERROR_MEMORY;
+	}
 
 	tmp->tag = strdup(tag);
 	if (!tmp->tag) {
@@ -396,8 +400,9 @@ HAPI void *group_context_item_data(struct context_item *item, const char *tag)
 	Eina_List *l;
 
 	EINA_LIST_FOREACH(item->data_list, l, tmp) {
-		if (!strcmp(tmp->tag, tag))
+		if (!strcmp(tmp->tag, tag)) {
 			return tmp->data;
+		}
 	}
 
 	return NULL;
@@ -454,8 +459,9 @@ static inline char *get_token(char *ptr, int *len)
 
 	_len = *len;
 
-	while (_len > 0 && isspace(ptr[_len]))
+	while (_len > 0 && isspace(ptr[_len])) {
 		_len--;
+	}
 
 	if (_len == 0) {
 		ErrPrint("Token has no string\n");
@@ -518,8 +524,9 @@ HAPI int group_add_livebox(const char *group, const char *pkgname)
 			switch (state) {
 			case CLUSTER:
 				cluster = group_find_cluster(name);
-				if (!cluster)
+				if (!cluster) {
 					cluster = group_create_cluster(name);
+				}
 
 				if (!cluster) {
 					ErrPrint("Failed to get cluster\n");
@@ -532,8 +539,9 @@ HAPI int group_add_livebox(const char *group, const char *pkgname)
 
 			case CATEGORY:
 				category = group_find_category(cluster, name);
-				if (!category)
+				if (!category) {
 					category = group_create_category(cluster, name);
+				}
 
 				if (!category) {
 					ErrPrint("Failed to get category\n");
@@ -594,8 +602,9 @@ HAPI int group_add_livebox(const char *group, const char *pkgname)
 					return LB_STATUS_ERROR_FAULT;
 				}
 				cluster = group_find_cluster(name);
-				if (!cluster)
+				if (!cluster) {
 					cluster = group_create_cluster(name);
+				}
 
 				if (!cluster) {
 					ErrPrint("Failed to get cluster\n");
@@ -613,8 +622,9 @@ HAPI int group_add_livebox(const char *group, const char *pkgname)
 					return LB_STATUS_ERROR_FAULT;
 				}
 				category = group_find_category(cluster, name);
-				if (!category)
+				if (!category) {
 					category = group_create_category(cluster, name);
+				}
 
 				if (!category) {
 					ErrPrint("Failed to get category\n");
@@ -634,8 +644,9 @@ HAPI int group_add_livebox(const char *group, const char *pkgname)
 			case CONTEXT_ITEM:
 				if (is_open == 1) {
 					category = group_find_category(cluster, name);
-					if (!category)
+					if (!category) {
 						category = group_create_category(cluster, name);
+					}
 
 					if (!category) {
 						ErrPrint("Failed to get category\n");
@@ -671,8 +682,9 @@ HAPI int group_add_livebox(const char *group, const char *pkgname)
 					return LB_STATUS_ERROR_FAULT;
 				}
 
-				if (group_add_option(item, key, name) < 0)
+				if (group_add_option(item, key, name) < 0) {
 					ErrPrint("Failed to add a new option: %s - %s\n", key, name);
+				}
 
 				DbgFree(key);
 				key = NULL;
@@ -727,8 +739,9 @@ HAPI int group_add_livebox(const char *group, const char *pkgname)
 			switch (state) {
 			case CATEGORY:
 				category = group_find_category(cluster, name);
-				if (!category)
+				if (!category) {
 					category = group_create_category(cluster, name);
+				}
 
 				if (!category) {
 					ErrPrint("Failed to get category\n");
@@ -748,8 +761,9 @@ HAPI int group_add_livebox(const char *group, const char *pkgname)
 			case CONTEXT_ITEM:
 				if (is_open == 1) {
 					category = group_find_category(cluster, name);
-					if (!category)
+					if (!category) {
 						category = group_create_category(cluster, name);
+					}
 
 					if (!category) {
 						ErrPrint("Failed to get category\n");
@@ -780,8 +794,9 @@ HAPI int group_add_livebox(const char *group, const char *pkgname)
 					return LB_STATUS_ERROR_FAULT;
 				}
 
-				if (group_add_option(item, key, name) < 0)
+				if (group_add_option(item, key, name) < 0) {
 					ErrPrint("Failed to add a new option: %s - %s\n", key, name);
+				}
 
 				DbgFree(key);
 				key = NULL;
@@ -807,8 +822,12 @@ HAPI int group_add_livebox(const char *group, const char *pkgname)
 		ptr++;
 	}
 
-	if (state != CLUSTER)
+	/* If some cases, the key is not released, try release it, doesn't need to check NULL */
+	DbgFree(key);
+
+	if (state != CLUSTER) {
 		return LB_STATUS_ERROR_INVALID;
+	}
 
 	return LB_STATUS_SUCCESS;
 }
@@ -828,16 +847,19 @@ HAPI int group_del_livebox(const char *pkgname)
 	EINA_LIST_FOREACH_SAFE(s_info.cluster_list, l, n, cluster) {
 		EINA_LIST_FOREACH_SAFE(cluster->category_list, s_l, s_n, category) {
 			EINA_LIST_FOREACH_SAFE(category->info_list, i_l, i_n, info) {
-				if (!strcmp(pkgname, info->pkgname))
+				if (!strcmp(pkgname, info->pkgname)) {
 					group_destroy_context_info(info);
+				}
 			}
 
-			if (!category->info_list)
+			if (!category->info_list) {
 				group_destroy_category(category);
+			}
 		}
 
-		if (!cluster->category_list)
+		if (!cluster->category_list) {
 			group_destroy_cluster(cluster);
+		}
 	}
 
 	return LB_STATUS_SUCCESS;

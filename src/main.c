@@ -67,8 +67,9 @@ static inline int app_create(void)
 	int ret;
 
 	if (access(SLAVE_LOG_PATH, R_OK|W_OK) != 0) {
-		if (mkdir(SLAVE_LOG_PATH, 755) < 0)
+		if (mkdir(SLAVE_LOG_PATH, 755) < 0) {
 			ErrPrint("Failed to create %s (%s)\n", SLAVE_LOG_PATH, strerror(errno));
+		}
 	}
 
 	/*!
@@ -212,8 +213,9 @@ static Eina_Bool signal_cb(void *data, Ecore_Fd_Handler *handler)
 		CRITICAL_LOG("Terminated(SIGTERM)\n");
 
 		cfd = creat("/tmp/.stop.provider", 0644);
-		if (cfd < 0 || close(cfd) < 0)
+		if (cfd < 0 || close(cfd) < 0) {
 			ErrPrint("stop.provider: %s\n", strerror(errno));
+		}
 
 		vconf_set_bool(VCONFKEY_MASTER_STARTED, 0);
 		//exit(0);
@@ -259,13 +261,15 @@ int main(int argc, char *argv[])
 	 * Is there any way to print something on the screen?
 	 */
 	ret = critical_log_init(util_basename(argv[0]));
-	if (ret < 0)
+	if (ret < 0) {
 		ErrPrint("Failed to init the critical log\n");
+	}
 
 #if defined(FLOG)
 	__file_log_fp = fopen("/tmp/live.log", "w+t");
-	if (!__file_log_fp)
+	if (!__file_log_fp) {
 		__file_log_fp = fdopen(1, "w+t");
+	}
 #endif
 	/* appcore_agent_terminate */
 	if (ecore_init() <= 0) {
@@ -277,20 +281,24 @@ int main(int argc, char *argv[])
 	sigemptyset(&mask);
 
 	ret = sigaddset(&mask, SIGTERM);
-	if (ret < 0)
+	if (ret < 0) {
 		CRITICAL_LOG("Failed to do sigemptyset: %s\n", strerror(errno));
+	}
 
 	ret = sigaddset(&mask, SIGUSR1);
-	if (ret < 0)
+	if (ret < 0) {
 		CRITICAL_LOG("Failed to do sigemptyset: %s\n", strerror(errno));
+	}
 
 	ret = sigaddset(&mask, SIGUSR2);
-	if (ret < 0)
+	if (ret < 0) {
 		CRITICAL_LOG("Failed to do sigemptyset: %s\n", strerror(errno));
+	}
 
 	ret = sigprocmask(SIG_BLOCK, &mask, NULL);
-	if (ret < 0)
+	if (ret < 0) {
 		CRITICAL_LOG("Failed to mask the SIGTERM: %s\n", strerror(errno));
+	}
 
 	ret = signalfd(-1, &mask, 0);
 	if (ret < 0) {
@@ -343,15 +351,17 @@ int main(int argc, char *argv[])
 
 	ecore_x_shutdown();
 
-	if (signal_handler)
+	if (signal_handler) {
 		ecore_main_fd_handler_del(signal_handler);
+	}
 
 	ecore_shutdown();
 	critical_log_fini();
 
 #if defined(FLOG)
-	if (__file_log_fp)
+	if (__file_log_fp) {
 		fclose(__file_log_fp);
+	}
 #endif
 	return 0;
 }

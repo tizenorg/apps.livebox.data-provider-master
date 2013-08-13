@@ -129,8 +129,9 @@ HAPI const char *abi_find_slave(const char *abi)
 	struct item *item;
 
 	EINA_LIST_FOREACH(s_abi.list, l, item) {
-		if (!strcasecmp(item->abi, abi))
+		if (!strcasecmp(item->abi, abi)) {
 			return item->pkgname;
+		}
 	}
 
 	return NULL;
@@ -142,8 +143,9 @@ HAPI const char *abi_find_by_pkgname(const char *pkgname)
 	struct item *item;
 
 	EINA_LIST_FOREACH(s_abi.list, l, item) {
-		if (!strcmp(item->pkgname, pkgname))
+		if (!strcmp(item->pkgname, pkgname)) {
 			return item->abi;
+		}
 	}
 
 	return NULL;

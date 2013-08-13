@@ -168,8 +168,9 @@ HAPI int parser_find(const char *pkgname)
 	len = strlen(pkgname) * 2 + strlen(CONF_PATH);
 
 	filename = malloc(len);
-	if (!filename)
+	if (!filename) {
 		return LB_STATUS_SUCCESS;
+	}
 
 	ret = snprintf(filename, len, CONF_PATH, pkgname, pkgname);
 	if (ret < 0) {
@@ -302,10 +303,11 @@ static inline int parse_size(const char *buffer, unsigned int *size)
 				ErrPrint("Invalid size type: %dx%d\n", w, h);
 			}
 
-			if (buffer[i] == ';')
+			if (buffer[i] == ';') {
 				state = START;
-			else if (buffer[i] == '\0')
+			} else if (buffer[i] == '\0') {
 				state = END;
+			}
 
 			w = 0;
 			h = 0;
@@ -327,11 +329,13 @@ static inline const char *rtrim(char *buffer)
 	int len;
 
 	len = strlen(buffer);
-	while (len > 0 && isspace(buffer[len - 1]))
+	while (len > 0 && isspace(buffer[len - 1])) {
 		len--;
+	}
 
-	if (len <= 0)
+	if (len <= 0) {
 		return NULL;
+	}
 
 	buffer[len] = '\0';
 
@@ -346,8 +350,9 @@ static inline char *dup_rtrim(char *buffer)
 {
 	char *ret;
 
-	if (!rtrim(buffer))
+	if (!rtrim(buffer)) {
 		return NULL;
+	}
 
 	ret = strdup(buffer);
 	if (!ret) {
@@ -362,32 +367,36 @@ static void period_handler(struct parser *item, char *buffer)
 {
 	char *tmp = NULL;
 
-	if (!rtrim(buffer))
+	if (!rtrim(buffer)) {
 		return;
+	}
 
 	item->period = strtod(buffer, &tmp);
 }
 
 static void timeout_handler(struct parser *item, char *buffer)
 {
-	if (!rtrim(buffer))
+	if (!rtrim(buffer)) {
 		return;
+	}
 
 	item->timeout = atoi(buffer);
 }
 
 static void network_handler(struct parser *item, char *buffer)
 {
-	if (!rtrim(buffer))
+	if (!rtrim(buffer)) {
 		return;
+	}
 
 	item->network = !!atoi(buffer);
 }
 
 static void auto_launch_handler(struct parser *item, char *buffer)
 {
-	if (!rtrim(buffer))
+	if (!rtrim(buffer)) {
 		return;
+	}
 
 	item->auto_launch = strdup(buffer);
 	if (!item->auto_launch) {
@@ -406,14 +415,16 @@ static void size_handler(struct parser *item, char *buffer)
 
 static void pd_size_handler(struct parser *item, char *buffer)
 {
-	if (sscanf(buffer, "%ux%u", &item->pd_width, &item->pd_height) != 2)
+	if (sscanf(buffer, "%ux%u", &item->pd_width, &item->pd_height) != 2) {
 		ErrPrint("parse pd size\n");
+	}
 }
 
 static void text_lb_handler(struct parser *item, char *buffer)
 {
-	if (!rtrim(buffer))
+	if (!rtrim(buffer)) {
 		return;
+	}
 
 	item->text_lb = !!atoi(buffer);
 }
@@ -430,91 +441,107 @@ static void script_handler(struct parser *item, char *buffer)
 
 static void buffer_pd_handler(struct parser *item, char *buffer)
 {
-	if (!rtrim(buffer))
+	if (!rtrim(buffer)) {
 		return;
+	}
 
 	item->buffer_pd = !!atoi(buffer);
 }
 
 static void buffer_lb_handler(struct parser *item, char *buffer)
 {
-	if (!rtrim(buffer))
+	if (!rtrim(buffer)) {
 		return;
+	}
+
 	item->buffer_lb = !!atoi(buffer);
 }
 
 static void text_pd_handler(struct parser *item, char *buffer)
 {
-	if (!rtrim(buffer))
+	if (!rtrim(buffer)) {
 		return;
+	}
 
 	item->text_pd = !!atoi(buffer);
 }
 
 static void pinup_handler(struct parser *item, char *buffer)
 {
-	if (!rtrim(buffer))
+	if (!rtrim(buffer)) {
 		return;
+	}
 
 	item->pinup = !!atoi(buffer);
 }
 
 static void lb_path_handler(struct parser *item, char *buffer)
 {
-	if (item->lb_path)
+	if (item->lb_path) {
 		DbgFree(item->lb_path);
+	}
 
 	item->lb_path = dup_rtrim(buffer);
-	if (!item->lb_path)
+	if (!item->lb_path) {
 		ErrPrint("Error: %s\n", strerror(errno));
+	}
 }
 
 static void group_handler(struct parser *item, char *buffer)
 {
-	if (item->group)
+	if (item->group) {
 		DbgFree(item->group);
+	}
 
 	item->group = dup_rtrim(buffer);
-	if (!item->group)
+	if (!item->group) {
 		ErrPrint("Error: %s\n", strerror(errno));
+	}
 }
 
 static void secured_handler(struct parser *item, char *buffer)
 {
-	if (!rtrim(buffer))
+	if (!rtrim(buffer)) {
 		return;
+	}
 
 	item->secured = !!atoi(buffer);
 }
 
 static void lb_group_handler(struct parser *item, char *buffer)
 {
-	if (item->lb_group)
+	if (item->lb_group) {
 		DbgFree(item->lb_group);
+	}
 
 	item->lb_group = dup_rtrim(buffer);
-	if (!item->lb_group)
+	if (!item->lb_group) {
 		ErrPrint("Error: %s\n", strerror(errno));
+	}
 }
 
 static void pd_path_handler(struct parser *item, char *buffer)
 {
-	if (item->pd_path)
+	if (item->pd_path) {
 		DbgFree(item->pd_path);
+	}
 
 	item->pd_path = dup_rtrim(buffer);
-	if (!item->pd_path)
+	if (!item->pd_path) {
 		ErrPrint("Error: %s\n", strerror(errno));
+	}
 }
 
 static void pd_group_handler(struct parser *item, char *buffer)
 {
-	if (item->pd_group)
+	if (item->pd_group) {
 		DbgFree(item->pd_group);
+	}
 
 	item->pd_group = dup_rtrim(buffer);
-	if (!item->pd_group)
+	if (!item->pd_group) {
 		ErrPrint("Error: %s\n", strerror(errno));
+	}
 }
 
 HAPI struct parser *parser_load(const char *pkgname)
@@ -626,8 +653,9 @@ HAPI struct parser *parser_load(const char *pkgname)
 	int ret;
 
 	item = calloc(1, sizeof(*item));
-	if (!item)
+	if (!item) {
 		return 0;
+	}
 
 	/* live-, .conf */
 	len = strlen(CONF_PATH) + strlen(pkgname) * 2;
@@ -671,8 +699,9 @@ HAPI struct parser *parser_load(const char *pkgname)
 	linelen = 0;
 	do {
 		c = getc(fp);
-		if ((c == EOF) && (state == VALUE))
+		if ((c == EOF) && (state == VALUE)) {
 			state = END;
+		}
 
 		switch (state) {
 		case COMMENT:
@@ -704,10 +733,11 @@ HAPI struct parser *parser_load(const char *pkgname)
 			}
 			break;
 		case SPACE:
-			if (c == '=')
+			if (c == '=') {
 				state = VALUE;
-			else if (!isspace(c))
+			} else if (!isspace(c)) {
 				state = ERROR;
+			}
 			break;
 		case VALUE:
 			if (c == '"') {
@@ -716,8 +746,9 @@ HAPI struct parser *parser_load(const char *pkgname)
 					state = END;
 				} else if (buffer_idx != 0) {
 					buffer[buffer_idx++] = c;
-					if (buffer_idx >= sizeof(buffer))
+					if (buffer_idx >= sizeof(buffer)) {
 						state = ERROR;
+					}
 				} else {
 					quote = 1;
 				}
@@ -726,8 +757,9 @@ HAPI struct parser *parser_load(const char *pkgname)
 					/* Ignore */
 				} else if (quote == 1) {
 					buffer[buffer_idx++] = c;
-					if (buffer_idx >= sizeof(buffer))
+					if (buffer_idx >= sizeof(buffer)) {
 						state = ERROR;
+					}
 				} else {
 					buffer[buffer_idx] = '\0';
 					ungetc(c, fp);
@@ -735,24 +767,28 @@ HAPI struct parser *parser_load(const char *pkgname)
 				}
 			} else {
 				buffer[buffer_idx++] = c;
-				if (buffer_idx >= sizeof(buffer))
+				if (buffer_idx >= sizeof(buffer)) {
 					state = ERROR;
+				}
 			}
 			break;
 		case TOKEN:
 			if (c == '=') {
-				if (token_idx < 0)
+				if (token_idx < 0) {
 					state = ERROR;
-				else
+				} else {
 					state = VALUE;
+				}
 			} else if (isspace(c)) {
-				if (token_idx < 0)
+				if (token_idx < 0) {
 					break;
+				}
 
-				if (token_handler[token_idx].name[ch_idx] != '\0')
+				if (token_handler[token_idx].name[ch_idx] != '\0') {
 					state = ERROR;
-				else
+				} else {
 					state = SPACE;
+				}
 			} else  {
 				if (token_idx < 0) {
 					/* Now start to find a token! */
@@ -763,15 +799,17 @@ HAPI struct parser *parser_load(const char *pkgname)
 					ch_idx++;
 				} else {
 					ungetc(c, fp);
-					while (ch_idx-- > 0)
+					while (ch_idx-- > 0) {
 						ungetc(token_handler[token_idx].name[ch_idx], fp);
+					}
 
 					token_idx++;
 
-					if (token_handler[token_idx].name == NULL)
+					if (token_handler[token_idx].name == NULL) {
 						state = ERROR;
-					else
+					} else {
 						ch_idx = 0;
+					}
 				}
 			}
 			break;
@@ -795,8 +833,9 @@ HAPI struct parser *parser_load(const char *pkgname)
 				 */
 				buffer[buffer_idx] = '\0';
 
-				if (token_idx >= 0 && token_handler[token_idx].handler)
+				if (token_idx >= 0 && token_handler[token_idx].handler) {
 					token_handler[token_idx].handler(item, buffer);
+				}
 
 				token_idx = -1;
 				ch_idx = 0;
@@ -818,8 +857,9 @@ HAPI struct parser *parser_load(const char *pkgname)
 		linelen++;
 	 } while (c != EOF);
 
-	if (fclose(fp) != 0)
+	if (fclose(fp) != 0) {
 		ErrPrint("fclose: %s\n", strerror(errno));
+	}
 
 	s_list = eina_list_append(s_list, item);
 	return item;

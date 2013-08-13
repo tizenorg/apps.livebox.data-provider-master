@@ -67,8 +67,9 @@ static inline void invoke_install_event_handler(const char *pkgname, enum pkgmgr
 	struct event_item *item;
 
 	EINA_LIST_FOREACH(s_info.install_event, l, item) {
-		if (item->cb)
+		if (item->cb) {
 			item->cb(pkgname, status, value, item->data);
+		}
 	}
 }
 
@@ -78,8 +79,9 @@ static inline void invoke_uninstall_event_handler(const char *pkgname, enum pkgm
 	struct event_item *item;
 
 	EINA_LIST_FOREACH(s_info.uninstall_event, l, item) {
-		if (item->cb)
+		if (item->cb) {
 			item->cb(pkgname, status, value, item->data);
+		}
 	}
 }
 
@@ -89,8 +91,9 @@ static inline void invoke_update_event_handler(const char *pkgname, enum pkgmgr_
 	struct event_item *item;
 
 	EINA_LIST_FOREACH(s_info.update_event, l, item) {
-		if (item->cb)
+		if (item->cb) {
 			item->cb(pkgname, status, value, item->data);
+		}
 	}
 }
 
@@ -100,8 +103,9 @@ static inline void invoke_download_event_handler(const char *pkgname, enum pkgmg
 	struct event_item *item;
 
 	EINA_LIST_FOREACH(s_info.download_event, l, item) {
-		if (item->cb)
+		if (item->cb) {
 			item->cb(pkgname, status, value, item->data);
+		}
 	}
 }
 
@@ -111,8 +115,9 @@ static inline void invoke_recover_event_handler(const char *pkgname, enum pkgmgr
 	struct event_item *item;
 
 	EINA_LIST_FOREACH(s_info.recover_event, l, item) {
-		if (item->cb)
+		if (item->cb) {
 			item->cb(pkgname, status, value, item->data);
+		}
 	}
 }
 
@@ -178,8 +183,9 @@ static struct item *find_item(const char *pkgname)
 	}
 
 	EINA_LIST_FOREACH(s_info.item_list, l, item) {
-		if (strcmp(item->pkgname, pkgname))
+		if (strcmp(item->pkgname, pkgname)) {
 			continue;
+		}
 
 		return item;
 	}
@@ -239,11 +245,13 @@ static int icon_path_cb(const char *pkgname, const char *val, void *data)
 	DbgPrint("[%s] %s\n", pkgname, val);
 
 	item = find_item(pkgname);
-	if (!item)
+	if (!item) {
 		return LB_STATUS_ERROR_NOT_EXIST;
+	}
 
-	if (item->icon)
+	if (item->icon) {
 		DbgFree(item->icon);
+	}
 
 	item->icon = strdup(val);
 	if (!item->icon) {
@@ -261,8 +269,9 @@ static int command_cb(const char *pkgname, const char *val, void *data)
 	DbgPrint("[%s] %s\n", pkgname, val);
 
 	item = find_item(pkgname);
-	if (!item)
+	if (!item) {
 		return LB_STATUS_ERROR_NOT_EXIST;
+	}
 
 	if (!is_valid_status(item, val)) {
 		DbgPrint("Invalid status: %d, %s\n", item->type, val);
@@ -282,8 +291,9 @@ static int error_cb(const char *pkgname, const char *val, void *data)
 	DbgPrint("[%s] %s\n", pkgname, val);
 
 	item = find_item(pkgname);
-	if (!item)
+	if (!item) {
 		return LB_STATUS_ERROR_NOT_EXIST;
+	}
 
 	item->status = PKGMGR_STATUS_ERROR;
 	invoke_callback(pkgname, item, 0.0f);
@@ -298,8 +308,9 @@ static int change_pkgname_cb(const char *pkgname, const char *val, void *data)
 	DbgPrint("[%s] %s\n", pkgname, val);
 
 	item = find_item(pkgname);
-	if (!item)
+	if (!item) {
 		return LB_STATUS_ERROR_NOT_EXIST;
+	}
 
 	new_pkgname = strdup(val);
 	if (!new_pkgname) {
@@ -343,8 +354,9 @@ static int download_cb(const char *pkgname, const char *val, void *data)
 	}
 
 	if (val) {
-		if (sscanf(val, "%lf", &value) != 1)
+		if (sscanf(val, "%lf", &value) != 1) {
 			value = (double)LB_STATUS_ERROR_INVALID;
+		}
 	} else {
 		value = (double)LB_STATUS_ERROR_INVALID;
 	}
@@ -379,8 +391,9 @@ static int progress_cb(const char *pkgname, const char *val, void *data)
 	}
 
 	if (val) {
-		if (sscanf(val, "%lf", &value) != 1)
+		if (sscanf(val, "%lf", &value) != 1) {
 			value = (double)LB_STATUS_ERROR_INVALID;
+		}
 	} else {
 		value = (double)LB_STATUS_ERROR_INVALID;
 	}
@@ -396,8 +409,9 @@ static int end_cb(const char *pkgname, const char *val, void *data)
 	DbgPrint("[%s] %s\n", pkgname, val);
 
 	item = find_item(pkgname);
-	if (!item)
+	if (!item) {
 		return LB_STATUS_ERROR_NOT_EXIST;
+	}
 
 	item->status = !strcasecmp(val, "ok") ? PKGMGR_STATUS_END : PKGMGR_STATUS_ERROR;
 
@@ -431,8 +445,9 @@ static int pkgmgr_cb(int req_id, const char *type, const char *pkgname, const ch
 	int ret;
 
 	for (i = 0; handler[i].key; i++) {
-		if (strcasecmp(key, handler[i].key))
+		if (strcasecmp(key, handler[i].key)) {
 			continue;
+		}
 
 		ret = handler[i].func(pkgname, val, data);
 		DbgPrint("REQ[%d] pkgname[%s], type[%s], key[%s], val[%s], ret = %d\n",
@@ -444,15 +459,18 @@ static int pkgmgr_cb(int req_id, const char *type, const char *pkgname, const ch
 
 HAPI int pkgmgr_init(void)
 {
-	if (s_info.listen_pc)
+	if (s_info.listen_pc) {
 		return LB_STATUS_ERROR_ALREADY;
+	}
 
 	s_info.listen_pc = pkgmgr_client_new(PC_LISTENING);
-	if (!s_info.listen_pc)
+	if (!s_info.listen_pc) {
 		return LB_STATUS_ERROR_FAULT;
+	}
 
-	if (pkgmgr_client_listen_status(s_info.listen_pc, pkgmgr_cb, NULL) != PKGMGR_R_OK)
+	if (pkgmgr_client_listen_status(s_info.listen_pc, pkgmgr_cb, NULL) != PKGMGR_R_OK) {
 		return LB_STATUS_ERROR_FAULT;
+	}
 
 	return LB_STATUS_SUCCESS;
 }
@@ -462,11 +480,13 @@ HAPI int pkgmgr_fini(void)
 	struct event_item *item;
 	struct item *ctx;
 
-	if (!s_info.listen_pc)
+	if (!s_info.listen_pc) {
 		return LB_STATUS_ERROR_INVALID;
+	}
 
-	if (pkgmgr_client_free(s_info.listen_pc) != PKGMGR_R_OK)
+	if (pkgmgr_client_free(s_info.listen_pc) != PKGMGR_R_OK) {
 		return LB_STATUS_ERROR_FAULT;
+	}
 
 	s_info.listen_pc = NULL;
 

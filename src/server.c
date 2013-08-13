@@ -307,12 +307,14 @@ static int event_lb_route_cb(enum event_state state, struct event_data *event_in
 	const char *cmdstr;
 
 	pkg = instance_package(inst);
-	if (!pkg)
+	if (!pkg) {
 		return LB_STATUS_ERROR_INVALID;
+	}
 
 	slave = package_slave(pkg);
-	if (!slave)
+	if (!slave) {
 		return LB_STATUS_ERROR_INVALID;
+	}
 
 	switch (state) {
 	case EVENT_STATE_ACTIVATE:
@@ -329,8 +331,9 @@ static int event_lb_route_cb(enum event_state state, struct event_data *event_in
 	}
 
 	packet = packet_create_noack(cmdstr, "ssdii", package_name(pkg), instance_id(inst), util_timestamp(), event_info->x, event_info->y);
-	if (!packet)
+	if (!packet) {
 		return LB_STATUS_ERROR_FAULT;
+	}
 
 	return slave_rpc_request_only(slave, package_name(pkg), packet, 0);
 }
@@ -344,16 +347,19 @@ static int event_lb_consume_cb(enum event_state state, struct event_data *event_
 	Evas *e;
 
 	pkg = instance_package(inst);
-	if (!pkg)
+	if (!pkg) {
 		return 0;
+	}
 
 	script = instance_lb_script(inst);
-	if (!script)
+	if (!script) {
 		return LB_STATUS_ERROR_FAULT;
+	}
 
 	e = script_handler_evas(script);
-	if (!e)
+	if (!e) {
 		return LB_STATUS_ERROR_FAULT;
+	}
 
 	timestamp = util_timestamp();
 
@@ -386,12 +392,14 @@ static int event_pd_route_cb(enum event_state state, struct event_data *event_in
 	const char *cmdstr;
 
 	pkg = instance_package(inst);
-	if (!pkg)
+	if (!pkg) {
 		return LB_STATUS_ERROR_INVALID;
+	}
 
 	slave = package_slave(pkg);
-	if (!slave)
+	if (!slave) {
 		return LB_STATUS_ERROR_INVALID;
+	}
 
 	switch (state) {
 	case EVENT_STATE_ACTIVATE:
@@ -408,8 +416,9 @@ static int event_pd_route_cb(enum event_state state, struct event_data *event_in
 	}
 
 	packet = packet_create_noack(cmdstr, "ssdii", package_name(pkg), instance_id(inst), util_timestamp(), event_info->x, event_info->y);
-	if (!packet)
+	if (!packet) {
 		return LB_STATUS_ERROR_FAULT;
+	}
 
 	return slave_rpc_request_only(slave, package_name(pkg), packet, 0);
 }
@@ -423,16 +432,19 @@ static int event_pd_consume_cb(enum event_state state, struct event_data *event_
 	Evas *e;
 
 	pkg = instance_package(inst);
-	if (!pkg)
+	if (!pkg) {
 		return 0;
+	}
 
 	script = instance_pd_script(inst);
-	if (!script)
+	if (!script) {
 		return LB_STATUS_ERROR_FAULT;
+	}
 
 	e = script_handler_evas(script);
-	if (!e)
+	if (!e) {
 		return LB_STATUS_ERROR_FAULT;
+	}
 
 	timestamp = util_timestamp();
 
@@ -488,8 +500,9 @@ static struct packet *client_acquire(pid_t pid, int handle, const struct packet 
 
 out:
 	result = packet_create_reply(packet, "i", ret);
-	if (!result)
+	if (!result) {
 		ErrPrint("Failed to create a packet\n");
+	}
 
 	return result;
 }
@@ -512,8 +525,9 @@ static struct packet *cilent_release(pid_t pid, int handle, const struct packet 
 
 out:
 	result = packet_create_reply(packet, "i", ret);
-	if (!result)
+	if (!result) {
 		ErrPrint("Failed to create a packet\n");
+	}
 
 	return result;
 }
@@ -540,11 +554,13 @@ static inline int validate_request(const char *pkgname, const char *id, struct i
 		return LB_STATUS_ERROR_FAULT;
 	}
 
-	if (out_inst)
+	if (out_inst) {
 		*out_inst = inst;
+	}
 
-	if (out_pkg)
+	if (out_pkg) {
 		*out_pkg = pkg;
+	}
 
 	return LB_STATUS_SUCCESS;
 }
@@ -580,8 +596,9 @@ static struct packet *client_clicked(pid_t pid, int handle, const struct packet 
 	 * The package has to be a livebox package name.
 	 */
 	ret = validate_request(pkgname, id, &inst, NULL);
-	if (ret == LB_STATUS_SUCCESS)
+	if (ret == LB_STATUS_SUCCESS) {
 		(void)instance_clicked(inst, event, timestamp, x, y);
+	}
 
 out:
 	/*! \note No reply packet */
@@ -623,8 +640,9 @@ static struct packet *client_update_mode(pid_t pid, int handle, const struct pac
 
 out:
 	result = packet_create_reply(packet, "i", ret);
-	if (!result)
+	if (!result) {
 		ErrPrint("Failed to create a packet\n");
+	}
 
 	return result;
 }
@@ -665,13 +683,15 @@ static struct packet *client_text_signal(pid_t pid, int handle, const struct pac
 	 * The package has to be a livebox package name.
 	 */
 	ret = validate_request(pkgname, id, &inst, NULL);
-	if (ret == LB_STATUS_SUCCESS)
+	if (ret == LB_STATUS_SUCCESS) {
 		ret = instance_text_signal_emit(inst, emission, source, sx, sy, ex, ey);
+	}
 
 out:
 	result = packet_create_reply(packet, "i", ret);
-	if (!result)
+	if (!result) {
 		ErrPrint("Failed to create a packet\n");
+	}
 
 	return result;
 }
@@ -724,8 +744,9 @@ static struct packet *client_delete(pid_t pid, int handle, const struct packet *
 	 * The package has to be a livebox package name.
 	 */
 	ret = validate_request(pkgname, id, &inst, NULL);
-	if (ret != LB_STATUS_SUCCESS)
+	if (ret != LB_STATUS_SUCCESS) {
 		goto out;
+	}
 
 	if (instance_client(inst) != client) {
 		if (instance_has_client(inst, client)) {
@@ -768,8 +789,9 @@ static struct packet *client_delete(pid_t pid, int handle, const struct packet *
 
 out:
 	result = packet_create_reply(packet, "i", ret);
-	if (!result)
+	if (!result) {
 		ErrPrint("Failed to create a packet\n");
+	}
 
 	return result;
 }
@@ -807,18 +829,21 @@ static struct packet *client_resize(pid_t pid, int handle, const struct packet *
 	 * The package has to be a livebox package name.
 	 */
 	ret = validate_request(pkgname, id, &inst, NULL);
-	if (ret != LB_STATUS_SUCCESS)
+	if (ret != LB_STATUS_SUCCESS) {
 		goto out;
+	}
 
-	if (instance_client(inst) != client)
+	if (instance_client(inst) != client) {
 		ret = LB_STATUS_ERROR_PERMISSION;
-	else
+	} else {
 		ret = instance_resize(inst, w, h);
+	}
 
 out:
 	result = packet_create_reply(packet, "i", ret);
-	if (!result)
+	if (!result) {
 		ErrPrint("Failed to create a packet\n");
+	}
 
 	return result;
 }
@@ -874,8 +899,9 @@ static struct packet *client_new(pid_t pid, int handle, const struct packet *pac
 	DbgFree(mainappid);
 
 	info = package_find(lb_pkgname);
-	if (!info)
+	if (!info) {
 		info = package_create(lb_pkgname);
+	}
 
 	if (!info) {
 		ret = LB_STATUS_ERROR_FAULT;
@@ -887,8 +913,9 @@ static struct packet *client_new(pid_t pid, int handle, const struct packet *pac
 	} else {
 		struct inst_info *inst;
 
-		if (period > 0.0f && period < MINIMUM_PERIOD)
+		if (period > 0.0f && period < MINIMUM_PERIOD) {
 			period = MINIMUM_PERIOD;
+		}
 
 		inst = instance_create(client, timestamp, lb_pkgname, content, cluster, category, period, width, height);
 		/*!
@@ -902,8 +929,9 @@ static struct packet *client_new(pid_t pid, int handle, const struct packet *pac
 
 out:
 	result = packet_create_reply(packet, "i", ret);
-	if (!result)
+	if (!result) {
 		ErrPrint("Failed to create a packet\n");
+	}
 
 	return result;
 }
@@ -937,13 +965,15 @@ static struct packet *client_change_visibility(pid_t pid, int handle, const stru
 	 * The package has to be a livebox package name.
 	 */
 	ret = validate_request(pkgname, id, &inst, NULL);
-	if (ret != LB_STATUS_SUCCESS)
+	if (ret != LB_STATUS_SUCCESS) {
 		goto out;
+	}
 
-	if (instance_client(inst) != client)
+	if (instance_client(inst) != client) {
 		ret = LB_STATUS_ERROR_PERMISSION;
-	else
+	} else {
 		ret = instance_set_visible_state(inst, state);
+	}
 
 out:
 	/*! \note No reply packet */
@@ -982,18 +1012,21 @@ static struct packet *client_set_period(pid_t pid, int handle, const struct pack
 	 * The package has to be a livebox package name.
 	 */
 	ret = validate_request(pkgname, id, &inst, NULL);
-	if (ret != LB_STATUS_SUCCESS)
+	if (ret != LB_STATUS_SUCCESS) {
 		goto out;
+	}
 
-	if (instance_client(inst) != client)
+	if (instance_client(inst) != client) {
 		ret = LB_STATUS_ERROR_PERMISSION;
-	else
+	} else {
 		ret = instance_set_period(inst, period);
+	}
 
 out:
 	result = packet_create_reply(packet, "i", ret);
-	if (!result)
+	if (!result) {
 		ErrPrint("Failed to create a packet\n");
+	}
 
 	return result;
 }
@@ -1031,18 +1064,21 @@ static struct packet *client_change_group(pid_t pid, int handle, const struct pa
 	 * The package has to be a livebox package name.
 	 */
 	ret = validate_request(pkgname, id, &inst, NULL);
-	if (ret != LB_STATUS_SUCCESS)
+	if (ret != LB_STATUS_SUCCESS) {
 		goto out;
+	}
 
-	if (instance_client(inst) != client)
+	if (instance_client(inst) != client) {
 		ret = LB_STATUS_ERROR_PERMISSION;
-	else
+	} else {
 		ret = instance_change_group(inst, cluster, category);
+	}
 
 out:
 	result = packet_create_reply(packet, "i", ret);
-	if (!result)
+	if (!result) {
 		ErrPrint("Failed to create a packet\n");
+	}
 
 	return result;
 }
@@ -1074,8 +1110,9 @@ static struct packet *client_pd_mouse_enter(pid_t pid, int handle, const struct 
 	}
 
 	ret = validate_request(pkgname, id, &inst, &pkg);
-	if (ret != LB_STATUS_SUCCESS)
+	if (ret != LB_STATUS_SUCCESS) {
 		goto out;
+	}
 
 	if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
 		ret = forward_pd_event_packet(pkg, inst, packet);
@@ -1135,8 +1172,9 @@ static struct packet *client_pd_mouse_leave(pid_t pid, int handle, const struct 
 	}
 
 	ret = validate_request(pkgname, id, &inst, &pkg);
-	if (ret != LB_STATUS_SUCCESS)
+	if (ret != LB_STATUS_SUCCESS) {
 		goto out;
+	}
 
 	if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
 		ret = forward_pd_event_packet(pkg, inst, packet);
@@ -1196,8 +1234,9 @@ static struct packet *client_pd_mouse_down(pid_t pid, int handle, const struct p
 	}
 
 	ret = validate_request(pkgname, id, &inst, &pkg);
-	if (ret != LB_STATUS_SUCCESS)
+	if (ret != LB_STATUS_SUCCESS) {
 		goto out;
+	}
 
 	if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
 		ret = forward_pd_event_packet(pkg, inst, packet);
@@ -1257,8 +1296,9 @@ static struct packet *client_pd_mouse_up(pid_t pid, int handle, const struct pac
 	}
 
 	ret = validate_request(pkgname, id, &inst, &pkg);
-	if (ret != LB_STATUS_SUCCESS)
+	if (ret != LB_STATUS_SUCCESS) {
 		goto out;
+	}
 
 	if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
 		ret = forward_pd_event_packet(pkg, inst, packet);
@@ -1318,8 +1358,9 @@ static struct packet *client_pd_mouse_move(pid_t pid, int handle, const struct p
 	}
 
 	ret = validate_request(pkgname, id, &inst, &pkg);
-	if (ret != LB_STATUS_SUCCESS)
+	if (ret != LB_STATUS_SUCCESS) {
 		goto out;
+	}
 
 	if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
 		ret = forward_pd_event_packet(pkg, inst, packet);
@@ -1379,8 +1420,9 @@ static struct packet *client_lb_mouse_move(pid_t pid, int handle, const struct p
 	}
 
 	ret = validate_request(pkgname, id, &inst, &pkg);
-	if (ret != LB_STATUS_SUCCESS)
+	if (ret != LB_STATUS_SUCCESS) {
 		goto out;
+	}
 
 	if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
 		ret = forward_lb_event_packet(pkg, inst, packet);
@@ -1446,27 +1488,32 @@ static struct packet *client_lb_mouse_set(pid_t pid, int handle, const struct pa
 	}
 
 	ret = validate_request(pkgname, id, &inst, &pkg);
-	if (ret != LB_STATUS_SUCCESS)
+	if (ret != LB_STATUS_SUCCESS) {
 		goto out;
+	}
 
 	if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
 		if (event_is_activated()) {
-			if (event_deactivate() == 0)
+			if (event_deactivate() == 0) {
 				instance_event_callback_del(inst, INSTANCE_EVENT_DESTROY, inst_del_cb);
+			}
 		}
 
 		ret = event_activate(x, y, event_lb_route_cb, inst);
-		if (ret == 0)
+		if (ret == 0) {
 			instance_event_callback_add(inst, INSTANCE_EVENT_DESTROY, inst_del_cb, NULL);
+		}
 	} else if (package_lb_type(pkg) == LB_TYPE_SCRIPT) {
 		if (event_is_activated()) {
-			if (event_deactivate() == 0)
+			if (event_deactivate() == 0) {
 				instance_event_callback_del(inst, INSTANCE_EVENT_DESTROY, inst_del_cb);
+			}
 		}
 
 		ret = event_activate(x, y, event_lb_consume_cb, inst);
-		if (ret == 0)
+		if (ret == 0) {
 			instance_event_callback_add(inst, INSTANCE_EVENT_DESTROY, inst_del_cb, NULL);
+		}
 	} else {
 		ErrPrint("Unsupported package\n");
 		ret = LB_STATUS_ERROR_INVALID;
@@ -1502,17 +1549,20 @@ static struct packet *client_lb_mouse_unset(pid_t pid, int handle, const struct 
 	}
 
 	ret = validate_request(pkgname, id, &inst, &pkg);
-	if (ret != LB_STATUS_SUCCESS)
+	if (ret != LB_STATUS_SUCCESS) {
 		goto out;
+	}
 
 	if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
 		ret = event_deactivate();
-		if (ret == 0)
+		if (ret == 0) {
 			instance_event_callback_del(inst, INSTANCE_EVENT_DESTROY, inst_del_cb);
+		}
 	} else if (package_lb_type(pkg) == LB_TYPE_SCRIPT) {
 		ret = event_deactivate();
-		if (ret == 0)
+		if (ret == 0) {
 			instance_event_callback_del(inst, INSTANCE_EVENT_DESTROY, inst_del_cb);
+		}
 	} else {
 		ErrPrint("Unsupported package\n");
 		ret = LB_STATUS_ERROR_INVALID;
@@ -1548,27 +1598,32 @@ static struct packet *client_pd_mouse_set(pid_t pid, int handle, const struct pa
 	}
 
 	ret = validate_request(pkgname, id, &inst, &pkg);
-	if (ret != LB_STATUS_SUCCESS)
+	if (ret != LB_STATUS_SUCCESS) {
 		goto out;
+	}
 
 	if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
 		if (event_is_activated()) {
-			if (event_deactivate() == 0)
+			if (event_deactivate() == 0) {
 				instance_event_callback_del(inst, INSTANCE_EVENT_DESTROY, inst_del_cb);
+			}
 		}
 
 		ret = event_activate(x, y, event_pd_route_cb, inst);
-		if (ret == 0)
+		if (ret == 0) {
 			instance_event_callback_add(inst, INSTANCE_EVENT_DESTROY, inst_del_cb, NULL);
+		}
 	} else if (package_pd_type(pkg) == PD_TYPE_SCRIPT) {
 		if (event_is_activated()) {
-			if (event_deactivate() == 0)
+			if (event_deactivate() == 0) {
 				instance_event_callback_del(inst, INSTANCE_EVENT_DESTROY, inst_del_cb);
+			}
 		}
 
 		ret = event_activate(x, y, event_pd_consume_cb, inst);
-		if (ret == 0)
+		if (ret == 0) {
 			instance_event_callback_add(inst, INSTANCE_EVENT_DESTROY, inst_del_cb, NULL);
+		}
 	} else {
 		ErrPrint("Unsupported package\n");
 		ret = LB_STATUS_ERROR_INVALID;
@@ -1605,17 +1660,20 @@ static struct packet *client_pd_mouse_unset(pid_t pid, int handle, const struct 
 	}
 
 	ret = validate_request(pkgname, id, &inst, &pkg);
-	if (ret != LB_STATUS_SUCCESS)
+	if (ret != LB_STATUS_SUCCESS) {
 		goto out;
+	}
 
 	if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
 		ret = event_deactivate();
-		if (ret == 0)
+		if (ret == 0) {
 			instance_event_callback_del(inst, INSTANCE_EVENT_DESTROY, inst_del_cb);
+		}
 	} else if (package_pd_type(pkg) == PD_TYPE_SCRIPT) {
 		ret = event_deactivate();
-		if (ret == 0)
+		if (ret == 0) {
 			instance_event_callback_del(inst, INSTANCE_EVENT_DESTROY, inst_del_cb);
+		}
 	} else {
 		ErrPrint("Unsupported package\n");
 		ret = LB_STATUS_ERROR_INVALID;
@@ -1651,8 +1709,9 @@ static struct packet *client_lb_mouse_enter(pid_t pid, int handle, const struct 
 	}
 
 	ret = validate_request(pkgname, id, &inst, &pkg);
-	if (ret != LB_STATUS_SUCCESS)
+	if (ret != LB_STATUS_SUCCESS) {
 		goto out;
+	}
 
 	if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
 		ret = forward_lb_event_packet(pkg, inst, packet);
@@ -1712,8 +1771,9 @@ static struct packet *client_lb_mouse_leave(pid_t pid, int handle, const struct 
 	}
 
 	ret = validate_request(pkgname, id, &inst, &pkg);
-	if (ret != LB_STATUS_SUCCESS)
+	if (ret != LB_STATUS_SUCCESS) {
 		goto out;
+	}
 
 	if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
 		ret = forward_lb_event_packet(pkg, inst, packet);
@@ -1773,8 +1833,9 @@ static struct packet *client_lb_mouse_down(pid_t pid, int handle, const struct p
 	}
 
 	ret = validate_request(pkgname, id, &inst, &pkg);
-	if (ret != LB_STATUS_SUCCESS)
+	if (ret != LB_STATUS_SUCCESS) {
 		goto out;
+	}
 
 	if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
 		ret = forward_lb_event_packet(pkg, inst, packet);
@@ -1834,8 +1895,9 @@ static struct packet *client_lb_mouse_up(pid_t pid, int handle, const struct pac
 	}
 
 	ret = validate_request(pkgname, id, &inst, &pkg);
-	if (ret != LB_STATUS_SUCCESS)
+	if (ret != LB_STATUS_SUCCESS) {
 		goto out;
+	}
 
 	if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
 		ret = forward_lb_event_packet(pkg, inst, packet);
@@ -1896,8 +1958,9 @@ static struct packet *client_pd_access_action_up(pid_t pid, int handle, const st
 	}
 
 	ret = validate_request(pkgname, id, &inst, &pkg);
-	if (ret != LB_STATUS_SUCCESS)
+	if (ret != LB_STATUS_SUCCESS) {
 		goto out;
+	}
 
 	if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
 		ret = forward_pd_access_packet(pkg, inst, packet_command(packet), timestamp, x, y);
@@ -1945,8 +2008,9 @@ static struct packet *client_pd_access_action_up(pid_t pid, int handle, const st
 
 out:
 	result = packet_create_reply(packet, "i", ret);
-	if (!result)
+	if (!result) {
 		ErrPrint("Failed to create a reply packet\n");
+	}
 
 	return result;
 }
@@ -1979,8 +2043,9 @@ static struct packet *client_pd_access_action_down(pid_t pid, int handle, const 
 	}
 
 	ret = validate_request(pkgname, id, &inst, &pkg);
-	if (ret != LB_STATUS_SUCCESS)
+	if (ret != LB_STATUS_SUCCESS) {
 		goto out;
+	}
 
 	if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
 		ret = forward_pd_access_packet(pkg, inst, packet_command(packet), timestamp, x, y);
@@ -2028,8 +2093,9 @@ static struct packet *client_pd_access_action_down(pid_t pid, int handle, const 
 
 out:
 	result = packet_create_reply(packet, "i", ret);
-	if (!result)
+	if (!result) {
 		ErrPrint("Failed to create a reply packet\n");
+	}
 
 	return result;
 }
@@ -2062,8 +2128,9 @@ static struct packet *client_pd_access_scroll_down(pid_t pid, int handle, const 
 	}
 
 	ret = validate_request(pkgname, id, &inst, &pkg);
-	if (ret != LB_STATUS_SUCCESS)
+	if (ret != LB_STATUS_SUCCESS) {
 		goto out;
+	}
 
 	if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
 		ret = forward_pd_access_packet(pkg, inst, packet_command(packet), timestamp, x, y);
@@ -2111,8 +2178,9 @@ static struct packet *client_pd_access_scroll_down(pid_t pid, int handle, const 
 
 out:
 	result = packet_create_reply(packet, "i", ret);
-	if (!result)
+	if (!result) {
 		ErrPrint("Failed to create a reply packet\n");
+	}
 
 	return result;
 }
@@ -2145,8 +2213,9 @@ static struct packet *client_pd_access_scroll_move(pid_t pid, int handle, const 
 	}
 
 	ret = validate_request(pkgname, id, &inst, &pkg);
-	if (ret != LB_STATUS_SUCCESS)
+	if (ret != LB_STATUS_SUCCESS) {
 		goto out;
+	}
 
 	if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
 		ret = forward_pd_access_packet(pkg, inst, packet_command(packet), timestamp, x, y);
@@ -2194,8 +2263,9 @@ static struct packet *client_pd_access_scroll_move(pid_t pid, int handle, const 
 
 out:
 	result = packet_create_reply(packet, "i", ret);
-	if (!result)
+	if (!result) {
 		ErrPrint("Failed to create a reply packet\n");
+	}
 
 	return result;
 }
@@ -2228,8 +2298,9 @@ static struct packet *client_pd_access_scroll_up(pid_t pid, int handle, const st
 	}
 
 	ret = validate_request(pkgname, id, &inst, &pkg);
-	if (ret != LB_STATUS_SUCCESS)
+	if (ret != LB_STATUS_SUCCESS) {
 		goto out;
+	}
 
 	if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
 		ret = forward_pd_access_packet(pkg, inst, packet_command(packet), timestamp, x, y);
@@ -2277,8 +2348,9 @@ static struct packet *client_pd_access_scroll_up(pid_t pid, int handle, const st
 
 out:
 	result = packet_create_reply(packet, "i", ret);
-	if (!result)
+	if (!result) {
 		ErrPrint("Failed to create a reply packet\n");
+	}
 
 	return result;
 }
@@ -2311,8 +2383,9 @@ static struct packet *client_pd_access_unhighlight(pid_t pid, int handle, const 
 	}
 
 	ret = validate_request(pkgname, id, &inst, &pkg);
-	if (ret != LB_STATUS_SUCCESS)
+	if (ret != LB_STATUS_SUCCESS) {
 		goto out;
+	}
 
 	if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
 		ret = forward_pd_access_packet(pkg, inst, packet_command(packet), timestamp, x, y);
@@ -2359,8 +2432,9 @@ static struct packet *client_pd_access_unhighlight(pid_t pid, int handle, const 
 	}
 out:
 	result = packet_create_reply(packet, "i", ret);
-	if (!result)
+	if (!result) {
 		ErrPrint("Failed to create a reply packet\n");
+	}
 
 	return result;
 }
@@ -2393,8 +2467,9 @@ static struct packet *client_pd_access_hl(pid_t pid, int handle, const struct pa
 	}
 
 	ret = validate_request(pkgname, id, &inst, &pkg);
-	if (ret != LB_STATUS_SUCCESS)
+	if (ret != LB_STATUS_SUCCESS) {
 		goto out;
+	}
 
 	if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
 		ret = forward_pd_access_packet(pkg, inst, packet_command(packet), timestamp, x, y);
@@ -2442,8 +2517,9 @@ static struct packet *client_pd_access_hl(pid_t pid, int handle, const struct pa
 
 out:
 	result = packet_create_reply(packet, "i", ret);
-	if (!result)
+	if (!result) {
 		ErrPrint("Failed to create a reply packet\n");
+	}
 
 	return result;
 }
@@ -2476,8 +2552,9 @@ static struct packet *client_pd_access_hl_prev(pid_t pid, int handle, const stru
 	}
 
 	ret = validate_request(pkgname, id, &inst, &pkg);
-	if (ret != LB_STATUS_SUCCESS)
+	if (ret != LB_STATUS_SUCCESS) {
 		goto out;
+	}
 
 	if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
 		ret = forward_pd_access_packet(pkg, inst, packet_command(packet), timestamp, x, y);
@@ -2525,8 +2602,9 @@ static struct packet *client_pd_access_hl_prev(pid_t pid, int handle, const stru
 
 out:
 	result = packet_create_reply(packet, "i", ret);
-	if (!result)
+	if (!result) {
 		ErrPrint("Failed to create a reply packet\n");
+	}
 
 	return result;
 }
@@ -2559,8 +2637,9 @@ static struct packet *client_pd_access_hl_next(pid_t pid, int handle, const stru
 	}
 
 	ret = validate_request(pkgname, id, &inst, &pkg);
-	if (ret != LB_STATUS_SUCCESS)
+	if (ret != LB_STATUS_SUCCESS) {
 		goto out;
+	}
 
 	if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
 		ret = forward_pd_access_packet(pkg, inst, packet_command(packet), timestamp, x, y);
@@ -2614,8 +2693,9 @@ static struct packet *client_pd_access_hl_next(pid_t pid, int handle, const stru
 
 out:
 	result = packet_create_reply(packet, "i", ret);
-	if (!result)
+	if (!result) {
 		ErrPrint("Failed to create a reply packet\n");
+	}
 
 	return result;
 }
@@ -2648,8 +2728,9 @@ static struct packet *client_pd_access_activate(pid_t pid, int handle, const str
 	}
 
 	ret = validate_request(pkgname, id, &inst, &pkg);
-	if (ret != LB_STATUS_SUCCESS)
+	if (ret != LB_STATUS_SUCCESS) {
 		goto out;
+	}
 
 	if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
 		ret = forward_pd_access_packet(pkg, inst, packet_command(packet), timestamp, x, y);
@@ -2697,8 +2778,9 @@ static struct packet *client_pd_access_activate(pid_t pid, int handle, const str
 
 out:
 	result = packet_create_reply(packet, "i", ret);
-	if (!result)
+	if (!result) {
 		ErrPrint("Failed to create a reply packet\n");
+	}
 
 	return result;
 }
@@ -2730,8 +2812,9 @@ static struct packet *client_pd_key_down(pid_t pid, int handle, const struct pac
 	}
 
 	ret = validate_request(pkgname, id, &inst, &pkg);
-	if (ret != LB_STATUS_SUCCESS)
+	if (ret != LB_STATUS_SUCCESS) {
 		goto out;
+	}
 
 	if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
 		ret = forward_pd_event_packet(pkg, inst, packet);
@@ -2786,10 +2869,11 @@ static struct packet *client_pause_request(pid_t pid, int handle, const struct p
 		goto out;
 	}
 
-	if (USE_XMONITOR)
+	if (USE_XMONITOR) {
 		DbgPrint("XMONITOR enabled. ignore client paused request\n");
-	else
+	} else {
 		xmonitor_pause(client);
+	}
 
 out:
 	return NULL;
@@ -2813,10 +2897,11 @@ static struct packet *client_resume_request(pid_t pid, int handle, const struct 
 		goto out;
 	}
 
-	if (USE_XMONITOR)
+	if (USE_XMONITOR) {
 		DbgPrint("XMONITOR enabled. ignore client resumed request\n");
-	else
+	} else {
 		xmonitor_resume(client);
+	}
 
 out:
 	return NULL;
@@ -2849,8 +2934,9 @@ static struct packet *client_pd_key_up(pid_t pid, int handle, const struct packe
 	}
 
 	ret = validate_request(pkgname, id, &inst, &pkg);
-	if (ret != LB_STATUS_SUCCESS)
+	if (ret != LB_STATUS_SUCCESS) {
 		goto out;
+	}
 
 	if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
 		ret = forward_pd_event_packet(pkg, inst, packet);
@@ -2913,8 +2999,9 @@ static struct packet *client_lb_access_hl(pid_t pid, int handle, const struct pa
 	}
 
 	ret = validate_request(pkgname, id, &inst, &pkg);
-	if (ret != LB_STATUS_SUCCESS)
+	if (ret != LB_STATUS_SUCCESS) {
 		goto out;
+	}
 
 	if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
 		ret = forward_lb_access_packet(pkg, inst, packet_command(packet), timestamp, x, y);
@@ -2962,8 +3049,9 @@ static struct packet *client_lb_access_hl(pid_t pid, int handle, const struct pa
 
 out:
 	result = packet_create_reply(packet, "i", ret);
-	if (!result)
+	if (!result) {
 		ErrPrint("Failed to create a reply packet\n");
+	}
 
 	return result;
 }
@@ -2996,8 +3084,9 @@ static struct packet *client_lb_access_hl_prev(pid_t pid, int handle, const stru
 	}
 
 	ret = validate_request(pkgname, id, &inst, &pkg);
-	if (ret != LB_STATUS_SUCCESS)
+	if (ret != LB_STATUS_SUCCESS) {
 		goto out;
+	}
 
 	if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
 		ret = forward_lb_access_packet(pkg, inst, packet_command(packet), timestamp, x, y);
@@ -3045,8 +3134,9 @@ static struct packet *client_lb_access_hl_prev(pid_t pid, int handle, const stru
 
 out:
 	result = packet_create_reply(packet, "i", ret);
-	if (!result)
+	if (!result) {
 		ErrPrint("Failed to create a reply packet\n");
+	}
 
 	return result;
 }
@@ -3079,8 +3169,9 @@ static struct packet *client_lb_access_hl_next(pid_t pid, int handle, const stru
 	}
 
 	ret = validate_request(pkgname, id, &inst, &pkg);
-	if (ret != LB_STATUS_SUCCESS)
+	if (ret != LB_STATUS_SUCCESS) {
 		goto out;
+	}
 
 	if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
 		ret = forward_lb_access_packet(pkg, inst, packet_command(packet), timestamp, x, y);
@@ -3128,8 +3219,9 @@ static struct packet *client_lb_access_hl_next(pid_t pid, int handle, const stru
 
 out:
 	result = packet_create_reply(packet, "i", ret);
-	if (!result)
+	if (!result) {
 		ErrPrint("Failed to create a reply packet\n");
+	}
 
 	return result;
 }
@@ -3162,8 +3254,9 @@ static struct packet *client_lb_access_action_up(pid_t pid, int handle, const st
 	}
 
 	ret = validate_request(pkgname, id, &inst, &pkg);
-	if (ret != LB_STATUS_SUCCESS)
+	if (ret != LB_STATUS_SUCCESS) {
 		goto out;
+	}
 
 	if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
 		ret = forward_lb_access_packet(pkg, inst, packet_command(packet), timestamp, x, y);
@@ -3218,8 +3311,9 @@ static struct packet *client_lb_access_action_up(pid_t pid, int handle, const st
 
 out:
 	result = packet_create_reply(packet, "i", ret);
-	if (!result)
+	if (!result) {
 		ErrPrint("Failed to create a reply packet\n");
+	}
 
 	return result;
 }
@@ -3252,8 +3346,9 @@ static struct packet *client_lb_access_action_down(pid_t pid, int handle, const 
 	}
 
 	ret = validate_request(pkgname, id, &inst, &pkg);
-	if (ret != LB_STATUS_SUCCESS)
+	if (ret != LB_STATUS_SUCCESS) {
 		goto out;
+	}
 
 	if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
 		ret = forward_lb_access_packet(pkg, inst, packet_command(packet), timestamp, x, y);
@@ -3308,8 +3403,9 @@ static struct packet *client_lb_access_action_down(pid_t pid, int handle, const 
 
 out:
 	result = packet_create_reply(packet, "i", ret);
-	if (!result)
+	if (!result) {
 		ErrPrint("Failed to create a reply packet\n");
+	}
 
 	return result;
 }
@@ -3342,8 +3438,9 @@ static struct packet *client_lb_access_unhighlight(pid_t pid, int handle, const 
 	}
 
 	ret = validate_request(pkgname, id, &inst, &pkg);
-	if (ret != LB_STATUS_SUCCESS)
+	if (ret != LB_STATUS_SUCCESS) {
 		goto out;
+	}
 
 	if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
 		ret = forward_lb_access_packet(pkg, inst, packet_command(packet), timestamp, x, y);
@@ -3391,8 +3488,9 @@ static struct packet *client_lb_access_unhighlight(pid_t pid, int handle, const 
 
 out:
 	result = packet_create_reply(packet, "i", ret);
-	if (!result)
+	if (!result) {
 		ErrPrint("Failed to create a reply packet\n");
+	}
 
 	return result;
 }
@@ -3425,8 +3523,9 @@ static struct packet *client_lb_access_scroll_down(pid_t pid, int handle, const 
 	}
 
 	ret = validate_request(pkgname, id, &inst, &pkg);
-	if (ret != LB_STATUS_SUCCESS)
+	if (ret != LB_STATUS_SUCCESS) {
 		goto out;
+	}
 
 	if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
 		ret = forward_lb_access_packet(pkg, inst, packet_command(packet), timestamp, x, y);
@@ -3481,8 +3580,9 @@ static struct packet *client_lb_access_scroll_down(pid_t pid, int handle, const 
 
 out:
 	result = packet_create_reply(packet, "i", ret);
-	if (!result)
+	if (!result) {
 		ErrPrint("Failed to create a reply packet\n");
+	}
 
 	return result;
 }
@@ -3515,8 +3615,9 @@ static struct packet *client_lb_access_scroll_move(pid_t pid, int handle, const 
 	}
 
 	ret = validate_request(pkgname, id, &inst, &pkg);
-	if (ret != LB_STATUS_SUCCESS)
+	if (ret != LB_STATUS_SUCCESS) {
 		goto out;
+	}
 
 	if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
 		ret = forward_lb_access_packet(pkg, inst, packet_command(packet), timestamp, x, y);
@@ -3571,8 +3672,9 @@ static struct packet *client_lb_access_scroll_move(pid_t pid, int handle, const 
 
 out:
 	result = packet_create_reply(packet, "i", ret);
-	if (!result)
+	if (!result) {
 		ErrPrint("Failed to create a reply packet\n");
+	}
 
 	return result;
 }
@@ -3605,8 +3707,9 @@ static struct packet *client_lb_access_scroll_up(pid_t pid, int handle, const st
 	}
 
 	ret = validate_request(pkgname, id, &inst, &pkg);
-	if (ret != LB_STATUS_SUCCESS)
+	if (ret != LB_STATUS_SUCCESS) {
 		goto out;
+	}
 
 	if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
 		ret = forward_lb_access_packet(pkg, inst, packet_command(packet), timestamp, x, y);
@@ -3661,8 +3764,9 @@ static struct packet *client_lb_access_scroll_up(pid_t pid, int handle, const st
 
 out:
 	result = packet_create_reply(packet, "i", ret);
-	if (!result)
+	if (!result) {
 		ErrPrint("Failed to create a reply packet\n");
+	}
 
 	return result;
 }
@@ -3695,8 +3799,9 @@ static struct packet *client_lb_access_activate(pid_t pid, int handle, const str
 	}
 
 	ret = validate_request(pkgname, id, &inst, &pkg);
-	if (ret != LB_STATUS_SUCCESS)
+	if (ret != LB_STATUS_SUCCESS) {
 		goto out;
+	}
 
 	if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
 		ret = forward_lb_access_packet(pkg, inst, packet_command(packet), timestamp, x, y);
@@ -3746,8 +3851,9 @@ static struct packet *client_lb_access_activate(pid_t pid, int handle, const str
 
 out:
 	result = packet_create_reply(packet, "i", ret);
-	if (!result)
+	if (!result) {
 		ErrPrint("Failed to create a reply packet\n");
+	}
 
 	return result;
 }
@@ -3779,8 +3885,9 @@ static struct packet *client_lb_key_down(pid_t pid, int handle, const struct pac
 	}
 
 	ret = validate_request(pkgname, id, &inst, &pkg);
-	if (ret != LB_STATUS_SUCCESS)
+	if (ret != LB_STATUS_SUCCESS) {
 		goto out;
+	}
 
 	if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
 		ret = forward_lb_event_packet(pkg, inst, packet);
@@ -3843,8 +3950,9 @@ static struct packet *client_lb_key_up(pid_t pid, int handle, const struct packe
 	}
 
 	ret = validate_request(pkgname, id, &inst, &pkg);
-	if (ret != LB_STATUS_SUCCESS)
+	if (ret != LB_STATUS_SUCCESS) {
 		goto out;
+	}
 
 	if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
 		ret = forward_lb_event_packet(pkg, inst, packet);
@@ -3912,8 +4020,9 @@ static struct packet *client_lb_acquire_pixmap(pid_t pid, int handle, const stru
 	}
 
 	ret = validate_request(pkgname, id, &inst, NULL);
-	if (ret != LB_STATUS_SUCCESS)
+	if (ret != LB_STATUS_SUCCESS) {
 		goto out;
+	}
 
 	buffer = instance_lb_buffer(inst);
 	if (!buffer) {
@@ -3955,8 +4064,9 @@ static struct packet *client_lb_acquire_pixmap(pid_t pid, int handle, const stru
 
 out:
 	result = packet_create_reply(packet, "i", pixmap);
-	if (!result)
+	if (!result) {
 		ErrPrint("Failed to create a reply packet\n");
+	}
 
 	return result;
 }
@@ -3984,8 +4094,9 @@ static struct packet *client_lb_release_pixmap(pid_t pid, int handle, const stru
 	}
 
 	ret = validate_request(pkgname, id, &inst, NULL);
-	if (ret != LB_STATUS_SUCCESS)
+	if (ret != LB_STATUS_SUCCESS) {
 		goto out;
+	}
 
 	buf_ptr = buffer_handler_pixmap_find(pixmap);
 	if (!buf_ptr) {
@@ -3993,8 +4104,9 @@ static struct packet *client_lb_release_pixmap(pid_t pid, int handle, const stru
 		goto out;
 	}
 
-	if (client_event_callback_del(client, CLIENT_EVENT_DEACTIVATE, release_pixmap_cb, buf_ptr) == 0)
+	if (client_event_callback_del(client, CLIENT_EVENT_DEACTIVATE, release_pixmap_cb, buf_ptr) == 0) {
 		buffer_handler_pixmap_unref(buf_ptr);
+	}
 
 out:
 	/*! \note No reply packet */
@@ -4026,8 +4138,9 @@ static struct packet *client_pd_acquire_pixmap(pid_t pid, int handle, const stru
 	}
 
 	ret = validate_request(pkgname, id, &inst, NULL);
-	if (ret != LB_STATUS_SUCCESS)
+	if (ret != LB_STATUS_SUCCESS) {
 		goto out;
+	}
 
 	buffer = instance_pd_buffer(inst);
 	if (!buffer) {
@@ -4060,14 +4173,16 @@ static struct packet *client_pd_acquire_pixmap(pid_t pid, int handle, const stru
 	}
 
 	ret = client_event_callback_add(client, CLIENT_EVENT_DEACTIVATE, release_pixmap_cb, buf_ptr);
-	if (ret < 0)
+	if (ret < 0) {
 		buffer_handler_pixmap_unref(buf_ptr);
+	}
 
 	pixmap = buffer_handler_pixmap(buffer);
 out:
 	result = packet_create_reply(packet, "i", pixmap);
-	if (!result)
+	if (!result) {
 		ErrPrint("Failed to create a reply packet\n");
+	}
 
 	return result;
 }
@@ -4094,8 +4209,9 @@ static struct packet *client_pd_release_pixmap(pid_t pid, int handle, const stru
 	}
 
 	ret = validate_request(pkgname, id, NULL, NULL);
-	if (ret != LB_STATUS_SUCCESS)
+	if (ret != LB_STATUS_SUCCESS) {
 		goto out;
+	}
 
 	buf_ptr = buffer_handler_pixmap_find(pixmap);
 	if (!buf_ptr) {
@@ -4103,8 +4219,9 @@ static struct packet *client_pd_release_pixmap(pid_t pid, int handle, const stru
 		goto out;
 	}
 
-	if (client_event_callback_del(client, CLIENT_EVENT_DEACTIVATE, release_pixmap_cb, buf_ptr) == 0)
+	if (client_event_callback_del(client, CLIENT_EVENT_DEACTIVATE, release_pixmap_cb, buf_ptr) == 0) {
 		buffer_handler_pixmap_unref(buf_ptr);
+	}
 
 out:
 	/*! \note No reply packet */
@@ -4138,13 +4255,15 @@ static struct packet *client_pinup_changed(pid_t pid, int handle, const struct p
 	}
 
 	ret = validate_request(pkgname, id, &inst, NULL);
-	if (ret == LB_STATUS_SUCCESS)
+	if (ret == LB_STATUS_SUCCESS) {
 		ret = instance_set_pinup(inst, pinup);
+	}
 
 out:
 	result = packet_create_reply(packet, "i", ret);
-	if (!result)
+	if (!result) {
 		ErrPrint("Failed to create a packet\n");
+	}
 
 	return result;
 }
@@ -4206,7 +4325,9 @@ static Eina_Bool lazy_pd_destroyed_cb(void *inst)
 	if (instance_unref(inst)) {
 		int ret;
 		ret = instance_client_pd_destroyed(inst, LB_STATUS_SUCCESS);
-		DbgPrint("Send PD Destroy event (%d) to client\n", ret);
+		if (ret < 0) {
+			ErrPrint("Failed sending PD Destroy event (%d)\n", ret);
+		}
 	}
 
 	return ECORE_CALLBACK_CANCEL;
@@ -4238,8 +4359,9 @@ static struct packet *client_pd_move(pid_t pid, int handle, const struct packet 
 	}
 
 	ret = validate_request(pkgname, id, &inst, &pkg);
-	if (ret != LB_STATUS_SUCCESS)
+	if (ret != LB_STATUS_SUCCESS) {
 		goto out;
+	}
 
 	if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
 		instance_slave_set_pd_pos(inst, x, y);
@@ -4359,8 +4481,9 @@ static struct packet *client_create_pd(pid_t pid, int handle, const struct packe
 	}
 
 	ret = validate_request(pkgname, id, &inst, &pkg);
-	if (ret != LB_STATUS_SUCCESS)
+	if (ret != LB_STATUS_SUCCESS) {
 		goto out;
+	}
 
 	if (instance_pd_owner(inst)) {
 		ErrPrint("PD is already owned\n");
@@ -4496,16 +4619,18 @@ static struct packet *client_create_pd(pid_t pid, int handle, const struct packe
 				 */
 				pd_monitor = ecore_timer_add(DELAY_TIME, lazy_pd_created_cb, inst);
 				if (!pd_monitor) {
-					struct inst_info *tmp_inst;
-
-					tmp_inst = instance_unref(inst);
-					ErrPrint("Instance: %p (%s)\n", tmp_inst, pkgname);
-
 					ret = script_handler_unload(instance_pd_script(inst), 1);
 					ErrPrint("Unload script: %d\n", ret);
 
 					ret = instance_slave_close_pd(inst, client);
 					ErrPrint("Close PD %d\n", ret);
+
+					inst = instance_unref(inst);
+					if (!inst) {
+						DbgPrint("Instance destroyed\n");
+					}
+
+					ErrPrint("Instance: %s\n", pkgname);
 
 					ret = LB_STATUS_ERROR_FAULT;
 				} else {
@@ -4538,8 +4663,9 @@ static struct packet *client_create_pd(pid_t pid, int handle, const struct packe
 
 out:
 	result = packet_create_reply(packet, "i", ret);
-	if (!result)
+	if (!result) {
 		ErrPrint("Failed to create a packet\n");
+	}
 
 	return result;
 }
@@ -4573,8 +4699,9 @@ static struct packet *client_destroy_pd(pid_t pid, int handle, const struct pack
 	}
 
 	ret = validate_request(pkgname, id, &inst, &pkg);
-	if (ret != LB_STATUS_SUCCESS)
+	if (ret != LB_STATUS_SUCCESS) {
 		goto out;
+	}
 
 	slave = package_slave(pkg);
 	if (!slave) {
@@ -4610,20 +4737,24 @@ static struct packet *client_destroy_pd(pid_t pid, int handle, const struct pack
 			 */
 			ret = LB_STATUS_ERROR_CANCEL;
 			ret = instance_client_pd_created(inst, ret);
-			if (ret < 0)
+			if (ret < 0) {
 				ErrPrint("PD client create event: %d\n", ret);
+			}
 
 			ret = instance_client_pd_destroyed(inst, LB_STATUS_SUCCESS);
-			if (ret < 0)
+			if (ret < 0) {
 				ErrPrint("PD client destroy event: %d\n", ret);
+			}
 
 			ret = instance_signal_emit(inst, "pd,hide", instance_id(inst), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0);
-			if (ret < 0)
+			if (ret < 0) {
 				ErrPrint("PD close signal emit failed: %d\n", ret);
+			}
 
 			ret = instance_slave_close_pd(inst, client);
-			if (ret < 0)
+			if (ret < 0) {
 				ErrPrint("PD close request failed: %d\n", ret);
+			}
 
 			ecore_timer_del(pd_monitor);
 			(void)instance_unref(inst);
@@ -4643,15 +4774,17 @@ static struct packet *client_destroy_pd(pid_t pid, int handle, const struct pack
 			ecore_timer_del(pd_monitor);
 
 			inst = instance_unref(inst);
-			if (!inst)
+			if (!inst) {
 				goto out;
+			}
 
 			resize_aborted = 1;
 		}
 
 		ret = instance_signal_emit(inst, "pd,hide", instance_id(inst), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0);
-		if (ret < 0)
+		if (ret < 0) {
 			ErrPrint("PD close signal emit failed: %d\n", ret);
+		}
 
 		ret = instance_slave_close_pd(inst, client);
 		if (ret < 0) {
@@ -4690,8 +4823,9 @@ static struct packet *client_destroy_pd(pid_t pid, int handle, const struct pack
 		}
 
 		ret = script_handler_unload(instance_pd_script(inst), 1);
-		if (ret < 0)
+		if (ret < 0) {
 			ErrPrint("Unable to unload the script: %s, %d\n", pkgname, ret);
+		}
 
 		/*!
 		 * \note
@@ -4699,8 +4833,9 @@ static struct packet *client_destroy_pd(pid_t pid, int handle, const struct pack
 		 * The SLAVE must has to repsonse this via "release_buffer" method.
 		 */
 		ret = instance_slave_close_pd(inst, client);
-		if (ret < 0)
+		if (ret < 0) {
 			ErrPrint("Unable to close the PD: %s, %d\n", pkgname, ret);
+		}
 
 		/*!
 		 * \note
@@ -4730,8 +4865,9 @@ static struct packet *client_destroy_pd(pid_t pid, int handle, const struct pack
 
 out:
 	result = packet_create_reply(packet, "i", ret);
-	if (!result)
+	if (!result) {
 		ErrPrint("Failed to create a packet\n");
+	}
 
 	return result;
 }
@@ -4774,15 +4910,17 @@ static struct packet *client_activate_package(pid_t pid, int handle, const struc
 	}
 
 	info = package_find(pkgname);
-	if (!info)
+	if (!info) {
 		ret = LB_STATUS_ERROR_NOT_EXIST;
-	else
+	} else {
 		ret = package_clear_fault(info);
+	}
 
 out:
 	result = packet_create_reply(packet, "is", ret, pkgname);
-	if (!result)
+	if (!result) {
 		ErrPrint("Failed to create a packet\n");
+	}
 
 	return result;
 }
@@ -4819,8 +4957,9 @@ static struct packet *client_subscribed(pid_t pid, int handle, const struct pack
 	 * SUBSCRIBE cluster & sub-cluster for a client.
 	 */
 	ret = client_subscribe(client, cluster, category);
-	if (ret == 0)
+	if (ret == 0) {
 		package_alter_instances_to_client(client, ALTER_CREATE);
+	}
 
 out:
 	/*! \note No reply packet */
@@ -4863,8 +5002,10 @@ static struct packet *client_delete_cluster(pid_t pid, int handle, const struct 
 
 out:
 	result = packet_create_reply(packet, "i", ret);
-	if (!result)
+	if (!result) {
 		ErrPrint("Failed to create a packet\n");
+	}
+
 	return result;
 }
 
@@ -4897,8 +5038,9 @@ static inline int update_pkg_cb(struct category *category, const char *pkgname)
 		 * It means. some clients wants to handle this instances ;)
 		 */
 		inst = instance_create(NULL, timestamp, pkgname, "", c_name, s_name, DEFAULT_PERIOD, 0, 0);
-		if (!inst)
+		if (!inst) {
 			ErrPrint("Failed to create a new instance\n");
+		}
 	} else {
 		ErrPrint("Not enough space\n");
 	}
@@ -4926,8 +5068,9 @@ static struct packet *client_update(pid_t pid, int handle, const struct packet *
 	}
 
 	ret = validate_request(pkgname, id, &inst, NULL);
-	if (ret != LB_STATUS_SUCCESS)
+	if (ret != LB_STATUS_SUCCESS) {
 		goto out;
+	}
 
 	if (instance_client(inst) != client) {
 		/* PERMISSIONS */
@@ -5030,8 +5173,10 @@ static struct packet *client_delete_category(pid_t pid, int handle, const struct
 
 out:
 	result = packet_create_reply(packet, "i", ret);
-	if (!result)
+	if (!result) {
 		ErrPrint("Failed to create a packet\n");
+	}
+
 	return result;
 }
 
@@ -5068,8 +5213,9 @@ static struct packet *client_unsubscribed(pid_t pid, int handle, const struct pa
 	 * UNSUBSCRIBE cluster & sub-cluster for a client.
 	 */
 	ret = client_unsubscribe(client, cluster, category);
-	if (ret == 0)
+	if (ret == 0) {
 		package_alter_instances_to_client(client, ALTER_DESTROY);
+	}
 
 out:
 	/*! \note No reply packet */
@@ -5092,8 +5238,9 @@ static struct packet *slave_hello(pid_t pid, int handle, const struct packet *pa
 
 	slave = slave_find_by_name(slavename);
 
-	if (!slave) /* Try again to find a slave using pid */
+	if (!slave) { /* Try again to find a slave using pid */
 		slave = slave_find_by_pid(pid);
+	}
 
 	if (!slave) {
 		if (DEBUG_MODE) {
@@ -5125,6 +5272,10 @@ static struct packet *slave_hello(pid_t pid, int handle, const struct packet *pa
 			} else {
 				DbgPrint("Registered slave is replaced with this new one\n");
 				abi = slave_abi(slave);
+				if (!abi) {
+					ErrPrint("ABI is not valid: %s\n", slavename);
+					abi = DEFAULT_ABI;
+				}
 			}
 
 			slave_set_pid(slave, pid);
@@ -5172,10 +5323,11 @@ static struct packet *slave_ping(pid_t pid, int handle, const struct packet *pac
 	}
 
 	ret = packet_get(packet, "s", &slavename);
-	if (ret != 1)
+	if (ret != 1) {
 		ErrPrint("Parameter is not matched\n");
-	else
+	} else {
 		slave_rpc_ping(slave);
+	}
 
 out:
 	return NULL;
@@ -5243,8 +5395,9 @@ static struct packet *slave_lb_update_begin(pid_t pid, int handle, const struct 
 	}
 
 	ret = validate_request(pkgname, id, &inst, &pkg);
-	if (ret != LB_STATUS_SUCCESS)
+	if (ret != LB_STATUS_SUCCESS) {
 		goto out;
+	}
 
 	if (instance_state(inst) == INST_DESTROYED) {
 		ErrPrint("Package[%s] instance is already destroyed\n", pkgname);
@@ -5253,8 +5406,9 @@ static struct packet *slave_lb_update_begin(pid_t pid, int handle, const struct 
 
 	if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
 		ret = instance_lb_update_begin(inst, priority, content, title);
-		if (ret == LB_STATUS_SUCCESS)
+		if (ret == LB_STATUS_SUCCESS) {
 			slave_freeze_ttl(slave);
+		}
 	} else {
 		ErrPrint("Invalid request[%s]\n", id);
 	}
@@ -5285,8 +5439,9 @@ static struct packet *slave_lb_update_end(pid_t pid, int handle, const struct pa
 	}
 
 	ret = validate_request(pkgname, id, &inst, &pkg);
-	if (ret != LB_STATUS_SUCCESS)
+	if (ret != LB_STATUS_SUCCESS) {
 		goto out;
+	}
 
 	if (instance_state(inst) == INST_DESTROYED) {
 		ErrPrint("Package[%s] instance is already destroyed\n", pkgname);
@@ -5295,8 +5450,9 @@ static struct packet *slave_lb_update_end(pid_t pid, int handle, const struct pa
 
 	if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
 		ret = instance_lb_update_end(inst);
-		if (ret == LB_STATUS_SUCCESS)
+		if (ret == LB_STATUS_SUCCESS) {
 			slave_thaw_ttl(slave);
+		}
 	} else {
 		ErrPrint("Invalid request[%s]\n", id);
 	}
@@ -5327,18 +5483,20 @@ static struct packet *slave_pd_update_begin(pid_t pid, int handle, const struct 
 	}
 
 	ret = validate_request(pkgname, id, &inst, &pkg);
-	if (ret != LB_STATUS_SUCCESS)
+	if (ret != LB_STATUS_SUCCESS) {
 		goto out;
+	}
 
 	if (instance_state(inst) == INST_DESTROYED) {
 		ErrPrint("Package[%s] instance is already destroyed\n", pkgname);
 		goto out;
 	}
 
-	if (package_pd_type(pkg) == PD_TYPE_BUFFER)
+	if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
 		(void)instance_pd_update_begin(inst);
-	else
+	} else {
 		ErrPrint("Invalid request[%s]\n", id);
+	}
 
 out:
 	return NULL;
@@ -5367,10 +5525,11 @@ static struct packet *slave_access_status(pid_t pid, int handle, const struct pa
 
 	ret = validate_request(pkgname, id, &inst, NULL);
 	if (ret == LB_STATUS_SUCCESS) {
-		if (instance_state(inst) == INST_DESTROYED)
+		if (instance_state(inst) == INST_DESTROYED) {
 			ErrPrint("Package[%s] instance is already destroyed\n", pkgname);
-		else
+		} else {
 			(void)instance_forward_packet(inst, packet_ref((struct packet *)packet));
+		}
 	}
 
 out:
@@ -5399,18 +5558,20 @@ static struct packet *slave_pd_update_end(pid_t pid, int handle, const struct pa
 	}
 
 	ret = validate_request(pkgname, id, &inst, &pkg);
-	if (ret != LB_STATUS_SUCCESS)
+	if (ret != LB_STATUS_SUCCESS) {
 		goto out;
+	}
 
 	if (instance_state(inst) == INST_DESTROYED) {
 		ErrPrint("Package[%s] instance is already destroyed\n", pkgname);
 		goto out;
 	}
 
-	if (package_pd_type(pkg) == PD_TYPE_BUFFER)
+	if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
 		(void)instance_pd_update_end(inst);
-	else
+	} else {
 		ErrPrint("Invalid request[%s]\n", id);
+	}
 
 out:
 	return NULL;
@@ -5560,10 +5721,11 @@ static struct packet *slave_hold_scroll(pid_t pid, int handle, const struct pack
 
 	ret = validate_request(pkgname, id, &inst, NULL);
 	if (ret == LB_STATUS_SUCCESS) {
-		if (instance_state(inst) == INST_DESTROYED)
+		if (instance_state(inst) == INST_DESTROYED) {
 			ErrPrint("Package[%s] instance is already destroyed\n", pkgname);
-		else
+		} else {
 			(void)instance_hold_scroll(inst, seize);
+		}
 	}
 
 out:
@@ -5592,8 +5754,9 @@ static struct packet *slave_desc_updated(pid_t pid, int handle, const struct pac
 	}
 
 	ret = validate_request(pkgname, id, &inst, NULL);
-	if (ret != LB_STATUS_SUCCESS)
+	if (ret != LB_STATUS_SUCCESS) {
 		goto out;
+	}
 
 	if (instance_state(inst) == INST_DESTROYED) {
 		ErrPrint("Package[%s] instance is already destroyed\n", pkgname);
@@ -5685,8 +5848,9 @@ static struct packet *slave_acquire_buffer(pid_t pid, int handle, const struct p
 	ret = validate_request(pkgname, id, &inst, &pkg);
 	id = "";
 
-	if (ret != LB_STATUS_SUCCESS)
+	if (ret != LB_STATUS_SUCCESS) {
 		goto out;
+	}
 
 	ret = LB_STATUS_ERROR_INVALID;
 
@@ -5786,14 +5950,16 @@ static struct packet *slave_acquire_buffer(pid_t pid, int handle, const struct p
 		/*!
 		 * Send the PD created event to the client
 		 */
-		if (!is_resize)
+		if (!is_resize) {
 			instance_client_pd_created(inst, ret);
+		}
 	}
 
 out:
 	result = packet_create_reply(packet, "is", ret, id);
-	if (!result)
+	if (!result) {
 		ErrPrint("Failed to create a packet\n");
+	}
 
 	return result;
 }
@@ -5829,8 +5995,9 @@ static struct packet *slave_resize_buffer(pid_t pid, int handle, const struct pa
 
 	ret = validate_request(pkgname, id, &inst, &pkg);
 	id = "";
-	if (ret != LB_STATUS_SUCCESS)
+	if (ret != LB_STATUS_SUCCESS) {
 		goto out;
+	}
 
 	ret = LB_STATUS_ERROR_INVALID;
 	/*!
@@ -5847,8 +6014,9 @@ static struct packet *slave_resize_buffer(pid_t pid, int handle, const struct pa
 		struct buffer_info *info;
 
 		info = instance_lb_buffer(inst);
-		if (!info)
+		if (!info) {
 			goto out;
+		}
 
 		ret = buffer_handler_resize(info, w, h);
 		/*!
@@ -5864,8 +6032,9 @@ static struct packet *slave_resize_buffer(pid_t pid, int handle, const struct pa
 		struct buffer_info *info;
 
 		info = instance_pd_buffer(inst);
-		if (!info)
+		if (!info) {
 			goto out;
+		}
 
 		ret = buffer_handler_resize(info, w, h);
 		/*!
@@ -5880,8 +6049,9 @@ static struct packet *slave_resize_buffer(pid_t pid, int handle, const struct pa
 
 out:
 	result = packet_create_reply(packet, "is", ret, id);
-	if (!result)
+	if (!result) {
 		ErrPrint("Failed to create a packet\n");
+	}
 
 	return result;
 }
@@ -5911,8 +6081,9 @@ static struct packet *slave_release_buffer(pid_t pid, int handle, const struct p
 	}
 
 	ret = validate_request(pkgname, id, &inst, &pkg);
-	if (ret != LB_STATUS_SUCCESS)
+	if (ret != LB_STATUS_SUCCESS) {
 		goto out;
+	}
 
 	ret = LB_STATUS_ERROR_INVALID;
 
@@ -5990,13 +6161,13 @@ static struct packet *slave_release_buffer(pid_t pid, int handle, const struct p
 			 */
 			instance_client_pd_destroyed(inst, ret);
 		}
-
 	}
 
 out:
 	result = packet_create_reply(packet, "i", ret);
-	if (!result)
+	if (!result) {
 		ErrPrint("Failed to create a packet\n");
+	}
 
 	return result;
 }
@@ -6032,8 +6203,9 @@ static struct packet *service_change_period(pid_t pid, int handle, const struct 
 			inst_list = package_instance_list(pkg);
 			EINA_LIST_FOREACH(inst_list, l, inst) {
 				ret = instance_set_period(inst, period);
-				if (ret < 0)
+				if (ret < 0) {
 					ErrPrint("Failed to change the period of %s to (%lf)\n", pkgname, period);
+				}
 			}
 		}
 	} else {
@@ -6052,8 +6224,9 @@ static struct packet *service_change_period(pid_t pid, int handle, const struct 
 	DbgPrint("Change the update period: %s, %lf : %d\n", pkgname, period, ret);
 out:
 	result = packet_create_reply(packet, "i", ret);
-	if (!result)
+	if (!result) {
 		ErrPrint("Failed to create a packet\n");
+	}
 
 	return result;
 }
@@ -6132,8 +6305,9 @@ static struct packet *service_update(pid_t pid, int handle, const struct packet 
 
 out:
 	result = packet_create_reply(packet, "i", ret);
-	if (!result)
+	if (!result) {
 		ErrPrint("Failed to create a packet\n");
+	}
 
 	return result;
 }
@@ -6169,8 +6343,9 @@ static struct packet *liveinfo_hello(pid_t pid, int handle, const struct packet 
 
 out:
 	result = packet_create_reply(packet, "si", fifo_name, ret);
-	if (!result)
+	if (!result) {
 		ErrPrint("Failed to create a result packet\n");
+	}
 
 	return result;
 }
@@ -6870,29 +7045,36 @@ HAPI int server_init(void)
 {
 	com_core_packet_use_thread(COM_CORE_THREAD);
 
-	if (unlink(INFO_SOCKET) < 0)
+	if (unlink(INFO_SOCKET) < 0) {
 		ErrPrint("info socket: %s\n", strerror(errno));
+	}
 
-	if (unlink(SLAVE_SOCKET) < 0)
+	if (unlink(SLAVE_SOCKET) < 0) {
 		ErrPrint("slave socket: %s\n", strerror(errno));
+	}
 
-	if (unlink(CLIENT_SOCKET) < 0)
+	if (unlink(CLIENT_SOCKET) < 0) {
 		ErrPrint("client socket: %s\n", strerror(errno));
+	}
 
-	if (unlink(SERVICE_SOCKET) < 0)
+	if (unlink(SERVICE_SOCKET) < 0) {
 		ErrPrint("service socket: %s\n", strerror(errno));
+	}
 
 	s_info.info_fd = com_core_packet_server_init(INFO_SOCKET, s_info_table);
-	if (s_info.info_fd < 0)
+	if (s_info.info_fd < 0) {
 		ErrPrint("Failed to create a info socket\n");
+	}
 
 	s_info.slave_fd = com_core_packet_server_init(SLAVE_SOCKET, s_slave_table);
-	if (s_info.slave_fd < 0)
+	if (s_info.slave_fd < 0) {
 		ErrPrint("Failed to create a slave socket\n");
+	}
 
 	s_info.client_fd = com_core_packet_server_init(CLIENT_SOCKET, s_client_table);
-	if (s_info.client_fd < 0)
+	if (s_info.client_fd < 0) {
 		ErrPrint("Failed to create a client socket\n");
+	}
 
 	/*!
 	 * \note
@@ -6900,24 +7082,30 @@ HAPI int server_init(void)
 	 * Skip address to use the NULL.
 	 */
 	s_info.remote_client_fd = com_core_packet_server_init("remote://:"CLIENT_PORT, s_client_table);
-	if (s_info.client_fd < 0)
+	if (s_info.client_fd < 0) {
 		ErrPrint("Failed to create a remote client socket\n");
+	}
 
 	s_info.service_fd = com_core_packet_server_init(SERVICE_SOCKET, s_service_table);
-	if (s_info.service_fd < 0)
+	if (s_info.service_fd < 0) {
 		ErrPrint("Faild to create a service socket\n");
+	}
 
-	if (chmod(INFO_SOCKET, 0600) < 0)
+	if (chmod(INFO_SOCKET, 0600) < 0) {
 		ErrPrint("info socket: %s\n", strerror(errno));
+	}
 
-	if (chmod(SLAVE_SOCKET, 0666) < 0)
+	if (chmod(SLAVE_SOCKET, 0666) < 0) {
 		ErrPrint("slave socket: %s\n", strerror(errno));
+	}
 
-	if (chmod(CLIENT_SOCKET, 0666) < 0)
+	if (chmod(CLIENT_SOCKET, 0666) < 0) {
 		ErrPrint("client socket: %s\n", strerror(errno));
+	}
 
-	if (chmod(SERVICE_SOCKET, 0666) < 0)
+	if (chmod(SERVICE_SOCKET, 0666) < 0) {
 		ErrPrint("service socket: %s\n", strerror(errno));
+	}
 
 	return 0;
 }

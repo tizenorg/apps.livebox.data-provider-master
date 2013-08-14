@@ -165,7 +165,7 @@ out:
 	return ret;
 }
 
-static inline int forward_lb_access_packet(const struct pkg_info *pkg, struct inst_info *inst, const char *command, double timestamp, int x, int y)
+static int forward_lb_access_packet(const struct pkg_info *pkg, struct inst_info *inst, const char *command, double timestamp, int x, int y)
 {
 	int ret;
 	struct buffer_info *buffer;

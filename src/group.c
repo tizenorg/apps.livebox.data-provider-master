@@ -485,8 +485,8 @@ HAPI int group_add_livebox(const char *group, const char *pkgname)
 {
 	struct cluster *cluster;
 	struct category *category;
-	struct context_info *info;
-	struct context_item *item;
+	struct context_info *info = NULL;
+	struct context_item *item = NULL;
 	char *key;
 	char *name;
 	char *ptr;

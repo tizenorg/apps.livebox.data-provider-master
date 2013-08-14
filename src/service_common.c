@@ -105,12 +105,12 @@ static void *client_packet_pump_main(void *data)
 {
 	struct tcb *tcb = data;
 	struct service_context *svc_ctx = tcb->svc_ctx;
-	struct packet *packet;
+	struct packet *packet = NULL;
 	fd_set set;
 	char *ptr = NULL;
-	int size;
-	int packet_offset;
-	int recv_offset;
+	int size = 0;
+	int packet_offset = 0;
+	int recv_offset = 0;
 	int pid;
 	int ret;
 	int fd;

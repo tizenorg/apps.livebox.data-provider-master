@@ -208,7 +208,7 @@ static void inst_del_cb(struct node *node)
 	free(info);
 }
 
-static inline void ls(void)
+static void ls(void)
 {
 	struct node *node;
 	int cnt = 0;
@@ -698,7 +698,7 @@ static inline int do_stat(const char *cmd)
 	return 0;
 }
 
-static inline int do_set(const char *cmd)
+static int do_set(const char *cmd)
 {
 	int i;
 	char variable[4096] = { '0', };
@@ -852,7 +852,7 @@ static inline int do_rm(const char *cmd)
 #define WCOREDUMP(a)	0
 #endif
 
-static inline void do_sh(const char *cmd)
+static void do_sh(const char *cmd)
 {
 	pid_t pid;
 
@@ -995,7 +995,7 @@ static inline int do_capture(Display *disp, Pixmap id, const char *filename)
 	return 0;
 }
 
-static inline void do_x(const char *cmd)
+static void do_x(const char *cmd)
 {
 	Display *disp;
 

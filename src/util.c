@@ -238,7 +238,7 @@ HAPI char *util_replace_string(const char *src, const char *pattern, const char 
 	const char *ptr;
 	char *tmp;
 	char *ret = NULL;
-	int idx;
+	int idx = 0;
 	int out_idx;
 	int out_sz;
 	enum {

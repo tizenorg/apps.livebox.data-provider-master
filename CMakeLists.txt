@@ -35,8 +35,8 @@ pkg_check_modules(pkg REQUIRED
 )
 
 SET(PACKAGE "${PROJECT_NAME}")
-SET(CMAKE_C_FLAGS "-Wall -fpie -Winline -Werror -fno-builtin-malloc -fno-omit-frame-pointer -g")
-SET(CMAKE_EXE_LINKER_FLAGS "-pie")
+SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -fpie -Winline -Werror -fno-builtin-malloc -fno-omit-frame-pointer -g")
+SET(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -pie")
 
 INCLUDE_DIRECTORIES(${CMAKE_CURRENT_SOURCE_DIR}/include)
 

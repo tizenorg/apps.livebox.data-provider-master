@@ -708,8 +708,17 @@ HAPI struct service_context *service_common_create(const char *addr, int (*servi
 		return NULL;
 	}
 
-	if (unlink(addr) < 0) {
-		ErrPrint("[%s] - %s\n", addr, strerror(errno));
+	if (strncmp(addr, COM_CORE_REMOTE_SCHEME, strlen(COM_CORE_REMOTE_SCHEME))) {
+		int offset = 0;
+
+		offset = strlen(COM_CORE_LOCAL_SCHEME);
+		if (strncmp(addr, COM_CORE_LOCAL_SCHEME, offset)) {
+			offset = 0;
+		}
+
+		if (unlink(addr + offset) < 0) {
+			ErrPrint("[%s] - %s\n", addr, strerror(errno));
+		}
 	}
 
 	svc_ctx = calloc(1, sizeof(*svc_ctx));
@@ -779,7 +788,6 @@ HAPI struct service_context *service_common_create(const char *addr, int (*servi
 	 * \note
 	 * To give a chance to run for server thread.
 	 */
-	DbgPrint("Yield\n");
 	pthread_yield();
 
 	return svc_ctx;

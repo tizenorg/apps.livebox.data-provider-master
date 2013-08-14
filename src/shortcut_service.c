@@ -90,7 +90,7 @@ static inline struct tcb *get_reply_context(double seq)
 	return tcb;
 }
 
-static inline void send_reply_packet(struct tcb *tcb, struct packet *packet, int ret)
+static void send_reply_packet(struct tcb *tcb, struct packet *packet, int ret)
 {
 	struct packet *reply_packet;
 

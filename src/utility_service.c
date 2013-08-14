@@ -74,7 +74,7 @@ struct context {
 
 static int lazy_launcher_cb(struct service_context *svc_ctx, void *data);
 
-static inline int put_reply_tcb(struct tcb *tcb, double seq)
+static int put_reply_tcb(struct tcb *tcb, double seq)
 {
 	struct context *ctx;
 

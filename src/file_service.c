@@ -39,7 +39,6 @@
 #include "buffer_handler.h"
 
 #define FILE_SERVICE_ADDR	"remote://:8209"
-#define FILE_PUSH_ADDR		"remote://:8210"
 
 #define PUSH_EXIT	'e'
 #define PUSH_ITEM	'i'

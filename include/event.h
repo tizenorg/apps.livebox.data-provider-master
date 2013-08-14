@@ -18,18 +18,31 @@ struct event_data {
 	int x;
 	int y;
 	int device;
+	int slot;
+	struct {
+		int major;
+		int minor;
+	} touch;
+	struct {
+		int major;
+		int minor;
+	} width;
+	int distance;	/* Hovering */
+	struct timeval tv;
 };
 
 enum event_state {
+	EVENT_STATE_DEACTIVATED,
 	EVENT_STATE_ACTIVATE,
 	EVENT_STATE_ACTIVATED,
-	EVENT_STATE_DEACTIVATE
+	EVENT_STATE_DEACTIVATE,
+	EVENT_STATE_ERROR
 };
 
 extern int event_init(void);
 extern int event_fini(void);
 extern int event_activate(int x, int y, int (*event_cb)(enum event_state state, struct event_data *event, void *data), void *data);
-extern int event_deactivate(void);
+extern int event_deactivate(int (*event_cb)(enum event_state state, struct event_data *event, void *data), void *data);
 extern int event_is_activated(void);
 
 /* End of a file */

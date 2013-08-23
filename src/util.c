@@ -283,7 +283,7 @@ HAPI char *util_replace_string(const char *src, const char *pattern, const char 
 				if (out_idx == out_sz) {
 					tmp = extend_heap(ret, &out_sz, strlen(replace) + 1);
 					if (!tmp) {
-						free(ret);
+						DbgFree(ret);
 						return NULL;
 					}
 					ret = tmp;
@@ -299,7 +299,7 @@ HAPI char *util_replace_string(const char *src, const char *pattern, const char 
 				if (out_sz - out_idx < strlen(replace) + 1) {
 					tmp = extend_heap(ret, &out_sz, strlen(replace) + 1);
 					if (!tmp) {
-						free(ret);
+						DbgFree(ret);
 						return NULL;
 					}
 					ret = tmp;
@@ -319,7 +319,7 @@ HAPI char *util_replace_string(const char *src, const char *pattern, const char 
 				if (out_idx == out_sz) {
 					tmp = extend_heap(ret, &out_sz, strlen(replace) + 1);
 					if (!tmp) {
-						free(ret);
+						DbgFree(ret);
 						return NULL;
 					}
 
@@ -491,7 +491,7 @@ HAPI int util_unlink_files(const char *folder)
 			DbgPrint("unlink: %s\n", strerror(errno));
 		}
 
-		free(abspath);
+		DbgFree(abspath);
 	}
 
 	if (closedir(handle) < 0) {

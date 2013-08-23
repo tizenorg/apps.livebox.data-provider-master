@@ -426,7 +426,7 @@ static inline int destroy_gem(struct buffer *buffer)
 	if (s_info.fd >= 0) {
 		if (gem->compensate_data) {
 			DbgPrint("Release compensate buffer %p\n", gem->compensate_data);
-			free(gem->compensate_data);
+			DbgFree(gem->compensate_data);
 			gem->compensate_data = NULL;
 		}
 
@@ -1433,7 +1433,7 @@ static inline struct buffer *raw_open_file(const char *filename)
 	ret = read(fd, buffer->data, off);
 	if (ret < 0) {
 		ErrPrint("read: %s\n", strerror(errno));
-		free(buffer);
+		DbgFree(buffer);
 
 		if (close(fd) < 0) {
 			ErrPrint("close: %s\n", strerror(errno));
@@ -1451,7 +1451,7 @@ static inline struct buffer *raw_open_file(const char *filename)
 
 static inline int raw_close_file(struct buffer *buffer)
 {
-	free(buffer);
+	DbgFree(buffer);
 	return 0;
 }
 
@@ -1498,7 +1498,7 @@ static inline struct buffer *raw_open_pixmap(unsigned int pixmap)
 
 static inline int raw_close_pixmap(struct buffer *buffer)
 {
-	free(buffer);
+	DbgFree(buffer);
 	return 0;
 }
 

@@ -105,7 +105,7 @@ static inline struct tcb *get_reply_tcb(double seq)
 
 		s_info.context_list = eina_list_remove(s_info.context_list, ctx);
 		tcb = ctx->tcb;
-		free(ctx);
+		DbgFree(ctx);
 		return tcb;
 	}
 
@@ -133,7 +133,7 @@ static inline int flush_pended_request(void)
 			put_reply_tcb(item->tcb, packet_seq(item->packet));
 		}
 		packet_unref(item->packet);
-		free(item);
+		DbgFree(item);
 	}
 
 	return 0;
@@ -152,7 +152,7 @@ static inline int put_pended_request(struct tcb *tcb, struct packet *packet)
 	item->tcb = tcb;
 	item->packet = packet_ref(packet);
 	if (!item->packet) {
-		free(item);
+		DbgFree(item);
 		ErrPrint("Unable to ref packet\n");
 		return LB_STATUS_ERROR_FAULT;
 	}
@@ -182,7 +182,7 @@ static int launch_timeout_cb(struct service_context *svc_ctx, void *data)
 		}
 
 		packet_unref(item->packet);
-		free(item);
+		DbgFree(item);
 	}
 
 	s_info.launch_timer = NULL;

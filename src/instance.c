@@ -549,7 +549,7 @@ static inline void invoke_delete_callbacks(struct inst_info *inst)
 		if (item->event_cb(inst, item->data) < 0) {
 			if (eina_list_data_find(inst->delete_event_list, item)) {
 				inst->delete_event_list = eina_list_remove(inst->delete_event_list, item);
-				free(item);
+				DbgFree(item);
 			}
 		}
 	}
@@ -594,7 +594,7 @@ HAPI int instance_event_callback_del(struct inst_info *inst, enum instance_event
 		EINA_LIST_FOREACH_SAFE(inst->delete_event_list, l, n, item) {
 			if (item->event_cb == event_cb) {
 				inst->delete_event_list = eina_list_remove(inst->delete_event_list, item);
-				free(item);
+				DbgFree(item);
 				return LB_STATUS_SUCCESS;
 			}
 		}
@@ -656,8 +656,8 @@ static inline void destroy_instance(struct inst_info *inst)
 
 	EINA_LIST_FREE(inst->data_list, tag_item) {
 		DbgPrint("Tagged item[%s] %p\n", tag_item->tag, tag_item->data);
-		free(tag_item->tag);
-		free(tag_item);
+		DbgFree(tag_item->tag);
+		DbgFree(tag_item);
 	}
 
 	/*!
@@ -669,7 +669,7 @@ static inline void destroy_instance(struct inst_info *inst)
 	 * it is readonly value for instances
 	 */
 	EINA_LIST_FREE(inst->delete_event_list, item) {
-		free(item);
+		DbgFree(item);
 	}
 	DbgFree(inst->category);
 	DbgFree(inst->cluster);
@@ -1882,7 +1882,7 @@ HAPI int instance_set_update_mode(struct inst_info *inst, int active_update)
 	if (!packet) {
 		ErrPrint("Failed to build a packet for %s\n", package_name(inst->info));
 		instance_unref(cbdata->inst);
-		free(cbdata);
+		DbgFree(cbdata);
 		return LB_STATUS_ERROR_FAULT;
 	}
 
@@ -3133,7 +3133,7 @@ HAPI int instance_set_data(struct inst_info *inst, const char *tag, void *data)
 		item->tag = strdup(tag);
 		if (!item->tag) {
 			ErrPrint("Heap: %s\n", strerror(errno));
-			free(item);
+			DbgFree(item);
 			return LB_STATUS_ERROR_MEMORY;
 		}
 
@@ -3142,8 +3142,8 @@ HAPI int instance_set_data(struct inst_info *inst, const char *tag, void *data)
 
 	if (!data) {
 		inst->data_list = eina_list_remove(inst->data_list, item);
-		free(item->tag);
-		free(item);
+		DbgFree(item->tag);
+		DbgFree(item);
 	} else {
 		item->data = data;
 	}
@@ -3163,8 +3163,8 @@ HAPI void *instance_del_data(struct inst_info *inst, const char *tag)
 
 	inst->data_list = eina_list_remove(inst->data_list, item);
 	data = item->data;
-	free(item->tag);
-	free(item);
+	DbgFree(item->tag);
+	DbgFree(item);
 
 	return data;
 }

@@ -108,7 +108,7 @@ static inline struct request_item *create_request_item(struct tcb *tcb, int type
 		item->data.filename = strdup(data);
 		if (!item->data.filename) {
 			ErrPrint("Heap: %s\n", strerror(errno));
-			free(item);
+			DbgFree(item);
 			return NULL;
 		}
 		break;
@@ -120,7 +120,7 @@ static inline struct request_item *create_request_item(struct tcb *tcb, int type
 		break;
 	default:
 		ErrPrint("Invalid type of request\n");
-		free(item);
+		DbgFree(item);
 		return NULL;
 	}
 
@@ -133,7 +133,7 @@ static inline int destroy_request_item(struct request_item *item)
 {
 	switch (item->type) {
 	case REQUEST_TYPE_FILE:
-		free(item->data.filename);
+		DbgFree(item->data.filename);
 		break;
 	case REQUEST_TYPE_SHM:
 	case REQUEST_TYPE_PIXMAP:
@@ -142,7 +142,7 @@ static inline int destroy_request_item(struct request_item *item)
 		return LB_STATUS_ERROR_INVALID;
 	}
 
-	free(item);
+	DbgFree(item);
 	return LB_STATUS_SUCCESS;
 }
 
@@ -354,7 +354,7 @@ static int send_file(int handle, const struct request_item *item)
 	fsize = lseek(fd, 0L, SEEK_END);
 	if (fsize == (off_t)-1) {
 		ErrPrint("heap: %s\n", strerror(errno));
-		free(head);
+		DbgFree(head);
 		ret = -EIO;
 		goto errout;
 	}
@@ -365,7 +365,7 @@ static int send_file(int handle, const struct request_item *item)
 
 	/* Anytime we can fail to send packet */
 	ret = com_core_send(handle, (void *)head, pktsz, 2.0f);
-	free(head);
+	DbgFree(head);
 	if (ret < 0) {
 		ret = -EFAULT;
 		goto errout;
@@ -382,7 +382,7 @@ static int send_file(int handle, const struct request_item *item)
 
 		body->size = -1;
 		ret = com_core_send(handle, (void *)body, sizeof(*body), 2.0f);
-		free(body);
+		DbgFree(body);
 
 		if (ret < 0) {
 			ret = -EFAULT;
@@ -433,7 +433,7 @@ static int send_file(int handle, const struct request_item *item)
 		ret = -EFAULT;
 	}
 
-	free(body);
+	DbgFree(body);
 
 errout:
 	if (close(fd) < 0) {
@@ -480,7 +480,7 @@ static int send_buffer(int handle, const struct request_item *item)
 
 	/* Anytime we can fail to send packet */
 	ret = com_core_send(handle, (void *)head, pktsz, 2.0f);
-	free(head);
+	DbgFree(head);
 	if (ret < 0) {
 		ret = -EFAULT;
 		goto errout;
@@ -513,7 +513,7 @@ static int send_buffer(int handle, const struct request_item *item)
 		offset += body->size;
 	}
 
-	free(body);
+	DbgFree(body);
 
 errout:
 	(void)buffer_handler_raw_close(buffer);

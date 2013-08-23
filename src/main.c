@@ -62,59 +62,6 @@
 FILE *__file_log_fp;
 #endif
 
-static int input_event_cb(enum event_state state, struct event_data *event, void *data)
-{
-	static int valid = 0;
-	static int pid = -1;
-
-	if (event->device > 0) {
-		if (event->x > 30) {
-			valid = 2;
-		} else if (valid == 0) {
-			valid = 1;
-		}
-	}
-
-	if (state == EVENT_STATE_DEACTIVATE || event->device == -1) {
-		bundle *param;
-
-		if (valid == 1) {
-			param = bundle_create();
-			if (param) {
-				char coord[16];
-				snprintf(coord, sizeof(coord), "%dx%d", event->x, event->y);
-				bundle_add(param, "coordinate", coord);
-			}
-
-			pid = aul_launch_app("com.samsung.assistant-menu", param);
-			DbgPrint("Launch Pie Menu: %d\n", pid);
-
-			if (param) {
-				bundle_free(param);
-			}
-		} else if (valid == 2) {
-			int ret;
-			char pkgname[256];
-			ret = aul_app_get_appid_bypid(pid, pkgname, sizeof(pkgname) - 1);
-			if (ret == 0) {
-				if (!strcmp(pkgname, "com.samsung.assistant-menu")) {
-					param = bundle_create();
-					if (param) {
-						bundle_add(param, "request", "terminate");
-						pid = aul_launch_app("com.samsung.assistant-menu", param);
-						bundle_free(param);
-						DbgPrint("Request is sent: %d\n", pid);
-					}
-				}
-			}
-		}
-
-		valid = 0;
-	}
-
-	return 0;
-}
-
 static inline int app_create(void)
 {
 	int ret;
@@ -182,18 +129,12 @@ static inline int app_create(void)
 
 	file_service_init();
 
-	ret = event_activate(0, 0, input_event_cb, NULL);
-	DbgPrint("event activate: %d\n", ret);
-
 	return 0;
 }
 
 static inline int app_terminate(void)
 {
 	int ret;
-
-	ret = event_deactivate(input_event_cb, NULL);
-	DbgPrint("Deactivate event: %d\n", ret);
 
 	ret = file_service_fini();
 	DbgPrint("Finalize the file service: %d\n", ret);

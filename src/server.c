@@ -3986,12 +3986,14 @@ static struct packet *client_lb_acquire_pixmap(pid_t pid, int handle, const stru
 	client = client_find_by_rpc_handle(handle);
 	if (!client) {
 		ErrPrint("Client %d is not exists\n", pid);
+		ret = LB_STATUS_ERROR_INVALID;
 		goto out;
 	}
 
 	ret = packet_get(packet, "ss", &pkgname, &id);
 	if (ret != 2) {
 		ErrPrint("Parameter is not matched\n");
+		ret = LB_STATUS_ERROR_INVALID;
 		goto out;
 	}
 
@@ -4008,18 +4010,21 @@ static struct packet *client_lb_acquire_pixmap(pid_t pid, int handle, const stru
 		script_info = instance_lb_script(inst);
 		if (!script_info) {
 			ErrPrint("Unable to get LB buffer: %s\n", id);
+			ret = LB_STATUS_ERROR_FAULT;
 			goto out;
 		}
 
 		fb_info = script_handler_fb(script_info);
 		if (!fb_info) {
 			ErrPrint("Unable to get fb_info: %s\n", id);
+			ret = LB_STATUS_ERROR_FAULT;
 			goto out;
 		}
 
 		buffer = fb_buffer_info(fb_info);
 		if (!buffer) {
 			ErrPrint("Unable to get buffer_info: %s\n", id);
+			ret = LB_STATUS_ERROR_FAULT;
 			goto out;
 		}
 	}
@@ -4027,6 +4032,7 @@ static struct packet *client_lb_acquire_pixmap(pid_t pid, int handle, const stru
 	buf_ptr = buffer_handler_pixmap_ref(buffer);
 	if (!buf_ptr) {
 		ErrPrint("Failed to ref pixmap\n");
+		ret = LB_STATUS_ERROR_FAULT;
 		goto out;
 	}
 
@@ -4036,10 +4042,11 @@ static struct packet *client_lb_acquire_pixmap(pid_t pid, int handle, const stru
 		buffer_handler_pixmap_unref(buf_ptr);
 	} else {
 		pixmap = buffer_handler_pixmap(buffer);
+		ret = LB_STATUS_SUCCESS;
 	}
 
 out:
-	result = packet_create_reply(packet, "i", pixmap);
+	result = packet_create_reply(packet, "ii", pixmap, ret);
 	if (!result) {
 		ErrPrint("Failed to create a reply packet\n");
 	}
@@ -4103,18 +4110,25 @@ static struct packet *client_pd_acquire_pixmap(pid_t pid, int handle, const stru
 
 	client = client_find_by_rpc_handle(handle);
 	if (!client) {
+		ret = LB_STATUS_ERROR_INVALID;
 		ErrPrint("Client %d is not exists\n", pid);
 		goto out;
 	}
 
 	ret = packet_get(packet, "ss", &pkgname, &id);
 	if (ret != 2) {
+		ret = LB_STATUS_ERROR_INVALID;
 		ErrPrint("Parameter is not matched\n");
 		goto out;
 	}
 
 	ret = validate_request(pkgname, id, &inst, NULL);
 	if (ret != LB_STATUS_SUCCESS) {
+		goto out;
+	}
+
+	if (instance_get_data(inst, "pd,resize,monitor")) {
+		ret = LB_STATUS_ERROR_BUSY;
 		goto out;
 	}
 
@@ -4126,18 +4140,21 @@ static struct packet *client_pd_acquire_pixmap(pid_t pid, int handle, const stru
 		script_info = instance_pd_script(inst);
 		if (!script_info) {
 			ErrPrint("Unable to get LB buffer: %s\n", id);
+			ret = LB_STATUS_ERROR_FAULT;
 			goto out;
 		}
 
 		fb_info = script_handler_fb(script_info);
 		if (!fb_info) {
 			ErrPrint("Unable to get fb_info: %s\n", id);
+			ret = LB_STATUS_ERROR_FAULT;
 			goto out;
 		}
 
 		buffer = fb_buffer_info(fb_info);
 		if (!buffer) {
 			ErrPrint("Unable to get buffer_info: %s\n", id);
+			ret = LB_STATUS_ERROR_FAULT;
 			goto out;
 		}
 	}
@@ -4145,6 +4162,7 @@ static struct packet *client_pd_acquire_pixmap(pid_t pid, int handle, const stru
 	buf_ptr = buffer_handler_pixmap_ref(buffer);
 	if (!buf_ptr) {
 		ErrPrint("Failed to ref pixmap\n");
+		ret = LB_STATUS_ERROR_FAULT;
 		goto out;
 	}
 
@@ -4155,7 +4173,7 @@ static struct packet *client_pd_acquire_pixmap(pid_t pid, int handle, const stru
 
 	pixmap = buffer_handler_pixmap(buffer);
 out:
-	result = packet_create_reply(packet, "i", pixmap);
+	result = packet_create_reply(packet, "ii", pixmap, ret);
 	if (!result) {
 		ErrPrint("Failed to create a reply packet\n");
 	}
@@ -5878,6 +5896,7 @@ static struct packet *slave_acquire_buffer(pid_t pid, int handle, const struct p
 			is_resize = !!pd_monitor;
 			if (!is_resize) {
 				/* Invalid request. Reject this */
+				ErrPrint("Invalid request\n");
 				goto out;
 			}
 

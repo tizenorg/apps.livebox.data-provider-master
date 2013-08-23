@@ -324,14 +324,14 @@ static inline void clear_all_listener_list(void)
 			case EVENT_STATE_DEACTIVATED:
 			default:
 				s_info.event_listener_list = eina_list_remove(s_info.event_listener_list, listener);
-				free(listener);
+				DbgFree(listener);
 				continue;
 			}
 
 			if (listener->event_cb(listener->state, &s_info.event_data, listener->cbdata) < 0) {
 				if (eina_list_data_find(s_info.event_listener_list, listener)) {
 					s_info.event_listener_list = eina_list_remove(s_info.event_listener_list, listener);
-					free(listener);
+					DbgFree(listener);
 					continue;
 				}
 			}
@@ -368,65 +368,65 @@ static Eina_Bool event_read_cb(void *data, Ecore_Fd_Handler *handler)
 	item = eina_list_nth(s_info.event_list, 0);
 	if (item) {
 		s_info.event_list = eina_list_remove(s_info.event_list, item);
-	} else {
-		ErrPrint("Unable to get event\n");
 	}
 	CRITICAL_SECTION_END(&s_info.event_list_lock);
 
-	EINA_LIST_FOREACH_SAFE(s_info.event_listener_list, l, n, listener) {
-		switch (listener->state) {
-		case EVENT_STATE_ACTIVATE:
-			if (timercmp(&listener->tv, &item->tv, >)) {
-				/* Ignore previous events before activating this listener */
-				continue;
-			}
+	if (item) {
+		EINA_LIST_FOREACH_SAFE(s_info.event_listener_list, l, n, listener) {
+			switch (listener->state) {
+			case EVENT_STATE_ACTIVATE:
+				if (timercmp(&listener->tv, &item->tv, >)) {
+					/* Ignore previous events before activating this listener */
+					continue;
+				}
 
-			next_state = EVENT_STATE_ACTIVATED;
-			cur_state = listener->state;
-			break;
-		case EVENT_STATE_DEACTIVATE:
-			if (timercmp(&listener->tv, &item->tv, >)) {
-				/* Consuming all events occurred while activating this listener */
-				cur_state = EVENT_STATE_ACTIVATED;
 				next_state = EVENT_STATE_ACTIVATED;
+				cur_state = listener->state;
 				break;
-			}
+			case EVENT_STATE_DEACTIVATE:
+				if (timercmp(&listener->tv, &item->tv, >)) {
+					/* Consuming all events occurred while activating this listener */
+					cur_state = EVENT_STATE_ACTIVATED;
+					next_state = EVENT_STATE_ACTIVATED;
+					break;
+				}
 
-			cur_state = listener->state;
-			next_state = EVENT_STATE_DEACTIVATED;
-			break;
-		case EVENT_STATE_ACTIVATED:
-			cur_state = listener->state;
-			next_state = listener->state;
-			break;
-		case EVENT_STATE_DEACTIVATED:
-		default:
-			/* Remove this from the list */
-				/* Check the item again. the listener can be deleted from the callback */
-			if (eina_list_data_find(s_info.event_listener_list, listener)) {
-				s_info.event_listener_list = eina_list_remove(s_info.event_listener_list, listener);
-				free(listener);
-			}
+				cur_state = listener->state;
+				next_state = EVENT_STATE_DEACTIVATED;
+				break;
+			case EVENT_STATE_ACTIVATED:
+				cur_state = listener->state;
+				next_state = listener->state;
+				break;
+			case EVENT_STATE_DEACTIVATED:
+			default:
+				/* Remove this from the list */
+					/* Check the item again. the listener can be deleted from the callback */
+				if (eina_list_data_find(s_info.event_listener_list, listener)) {
+					s_info.event_listener_list = eina_list_remove(s_info.event_listener_list, listener);
+					DbgFree(listener);
+				}
 
-			continue;
-		}
-
-		memcpy(&modified_item, item, sizeof(modified_item));
-		modified_item.x -= listener->x;
-		modified_item.y -= listener->y;
-
-		if (listener->event_cb(cur_state, &modified_item, listener->cbdata) < 0) {
-			if (eina_list_data_find(s_info.event_listener_list, listener)) {
-				s_info.event_listener_list = eina_list_remove(s_info.event_listener_list, listener);
-				free(listener);
 				continue;
 			}
+
+			memcpy(&modified_item, item, sizeof(modified_item));
+			modified_item.x -= listener->x;
+			modified_item.y -= listener->y;
+
+			if (listener->event_cb(cur_state, &modified_item, listener->cbdata) < 0) {
+				if (eina_list_data_find(s_info.event_listener_list, listener)) {
+					s_info.event_listener_list = eina_list_remove(s_info.event_listener_list, listener);
+					DbgFree(listener);
+					continue;
+				}
+			}
+
+			listener->state = next_state;
 		}
 
-		listener->state = next_state;
+		DbgFree(item);
 	}
-
-	free(item);
 
 	if (s_info.handle < 0 && !s_info.event_list) {
 		/* This callback must has to clear all listeners in this case */
@@ -537,7 +537,7 @@ HAPI int event_activate(int x, int y, int (*event_cb)(enum event_state state, st
 
 	if (gettimeofday(&listener->tv, NULL) < 0) {
 		ErrPrint("gettimeofday: %s\n", strerror(errno));
-		free(listener);
+		DbgFree(listener);
 		return LB_STATUS_ERROR_FAULT;
 	}
 
@@ -563,7 +563,7 @@ HAPI int event_activate(int x, int y, int (*event_cb)(enum event_state state, st
 
 			if ((ret = activate_thread()) < 0) {
 				s_info.event_listener_list = eina_list_remove(s_info.event_listener_list, listener);
-				free(listener);
+				DbgFree(listener);
 			}
 		}
 	} else {
@@ -597,7 +597,7 @@ HAPI int event_deactivate(int (*event_cb)(enum event_state state, struct event_d
 
 	if (s_info.handle < 0) {
 		ErrPrint("Event handler is not actiavated\n");
-		free(listener);
+		DbgFree(listener);
 		return LB_STATUS_SUCCESS;
 	}
 

@@ -144,13 +144,13 @@ static void *client_packet_pump_main(void *data)
 				continue;
 			}
 			ErrPrint("Error: %s\n", strerror(errno));
-			free(ptr);
+			DbgFree(ptr);
 			ptr = NULL;
 			break;
 		} else if (ret == 0) {
 			ErrPrint("Timeout\n");
 			ret = -ETIMEDOUT;
-			free(ptr);
+			DbgFree(ptr);
 			ptr = NULL;
 			break;
 		}
@@ -158,7 +158,7 @@ static void *client_packet_pump_main(void *data)
 		if (FD_ISSET(tcb->ctrl_pipe[PIPE_READ], &set)) {
 			DbgPrint("Thread is canceled\n");
 			ret = -ECANCELED;
-			free(ptr);
+			DbgFree(ptr);
 			ptr = NULL;
 			break;
 		}
@@ -166,7 +166,7 @@ static void *client_packet_pump_main(void *data)
 		if (!FD_ISSET(tcb->fd, &set)) {
 			ErrPrint("Unexpected handler is toggled\n");
 			ret = -EINVAL;
-			free(ptr);
+			DbgFree(ptr);
 			ptr = NULL;
 			break;
 		}
@@ -195,7 +195,7 @@ static void *client_packet_pump_main(void *data)
 				if (ret == 0) {
 					ret = -ECANCELED;
 				}
-				free(ptr);
+				DbgFree(ptr);
 				ptr = NULL;
 				break;
 			}
@@ -205,7 +205,7 @@ static void *client_packet_pump_main(void *data)
 
 			if (recv_offset == size) {
 				packet = packet_build(packet, packet_offset, ptr, size);
-				free(ptr);
+				DbgFree(ptr);
 				ptr = NULL;
 				if (!packet) {
 					ret = -EFAULT;
@@ -237,7 +237,7 @@ static void *client_packet_pump_main(void *data)
 				if (ret == 0) {
 					ret = -ECANCELED;
 				}
-				free(ptr);
+				DbgFree(ptr);
 				ptr = NULL;
 				break;
 			}
@@ -247,7 +247,7 @@ static void *client_packet_pump_main(void *data)
 
 			if (recv_offset == size) {
 				packet = packet_build(packet, packet_offset, ptr, size);
-				free(ptr);
+				DbgFree(ptr);
 				ptr = NULL;
 				if (!packet) {
 					ret = -EFAULT;
@@ -294,7 +294,7 @@ static void *client_packet_pump_main(void *data)
 				CRITICAL_SECTION_END(&svc_ctx->packet_list_lock);
 
 				packet_destroy(packet);
-				free(packet_info);
+				DbgFree(packet_info);
 				ErrPrint("Terminate thread: %p\n", tcb);
 				break;
 			} else {
@@ -344,7 +344,7 @@ static inline struct tcb *tcb_create(struct service_context *svc_ctx, int fd)
 
 	if (pipe2(tcb->ctrl_pipe, O_NONBLOCK | O_CLOEXEC) < 0) {
 		ErrPrint("pipe2: %s\n", strerror(errno));
-		free(tcb);
+		DbgFree(tcb);
 		return NULL;
 	}
 
@@ -357,7 +357,7 @@ static inline struct tcb *tcb_create(struct service_context *svc_ctx, int fd)
 	if (status != 0) {
 		ErrPrint("Unable to create a new thread: %s\n", strerror(status));
 		CLOSE_PIPE(tcb->ctrl_pipe);
-		free(tcb);
+		DbgFree(tcb);
 		return NULL;
 	}
 
@@ -401,7 +401,7 @@ static inline void tcb_teminate_all(struct service_context *svc_ctx)
 		secure_socket_destroy_handle(tcb->fd);
 
 		CLOSE_PIPE(tcb->ctrl_pipe);
-		free(tcb);
+		DbgFree(tcb);
 	}
 }
 
@@ -436,7 +436,7 @@ static inline void tcb_destroy(struct service_context *svc_ctx, struct tcb *tcb)
 	secure_socket_destroy_handle(tcb->fd);
 
 	CLOSE_PIPE(tcb->ctrl_pipe);
-	free(tcb);
+	DbgFree(tcb);
 }
 
 /*!
@@ -511,7 +511,7 @@ static inline void processing_timer_event(struct service_context *svc_ctx, fd_se
 			if (close(item->info.timer.fd) < 0) {
 				ErrPrint("close: %s\n", strerror(errno));
 			}
-			free(item);
+			DbgFree(item);
 			break;
 		default:
 			ErrPrint("Unknown event: %d\n", item->type);
@@ -598,7 +598,7 @@ static void *server_main(void *data)
 				}
 
 				packet_destroy(packet_info->packet);
-				free(packet_info);
+				DbgFree(packet_info);
 			}
 
 			/* Take a breathe */
@@ -648,7 +648,7 @@ static void *server_main(void *data)
 					ErrPrint("Service thread returns: %d\n", ret);
 				}
 				packet_destroy(packet_info->packet);
-				free(packet_info);
+				DbgFree(packet_info);
 			}
 
 			/*!
@@ -686,7 +686,7 @@ static void *server_main(void *data)
 			ErrPrint("Service thread returns: %d\n", ret);
 		}
 		packet_destroy(packet_info->packet);
-		free(packet_info);
+		DbgFree(packet_info);
 	}
 	CRITICAL_SECTION_END(&svc_ctx->packet_list_lock);
 
@@ -729,7 +729,7 @@ HAPI struct service_context *service_common_create(const char *addr, int (*servi
 
 	svc_ctx->fd = secure_socket_create_server(addr);
 	if (svc_ctx->fd < 0) {
-		free(svc_ctx);
+		DbgFree(svc_ctx);
 		return NULL;
 	}
 
@@ -747,7 +747,7 @@ HAPI struct service_context *service_common_create(const char *addr, int (*servi
 	if (pipe2(svc_ctx->evt_pipe, O_NONBLOCK | O_CLOEXEC) < 0) {
 		ErrPrint("pipe: %d\n", strerror(errno));
 		secure_socket_destroy_handle(svc_ctx->fd);
-		free(svc_ctx);
+		DbgFree(svc_ctx);
 		return NULL;
 	}
 
@@ -755,7 +755,7 @@ HAPI struct service_context *service_common_create(const char *addr, int (*servi
 		ErrPrint("pipe: %s\n", strerror(errno));
 		CLOSE_PIPE(svc_ctx->evt_pipe);
 		secure_socket_destroy_handle(svc_ctx->fd);
-		free(svc_ctx);
+		DbgFree(svc_ctx);
 		return NULL;
 	}
 
@@ -765,7 +765,7 @@ HAPI struct service_context *service_common_create(const char *addr, int (*servi
 		CLOSE_PIPE(svc_ctx->evt_pipe);
 		CLOSE_PIPE(svc_ctx->tcb_pipe);
 		secure_socket_destroy_handle(svc_ctx->fd);
-		free(svc_ctx);
+		DbgFree(svc_ctx);
 		return NULL;
 	}
 
@@ -780,7 +780,7 @@ HAPI struct service_context *service_common_create(const char *addr, int (*servi
 		CLOSE_PIPE(svc_ctx->evt_pipe);
 		CLOSE_PIPE(svc_ctx->tcb_pipe);
 		secure_socket_destroy_handle(svc_ctx->fd);
-		free(svc_ctx);
+		DbgFree(svc_ctx);
 		return NULL;
 	}
 
@@ -830,7 +830,7 @@ HAPI int service_common_destroy(struct service_context *svc_ctx)
 
 	CLOSE_PIPE(svc_ctx->evt_pipe);
 	CLOSE_PIPE(svc_ctx->tcb_pipe);
-	free(svc_ctx);
+	DbgFree(svc_ctx);
 	return 0;
 }
 
@@ -983,7 +983,7 @@ HAPI struct service_event_item *service_common_add_timer(struct service_context 
 	item->info.timer.fd = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK | TFD_CLOEXEC);
 	if (item->info.timer.fd < 0) {
 		ErrPrint("Error: %s\n", strerror(errno));
-		free(item);
+		DbgFree(item);
 		return NULL;
 	}
 
@@ -997,7 +997,7 @@ HAPI struct service_event_item *service_common_add_timer(struct service_context 
 		if (close(item->info.timer.fd) < 0) {
 			ErrPrint("close: %s\n", strerror(errno));
 		}
-		free(item);
+		DbgFree(item);
 		return NULL;
 	}
 
@@ -1024,7 +1024,7 @@ HAPI int service_common_del_timer(struct service_context *svc_ctx, struct servic
 	if (close(item->info.timer.fd) < 0) {
 		ErrPrint("close: %s\n", strerror(errno));
 	}
-	free(item);
+	DbgFree(item);
 	return 0;
 }
 

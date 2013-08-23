@@ -45,8 +45,9 @@ struct dlist *dlist_append(struct dlist *list, void *data)
 	struct dlist *item;
 
 	item = malloc(sizeof(*item));
-	if (!item)
+	if (!item) {
 		return NULL;
+	}
 
 	item->next = NULL;
 	item->data = data;
@@ -71,8 +72,9 @@ struct dlist *dlist_prepend(struct dlist *list, void *data)
 	struct dlist *item;
 
 	item = malloc(sizeof(*item));
-	if (!item)
+	if (!item) {
 		return NULL;
+	}
 
 	item->data = data;
 
@@ -80,8 +82,9 @@ struct dlist *dlist_prepend(struct dlist *list, void *data)
 		item->prev = item;
 		item->next = NULL;
 	} else {
-		if (list->prev->next)
+		if (list->prev->next) {
 			list->prev->next = item;
+		}
 
 		item->prev = list->prev;
 		item->next = list;
@@ -95,16 +98,19 @@ struct dlist *dlist_prepend(struct dlist *list, void *data)
 
 struct dlist *dlist_remove(struct dlist *list, struct dlist *l)
 {
-	if (!list || !l)
+	if (!list || !l) {
 		return NULL;
+	}
 
-	if (l == list)
+	if (l == list) {
 		list = l->next;
-	else
+	} else {
 		l->prev->next = l->next;
+	}
 
-	if (l->next)
+	if (l->next) {
 		l->next->prev = l->prev;
+	}
 	/*!
 	 * \note
 	 * If the removed entry 'l' has no next element, it is the last element.
@@ -113,8 +119,9 @@ struct dlist *dlist_remove(struct dlist *list, struct dlist *l)
 	 *
 	 * If we didn't care about this, the head element(list) can indicates the invalid element.
 	 */
-	else if (list)
+	else if (list) {
 		list->prev = l->prev;
+	}
 
 	free(l);
 	return list;
@@ -126,8 +133,9 @@ struct dlist *dlist_find_data(struct dlist *list, void *data)
 	void *_data;
 
 	dlist_foreach(list, l, _data) {
-		if (data == _data)
+		if (data == _data) {
 			return l;
+		}
 	}
 
 	return NULL;
@@ -169,8 +177,9 @@ struct dlist *dlist_nth(struct dlist *l, int nth)
 
 	i = 0;
 	for (n = l; n; n = n->next) {
-		if (i == nth)
+		if (i == nth) {
 			return n;
+		}
 		i++;
 	}
 

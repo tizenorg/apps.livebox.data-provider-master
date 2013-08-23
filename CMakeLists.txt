@@ -50,6 +50,8 @@ ADD_DEFINITIONS("-DCLIENT_SOCKET=\"/opt/usr/share/live_magazine/.client.socket\"
 ADD_DEFINITIONS("-DSLAVE_SOCKET=\"/opt/usr/share/live_magazine/.slave.socket\"")
 ADD_DEFINITIONS("-DSERVICE_SOCKET=\"/opt/usr/share/live_magazine/.service.socket\"")
 
+ADD_DEFINITIONS("-DCLIENT_PORT=\"8208\"")
+
 ADD_DEFINITIONS("-DBADGE_SOCKET=\"/tmp/.badge.service\"")
 ADD_DEFINITIONS("-DSHORTCUT_SOCKET=\"/tmp/.shortcut.service\"")
 ADD_DEFINITIONS("-DNOTIFICATION_SOCKET=\"/tmp/.notification.service\"")
@@ -59,8 +61,6 @@ ADD_DEFINITIONS("-DUTILITY_SMACK_LABEL=\"data-provider-master::utility\"")
 ADD_DEFINITIONS("-DSHORTCUT_SMACK_LABEL=\"data-provider-master::shortcut\"")
 ADD_DEFINITIONS("-DNOTIFICATION_SMACK_LABEL=\"data-provider-master::notification\"")
 ADD_DEFINITIONS("-DBADGE_SMACK_LABEL=\"data-provider-master::badge\"")
-
-ADD_DEFINITIONS("-DCLIENT_PORT=\"8208\"")
 
 ADD_DEFINITIONS("-DNDEBUG")
 #ADD_DEFINITIONS("-DFLOG")
@@ -97,8 +97,8 @@ ADD_EXECUTABLE(${PROJECT_NAME}
 	src/badge_service.c
 	src/notification_service.c
 	src/utility_service.c
-	src/service_common.c
 	src/file_service.c
+	src/service_common.c
 )
 
 TARGET_LINK_LIBRARIES(${PROJECT_NAME} ${pkg_LDFLAGS} "-ldl")
@@ -115,4 +115,7 @@ INSTALL(TARGETS ${PROJECT_NAME} DESTINATION /usr/bin PERMISSIONS OWNER_READ OWNE
 ADD_SUBDIRECTORY(res)
 ADD_SUBDIRECTORY(data)
 ADD_SUBDIRECTORY(pkgmgr_livebox)
+
+if ("${ENGINEER_BINARY}" STREQUAL "true")
 ADD_SUBDIRECTORY(util_liveinfo)
+endif ("${ENGINEER_BINARY}" STREQUAL "true")

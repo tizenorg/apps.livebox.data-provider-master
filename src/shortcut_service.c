@@ -83,7 +83,7 @@ static inline struct tcb *get_reply_context(double seq)
 
 		s_info.context_list = eina_list_remove(s_info.context_list, ctx);
 		tcb = ctx->tcb;
-		free(ctx);
+		DbgFree(ctx);
 		break;
 	}
 

@@ -34,7 +34,8 @@
 	<assign>
 		<!-- Executable file -->
 		<filesystem path="/usr/bin/data-provider-master" label="data-provider-master" exec_label="data-provider-master" />
-		<filesystem path="/usr/bin/liveinfo" label="data-provider-master" exec_label="data-provider-master" />
+		<filesystem path="/opt/usr/devel/usr/bin/liveinfo" label="data-provider-master" exec_label="data-provider-master" />
+		<filesystem path="/opt/usr/devel/usr/bin" label="_" />
 
 		<!-- Configuration data -->
 		<filesystem path="/usr/share/data-provider-master" label="data-provider-master::data" />

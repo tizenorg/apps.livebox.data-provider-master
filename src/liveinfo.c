@@ -83,7 +83,7 @@ static inline int valid_requestor(pid_t pid)
 		return 0;
 	}
 
-	if (stat("/usr/bin/liveinfo", &src) < 0) {
+	if (stat("/opt/usr/devel/usr/bin/liveinfo", &src) < 0) {
 		ErrPrint("Error: %s\n", strerror(errno));
 		return 0;
 	}

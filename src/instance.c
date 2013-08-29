@@ -93,6 +93,7 @@ struct inst_info {
 
 	enum instance_state state; /*!< Represents current state */
 	enum instance_state requested_state; /*!< Only ACTIVATED | DESTROYED is acceptable */
+	enum instance_destroy_type destroy_type;
 	int changing_state;
 
 	char *id;
@@ -213,7 +214,7 @@ static int viewer_deactivated_cb(struct client_node *client, void *data)
 	inst->client_list = eina_list_remove(inst->client_list, client);
 	if (!inst->client_list && !inst->client) {
 		DbgPrint("Has no clients\n");
-		instance_destroy(inst);
+		instance_destroy(inst, INSTANCE_DESTROY_DEFAULT);
 	}
 
 	instance_unref(inst);
@@ -522,7 +523,7 @@ static int instance_broadcast_deleted_event(struct inst_info *inst)
 static int client_deactivated_cb(struct client_node *client, void *data)
 {
 	struct inst_info *inst = data;
-	instance_destroy(inst);
+	instance_destroy(inst, INSTANCE_DESTROY_DEFAULT);
 	return LB_STATUS_SUCCESS;
 }
 
@@ -805,7 +806,7 @@ HAPI struct inst_info *instance_create(struct client_node *client, double timest
 
 	if (package_add_instance(inst->info, inst) < 0) {
 		instance_state_reset(inst);
-		instance_destroy(inst);
+		instance_destroy(inst, INSTANCE_DESTROY_FAULT);
 		return NULL;
 	}
 
@@ -813,7 +814,7 @@ HAPI struct inst_info *instance_create(struct client_node *client, double timest
 
 	if (instance_activate(inst) < 0) {
 		instance_state_reset(inst);
-		instance_destroy(inst);
+		instance_destroy(inst, INSTANCE_DESTROY_FAULT);
 		inst = NULL;
 	}
 
@@ -906,7 +907,7 @@ static void deactivate_cb(struct slave_node *slave, const struct packet *packet,
 			info = inst->info;
 			instance_broadcast_deleted_event(inst);
 			instance_state_reset(inst);
-			instance_destroy(inst);
+			instance_destroy(inst, INSTANCE_DESTROY_DEFAULT);
 		default:
 			/*!< Unable to reach here */
 			break;
@@ -941,7 +942,7 @@ static void deactivate_cb(struct slave_node *slave, const struct packet *packet,
 		info = inst->info;
 		instance_broadcast_deleted_event(inst);
 		instance_state_reset(inst);
-		instance_destroy(inst);
+		instance_destroy(inst, INSTANCE_DESTROY_DEFAULT);
 		break;
 	}
 
@@ -1014,7 +1015,7 @@ static void reactivate_cb(struct slave_node *slave, const struct packet *packet,
 		inst->state = INST_ACTIVATED;
 		switch (inst->requested_state) {
 		case INST_DESTROYED:
-			instance_destroy(inst);
+			instance_destroy(inst, INSTANCE_DESTROY_DEFAULT);
 			break;
 		case INST_ACTIVATED:
 			inst->is_pinned_up = is_pinned_up;
@@ -1103,7 +1104,7 @@ static void reactivate_cb(struct slave_node *slave, const struct packet *packet,
 		info = inst->info;
 		instance_broadcast_deleted_event(inst);
 		instance_state_reset(inst);
-		instance_destroy(inst);
+		instance_destroy(inst, INSTANCE_DESTROY_DEFAULT);
 		break;
 	}
 
@@ -1175,7 +1176,7 @@ static void activate_cb(struct slave_node *slave, const struct packet *packet, v
 		case INST_DESTROYED:
 			instance_unicast_deleted_event(inst, NULL);
 			instance_state_reset(inst);
-			instance_destroy(inst);
+			instance_destroy(inst, INSTANCE_DESTROY_DEFAULT);
 			break;
 		case INST_ACTIVATED:
 		default:
@@ -1229,7 +1230,7 @@ static void activate_cb(struct slave_node *slave, const struct packet *packet, v
 	default:
 		instance_unicast_deleted_event(inst, NULL);
 		instance_state_reset(inst);
-		instance_destroy(inst);
+		instance_destroy(inst, INSTANCE_DESTROY_DEFAULT);
 		break;
 	}
 
@@ -1275,7 +1276,7 @@ HAPI int instance_create_lb_buffer(struct inst_info *inst)
 	return !!inst->lb.canvas.buffer;
 }
 
-HAPI int instance_destroy(struct inst_info *inst)
+HAPI int instance_destroy(struct inst_info *inst, enum instance_destroy_type type)
 {
 	struct packet *packet;
 
@@ -1302,12 +1303,13 @@ HAPI int instance_destroy(struct inst_info *inst)
 		break;
 	}
 
-	packet = packet_create("delete", "ss", package_name(inst->info), inst->id);
+	packet = packet_create("delete", "ssi", package_name(inst->info), inst->id, type);
 	if (!packet) {
 		ErrPrint("Failed to build a packet for %s\n", package_name(inst->info));
 		return LB_STATUS_ERROR_FAULT;
 	}
 
+	inst->destroy_type = type;
 	inst->requested_state = INST_DESTROYED;
 	inst->state = INST_REQUEST_TO_DESTROY;
 	inst->changing_state = 1;
@@ -2653,7 +2655,7 @@ HAPI int instance_destroyed(struct inst_info *inst)
 		DbgPrint("Send deleted event - unicast - %p\n", inst->client);
 		instance_unicast_deleted_event(inst, NULL);
 		instance_state_reset(inst);
-		instance_destroy(inst);
+		instance_destroy(inst, INSTANCE_DESTROY_DEFAULT);
 		break;
 	case INST_REQUEST_TO_REACTIVATE:
 	case INST_REQUEST_TO_DESTROY:
@@ -2661,7 +2663,7 @@ HAPI int instance_destroyed(struct inst_info *inst)
 		DbgPrint("Send deleted event - multicast\n");
 		instance_broadcast_deleted_event(inst);
 		instance_state_reset(inst);
-		instance_destroy(inst);
+		instance_destroy(inst, INSTANCE_DESTROY_DEFAULT);
 	case INST_DESTROYED:
 		break;
 	default:
@@ -2697,7 +2699,7 @@ HAPI int instance_recover_state(struct inst_info *inst)
 		case INST_DESTROYED:
 			DbgPrint("Req. to DESTROYED (%s)\n", package_name(inst->info));
 			instance_state_reset(inst);
-			instance_destroy(inst);
+			instance_destroy(inst, INSTANCE_DESTROY_DEFAULT);
 			break;
 		default:
 			break;
@@ -2714,7 +2716,7 @@ HAPI int instance_recover_state(struct inst_info *inst)
 				DbgPrint("Failed to reactivate the instance\n");
 				instance_broadcast_deleted_event(inst);
 				instance_state_reset(inst);
-				instance_destroy(inst);
+				instance_destroy(inst, INSTANCE_DESTROY_DEFAULT);
 			} else {
 				ret = 1;
 			}
@@ -2722,7 +2724,7 @@ HAPI int instance_recover_state(struct inst_info *inst)
 		case INST_DESTROYED:
 			DbgPrint("Req. to DESTROYED (%s)\n", package_name(inst->info));
 			instance_state_reset(inst);
-			instance_destroy(inst);
+			instance_destroy(inst, INSTANCE_DESTROY_DEFAULT);
 			ret = 1;
 			break;
 		default:
@@ -2761,7 +2763,7 @@ HAPI int instance_need_slave(struct inst_info *inst)
 		case INST_REQUEST_TO_DESTROY:
 		case INST_REQUEST_TO_ACTIVATE:
 			instance_state_reset(inst);
-			instance_destroy(inst);
+			instance_destroy(inst, INSTANCE_DESTROY_DEFAULT);
 			break;
 		case INST_DESTROYED:
 			break;
@@ -2783,7 +2785,7 @@ HAPI int instance_need_slave(struct inst_info *inst)
 		case INST_DESTROYED:
 			DbgPrint("Req. to DESTROYED (%s)\n", package_name(inst->info));
 			instance_state_reset(inst);
-			instance_destroy(inst);
+			instance_destroy(inst, INSTANCE_DESTROY_DEFAULT);
 			break;
 		default:
 			break;
@@ -2800,7 +2802,7 @@ HAPI int instance_need_slave(struct inst_info *inst)
 		case INST_DESTROYED:
 			DbgPrint("Req. to DESTROYED (%s)\n", package_name(inst->info));
 			instance_state_reset(inst);
-			instance_destroy(inst);
+			instance_destroy(inst, INSTANCE_DESTROY_DEFAULT);
 			break;
 		default:
 			break;

@@ -203,7 +203,7 @@ static void ail_info_cb(keynode_t *node, void *user_data)
 
 		inst_list = package_instance_list(info);
 		EINA_LIST_FOREACH_SAFE(inst_list, j, n, inst) {
-			instance_destroy(inst);
+			instance_destroy(inst, INSTANCE_DESTROY_DEFAULT);
 		}
 	}
 

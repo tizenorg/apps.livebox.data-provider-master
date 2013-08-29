@@ -1264,7 +1264,7 @@ static int io_uninstall_cb(const char *pkgname, int prime, void *data)
 	 */
 	if (info->inst_list) {
 		EINA_LIST_FOREACH_SAFE(info->inst_list, l, n, inst) {
-			instance_destroy(inst);
+			instance_destroy(inst, INSTANCE_DESTROY_PKGMGR);
 		}
 	} else {
 		package_destroy(info);
@@ -1285,7 +1285,7 @@ static inline void reload_package_info(struct pkg_info *info)
 	 * Without "is_uninstalled", the package will be kept
 	 */
 	EINA_LIST_FOREACH_SAFE(info->inst_list, l, n, inst) {
-		instance_destroy(inst);
+		instance_destroy(inst, INSTANCE_DESTROY_PKGMGR);
 	}
 
 	group_del_livebox(info->pkgname);
@@ -1416,7 +1416,7 @@ HAPI int package_fini(void)
 	EINA_LIST_FOREACH_SAFE(s_info.pkg_list, p_l, p_n, info) {
 		EINA_LIST_FOREACH_SAFE(info->inst_list, i_l, i_n, inst) {
 			instance_state_reset(inst);
-			instance_destroy(inst);
+			instance_destroy(inst, INSTANCE_DESTROY_TERMINATE);
 		}
 
 		package_destroy(info);

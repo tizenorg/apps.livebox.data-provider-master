@@ -784,7 +784,7 @@ static struct packet *client_delete(pid_t pid, int handle, const struct packet *
 			ret = LB_STATUS_ERROR_PERMISSION;
 		}
 	} else {
-		ret = instance_destroy(inst);
+		ret = instance_destroy(inst, INSTANCE_DESTROY_DEFAULT);
 	}
 
 out:
@@ -5357,7 +5357,7 @@ static struct packet *slave_faulted(pid_t pid, int handle, const struct packet *
 	} else if (instance_state(inst) == INST_DESTROYED) {
 		ErrPrint("Instance(%s) is already destroyed\n", id);
 	} else {
-		ret = instance_destroy(inst);
+		ret = instance_destroy(inst, INSTANCE_DESTROY_FAULT);
 	}
 
 out:
@@ -6570,7 +6570,7 @@ static struct packet *liveinfo_pkg_ctrl(pid_t pid, int handle, const struct pack
 		if (!inst) {
 			fprintf(fp, "%d\n", ENOENT);
 		} else {
-			(void)instance_destroy(inst);
+			(void)instance_destroy(inst, INSTANCE_DESTROY_DEFAULT);
 			fprintf(fp, "%d\n", 0);
 		}
 	}

@@ -286,7 +286,7 @@ static void _handler_delete_multiple(struct tcb *tcb, struct packet *packet, voi
 		if (ret != NOTIFICATION_ERROR_NONE) {
 			ErrPrint("failed to delete notifications:%d\n", ret);
 			if (list_deleted != NULL) {
-				free(list_deleted);
+				DbgFree(list_deleted);
 			}
 			return ;
 		}
@@ -324,7 +324,7 @@ static void _handler_delete_multiple(struct tcb *tcb, struct packet *packet, voi
 		}
 
 		if (list_deleted != NULL) {
-			free(list_deleted);
+			DbgFree(list_deleted);
 			list_deleted = NULL;
 		}
 	} else {

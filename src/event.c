@@ -156,6 +156,7 @@ static inline int processing_input_event(struct input_event *event)
 			if (s_info.event_data.device < 0) {
 				s_info.event_data.x = -1;
 				s_info.event_data.y = -1;
+				s_info.event_data.slot = -1;
 			}
 			break;
 		/*
@@ -633,6 +634,7 @@ HAPI int event_deactivate(int (*event_cb)(enum event_state state, struct event_d
 
 	s_info.event_data.x = -1;
 	s_info.event_data.y = -1;
+	s_info.event_data.slot = -1;
 	return LB_STATUS_SUCCESS;
 }
 

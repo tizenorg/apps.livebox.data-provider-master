@@ -25,6 +25,7 @@
 
 #include <packet.h>
 #include <livebox-errno.h>
+#include <livebox-service.h>
 #include <ail.h>
 
 #include "critical_log.h"
@@ -58,7 +59,8 @@ struct fault_info {
  */
 
 struct pkg_info {
-	char *pkgname;
+	char *pkgid;
+	char *lbid;
 
 	struct {
 		enum lb_type type;
@@ -285,7 +287,7 @@ static inline void destroy_package(struct pkg_info *info)
 		/* This items will be deleted from group_del_livebox */
 	}
 
-	group_del_livebox(info->pkgname);
+	group_del_livebox(info->lbid);
 	package_clear_fault(info);
 
 	s_info.pkg_list = eina_list_remove(s_info.pkg_list, info);
@@ -302,9 +304,10 @@ static inline void destroy_package(struct pkg_info *info)
 
 	DbgFree(info->script);
 	DbgFree(info->abi);
-	DbgFree(info->pkgname);
+	DbgFree(info->lbid);
 	DbgFree(info->lb.libexec);
 	DbgFree(info->lb.auto_launch);
+	DbgFree(info->pkgid);
 
 	DbgFree(info);
 }
@@ -315,7 +318,7 @@ static inline int load_conf(struct pkg_info *info)
 	const char *str;
 	const char *group;
 
-	parser = parser_load(info->pkgname);
+	parser = parser_load(info->lbid);
 	if (!parser) {
 		info->lb.size_list = 0x01; /* Default */
 
@@ -481,15 +484,15 @@ static inline int load_conf(struct pkg_info *info)
 	parser_get_pdsize(parser, &info->pd.width, &info->pd.height);
 
 	group = parser_group_str(parser);
-	if (group && group_add_livebox(group, info->pkgname) < 0) {
-		ErrPrint("Failed to build cluster tree for %s{%s}\n", info->pkgname, group);
+	if (group && group_add_livebox(group, info->lbid) < 0) {
+		ErrPrint("Failed to build cluster tree for %s{%s}\n", info->lbid, group);
 	}
 
 	parser_unload(parser);
 	return LB_STATUS_SUCCESS;
 }
 
-HAPI struct pkg_info *package_create(const char *pkgname)
+HAPI struct pkg_info *package_create(const char *pkgid, const char *lbid)
 {
 	struct pkg_info *pkginfo;
 
@@ -499,18 +502,27 @@ HAPI struct pkg_info *package_create(const char *pkgname)
 		return NULL;
 	}
 
-	pkginfo->pkgname = io_livebox_pkgname(pkgname);
-	if (!pkginfo->pkgname) {
+	pkginfo->pkgid = strdup(pkgid);
+	if (!pkginfo->pkgid) {
+		ErrPrint("Heap: %s\n", strerror(errno));
+		DbgFree(pkginfo);
+		return NULL;
+	}
+
+	pkginfo->lbid = io_livebox_pkgname(lbid);
+	if (!pkginfo->lbid) {
 		ErrPrint("Failed to get pkgname, fallback to fs checker\n");
-		if (util_validate_livebox_package(pkgname) < 0) {
-			ErrPrint("Invalid package name: %s\n", pkgname);
+		if (util_validate_livebox_package(lbid) < 0) {
+			ErrPrint("Invalid package name: %s\n", lbid);
+			DbgFree(pkginfo->pkgid);
 			DbgFree(pkginfo);
 			return NULL;
 		}
 
-		pkginfo->pkgname = strdup(pkgname);
-		if (!pkginfo->pkgname) {
+		pkginfo->lbid = strdup(lbid);
+		if (!pkginfo->lbid) {
 			ErrPrint("Heap: %s\n", strerror(errno));
+			DbgFree(pkginfo->pkgid);
 			DbgFree(pkginfo);
 			return NULL;
 		}
@@ -520,7 +532,8 @@ HAPI struct pkg_info *package_create(const char *pkgname)
 		ErrPrint("Failed to load DB, fall back to conf file loader\n");
 		if (load_conf(pkginfo) < 0) {
 			ErrPrint("Failed to initiate the conf file loader\n");
-			DbgFree(pkginfo->pkgname);
+			DbgFree(pkginfo->lbid);
+			DbgFree(pkginfo->pkgid);
 			DbgFree(pkginfo);
 			return NULL;
 		}
@@ -556,47 +569,47 @@ HAPI void package_del_ctx_info(struct pkg_info *pkginfo, struct context_info *in
 
 HAPI char *package_lb_pkgname(const char *pkgname)
 {
-	char *lb_pkgname;
+	char *lbid;
 
-	lb_pkgname = io_livebox_pkgname(pkgname);
-	if (!lb_pkgname) {
+	lbid = io_livebox_pkgname(pkgname);
+	if (!lbid) {
 		if (util_validate_livebox_package(pkgname) < 0) {
 			return NULL;
 		}
 
-		lb_pkgname = strdup(pkgname);
-		if (!lb_pkgname) {
+		lbid = strdup(pkgname);
+		if (!lbid) {
 			ErrPrint("Heap: %s\n", strerror(errno));
 			return NULL;
 		}
 	}
 
-	return lb_pkgname;
+	return lbid;
 }
 
 HAPI int package_is_lb_pkgname(const char *pkgname)
 {
-	char *lb_pkgname;
+	char *lbid;
 	int ret;
 
-	lb_pkgname = package_lb_pkgname(pkgname);
-	ret = !!lb_pkgname;
-	DbgFree(lb_pkgname);
+	lbid = package_lb_pkgname(pkgname);
+	ret = !!lbid;
+	DbgFree(lbid);
 
 	return ret;
 }
 
-HAPI struct pkg_info *package_find(const char *pkgname)
+HAPI struct pkg_info *package_find(const char *lbid)
 {
 	Eina_List *l;
 	struct pkg_info *info;
 
-	if (!pkgname) {
+	if (!lbid) {
 		return NULL;
 	}
 
 	EINA_LIST_FOREACH(s_info.pkg_list, l, info) {
-		if (!strcmp(info->pkgname, pkgname)) {
+		if (!strcmp(info->lbid, lbid)) {
 			return info;
 		}
 	}
@@ -604,15 +617,15 @@ HAPI struct pkg_info *package_find(const char *pkgname)
 	return NULL;
 }
 
-HAPI struct inst_info *package_find_instance_by_id(const char *pkgname, const char *id)
+HAPI struct inst_info *package_find_instance_by_id(const char *lbid, const char *id)
 {
 	Eina_List *l;
 	struct inst_info *inst;
 	struct pkg_info *info;
 
-	info = package_find(pkgname);
+	info = package_find(lbid);
 	if (!info) {
-		ErrPrint("Package %s is not exists\n", pkgname);
+		ErrPrint("Package %s is not exists\n", lbid);
 		return NULL;
 	}
 
@@ -625,15 +638,15 @@ HAPI struct inst_info *package_find_instance_by_id(const char *pkgname, const ch
 	return NULL;
 }
 
-HAPI struct inst_info *package_find_instance_by_timestamp(const char *pkgname, double timestamp)
+HAPI struct inst_info *package_find_instance_by_timestamp(const char *lbid, double timestamp)
 {
 	Eina_List *l;
 	struct inst_info *inst;
 	struct pkg_info *info;
 
-	info = package_find(pkgname);
+	info = package_find(lbid);
 	if (!info) {
-		ErrPrint("Package %s is not exists\n", pkgname);
+		ErrPrint("Package %s is not exists\n", lbid);
 		return NULL;
 	}
 
@@ -654,7 +667,7 @@ HAPI int package_dump_fault_info(struct pkg_info *info)
 
 	CRITICAL_LOG("=============\n");
 	CRITICAL_LOG("faulted at %lf\n", info->fault_info->timestamp);
-	CRITICAL_LOG("Package: %s\n", info->pkgname);
+	CRITICAL_LOG("Package: %s\n", info->lbid);
 	CRITICAL_LOG("Function: %s\n", info->fault_info->function);
 	CRITICAL_LOG("InstanceID: %s\n", info->fault_info->filename);
 	return LB_STATUS_SUCCESS;
@@ -1077,7 +1090,7 @@ static inline int assign_new_slave(struct pkg_info *info)
 		return LB_STATUS_ERROR_INVALID;
 	}
 
-	s_pkgname = util_replace_string(tmp, REPLACE_TAG_APPID, info->pkgname);
+	s_pkgname = util_replace_string(tmp, REPLACE_TAG_APPID, info->lbid);
 	if (!s_pkgname) {
 		DbgPrint("Failed to get replaced string\n");
 		s_pkgname = strdup(tmp);
@@ -1088,7 +1101,7 @@ static inline int assign_new_slave(struct pkg_info *info)
 		}
 	}
 
-	DbgPrint("New slave[%s] is assigned for %s (using %s / abi[%s])\n", s_name, info->pkgname, s_pkgname, info->abi);
+	DbgPrint("New slave[%s] is assigned for %s (using %s / abi[%s])\n", s_name, info->lbid, s_pkgname, info->abi);
 	info->slave = slave_create(s_name, info->secured, info->abi, s_pkgname, info->network);
 
 	DbgFree(s_name);
@@ -1124,7 +1137,7 @@ HAPI int package_add_instance(struct pkg_info *info, struct inst_info *inst)
 				return ret;
 			}
 		} else {
-			DbgPrint("Slave %s is used for %s\n", slave_name(info->slave), info->pkgname);
+			DbgPrint("Slave %s is used for %s\n", slave_name(info->slave), info->lbid);
 		}
 
 		slave_ref(info->slave);
@@ -1203,7 +1216,7 @@ static int client_created_cb(struct client_node *client, void *data)
 
 	EINA_LIST_FOREACH(s_info.pkg_list, l, info) {
 		if (info->fault_info) {
-			fault_unicast_info(client, info->pkgname, info->fault_info->filename, info->fault_info->function);
+			fault_unicast_info(client, info->lbid, info->fault_info->filename, info->fault_info->function);
 			continue;
 		}
 
@@ -1224,7 +1237,7 @@ static int client_created_cb(struct client_node *client, void *data)
 					 */
 					if (client_is_subscribed(client, instance_cluster(inst), instance_category(inst))) {
 						instance_unicast_created_event(inst, client);
-						DbgPrint("(Subscribed) Created package: %s\n", info->pkgname);
+						DbgPrint("(Subscribed) Created package: %s\n", info->lbid);
 					}
 				}
 
@@ -1240,17 +1253,17 @@ static int client_created_cb(struct client_node *client, void *data)
 	return 0;
 }
 
-static int io_uninstall_cb(const char *pkgname, int prime, void *data)
+static int io_uninstall_cb(const char *pkgid, const char *lbid, int prime, void *data)
 {
 	struct pkg_info *info;
 	Eina_List *l;
 	Eina_List *n;
 	struct inst_info *inst;
 
-	DbgPrint("Package %s is uninstalled\n", pkgname);
-	info = package_find(pkgname);
+	DbgPrint("Package %s is uninstalled\n", lbid);
+	info = package_find(lbid);
 	if (!info) {
-		DbgPrint("%s is not yet loaded\n", pkgname);
+		DbgPrint("%s is not yet loaded\n", lbid);
 		return 0;
 	}
 
@@ -1278,17 +1291,13 @@ static inline void reload_package_info(struct pkg_info *info)
 	Eina_List *l;
 	Eina_List *n;
 	struct inst_info *inst;
+	unsigned int size_type;
+	int width;
+	int height;
 
 	DbgPrint("Already exists, try to update it\n");
-	/*!
-	 * \note
-	 * Without "is_uninstalled", the package will be kept
-	 */
-	EINA_LIST_FOREACH_SAFE(info->inst_list, l, n, inst) {
-		instance_destroy(inst, INSTANCE_DESTROY_PKGMGR);
-	}
 
-	group_del_livebox(info->pkgname);
+	group_del_livebox(info->lbid);
 	package_clear_fault(info);
 
 	/*!
@@ -1296,89 +1305,98 @@ static inline void reload_package_info(struct pkg_info *info)
 	 * Nested DB I/O
 	 */
 	io_load_package_db(info);
+
+	/*!
+	 * \note
+	 * Without "is_uninstalled", the package will be kept
+	 */
+	EINA_LIST_FOREACH_SAFE(info->inst_list, l, n, inst) {
+		width = instance_lb_width(inst);
+		height = instance_lb_height(inst);
+		size_type = livebox_service_size_type(width, height);
+		if (info->lb.size_list & size_type) {
+			instance_reload(inst, INSTANCE_DESTROY_PKGMGR);
+		} else {
+			instance_destroy(inst, INSTANCE_DESTROY_PKGMGR);
+		}
+	}
 }
 
-static int io_install_cb(const char *pkgname, int prime, void *data)
+static int io_install_cb(const char *pkgid, const char *lbid, int prime, void *data)
 {
 	struct pkg_info *info;
 
-	DbgPrint("Livebox package %s is installed\n", pkgname);
-	info = package_find(pkgname);
+	info = package_find(lbid);
 	if (info) {
-		reload_package_info(info);
-	} else {
-		info = package_create(pkgname);
-		if (!info) {
-			ErrPrint("Failed to build an info: %s\n", pkgname);
-		} else {
-			DbgPrint("Package %s is built\n", pkgname);
-		}
-	}
-
-	return 0;
-}
-
-static int install_cb(const char *pkgname, enum pkgmgr_status status, double value, void *data)
-{
-	int ret;
-
-	if (status != PKGMGR_STATUS_END) {
+		/*!
+		 * Already exists. skip to create this.
+		 */
 		return 0;
 	}
 
-	ret = io_update_livebox_package(pkgname, io_install_cb, NULL);
+	info = package_create(pkgid, lbid);
+	if (!info) {
+		ErrPrint("Failed to build an info %s\n", lbid);
+	} else {
+		DbgPrint("Livebox %s is built\n", lbid);
+	}
+
 	return 0;
 }
 
 static int uninstall_cb(const char *pkgname, enum pkgmgr_status status, double value, void *data)
 {
-	int ret;
+	Eina_List *l;
+	Eina_List *n;
+	struct pkg_info *info;
 
-	if (status == PKGMGR_STATUS_START) {
-		ret = io_update_livebox_package(pkgname, io_uninstall_cb, NULL);
-		if (ret == 0) {
-			/*! for keeping the old style */
-			(void)io_uninstall_cb(pkgname, -1, NULL);
+	if (status != PKGMGR_STATUS_END) {
+		return 0;
+	}
+
+	EINA_LIST_FOREACH_SAFE(s_info.pkg_list, l, n, info) {
+		if (!strcmp(info->pkgid, pkgname)) {
+			io_uninstall_cb(pkgname, info->lbid, -1, NULL);
 		}
 	}
 
 	return 0;
 }
 
-static int io_update_cb(const char *pkgname, int prime, void *data)
-{
-	struct pkg_info *info;
-
-	DbgPrint("Livebox package %s is updated\n", pkgname);
-	info = package_find(pkgname);
-	if (!info) {
-		return 0;
-	}
-
-	reload_package_info(info);
-	return 0;
-}
-
 static int update_cb(const char *pkgname, enum pkgmgr_status status, double value, void *data)
 {
-	int ret;
+	Eina_List *l;
+	Eina_List *n;
+	struct pkg_info *info;
+
 	if (status != PKGMGR_STATUS_END) {
 		return 0;
 	}
 
-	ret = io_update_livebox_package(pkgname, io_update_cb, NULL);
+	EINA_LIST_FOREACH_SAFE(s_info.pkg_list, l, n, info) {
+		if (!strcmp(info->pkgid, pkgname)) {
+			DbgPrint("Update lbid: %s\n", info->lbid);
+			if (io_is_exists(info->lbid) == 1) {
+				reload_package_info(info);
+			} else {
+				io_uninstall_cb(pkgname, info->lbid, -1, NULL);
+			}
+		}
+	}
+
+	(void)io_update_livebox_package(pkgname, io_install_cb, NULL);
 	return 0;
 }
 
-static int crawling_liveboxes(const char *pkgname, int prime, void *data)
+static int crawling_liveboxes(const char *pkgid, const char *lbid, int prime, void *data)
 {
-	if (package_find(pkgname)) {
-		ErrPrint("Information of %s is already built\n", pkgname);
+	if (package_find(lbid)) {
+		ErrPrint("Information of %s is already built\n", lbid);
 	} else {
 		struct pkg_info *info;
-		info = package_create(pkgname);
+		info = package_create(pkgid, lbid);
 		if (info) {
-			DbgPrint("[%s] information is built prime(%d)\n", pkgname, prime);
+			DbgPrint("[%s] information is built prime(%d)\n", lbid, prime);
 		}
 	}
 
@@ -1390,7 +1408,7 @@ HAPI int package_init(void)
 	client_global_event_handler_add(CLIENT_GLOBAL_EVENT_CREATE, client_created_cb, NULL);
 	pkgmgr_init();
 
-	pkgmgr_add_event_callback(PKGMGR_EVENT_INSTALL, install_cb, NULL);
+	pkgmgr_add_event_callback(PKGMGR_EVENT_INSTALL, update_cb, NULL);
 	pkgmgr_add_event_callback(PKGMGR_EVENT_UNINSTALL, uninstall_cb, NULL);
 	pkgmgr_add_event_callback(PKGMGR_EVENT_UPDATE, update_cb, NULL);
 
@@ -1407,7 +1425,7 @@ HAPI int package_fini(void)
 	struct pkg_info *info;
 	struct inst_info *inst;
 
-	pkgmgr_del_event_callback(PKGMGR_EVENT_INSTALL, install_cb, NULL);
+	pkgmgr_del_event_callback(PKGMGR_EVENT_INSTALL, update_cb, NULL);
 	pkgmgr_del_event_callback(PKGMGR_EVENT_UNINSTALL, uninstall_cb, NULL);
 	pkgmgr_del_event_callback(PKGMGR_EVENT_UPDATE, update_cb, NULL);
 	pkgmgr_fini();
@@ -1436,7 +1454,7 @@ HAPI const char *package_find_by_secured_slave(struct slave_node *slave)
 
 	EINA_LIST_FOREACH(s_info.pkg_list, l, info) {
 		if (info->slave == slave) {
-			return info->pkgname;
+			return info->lbid;
 		}
 	}
 
@@ -1445,7 +1463,7 @@ HAPI const char *package_find_by_secured_slave(struct slave_node *slave)
 
 HAPI const char * const package_name(const struct pkg_info *info)
 {
-	return info->pkgname;
+	return info->lbid;
 }
 
 /*!
@@ -1500,7 +1518,7 @@ HAPI int package_alter_instances_to_client(struct client_node *client, enum alte
 					if (!instance_has_client(inst, client)) {
 						instance_unicast_created_event(inst, client);
 						instance_add_client(inst, client);
-						DbgPrint("(Subscribed) Created package: %s\n", info->pkgname);
+						DbgPrint("(Subscribed) Created package: %s\n", info->lbid);
 					}
 					break;
 				case ALTER_DESTROY:

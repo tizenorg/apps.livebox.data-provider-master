@@ -43,7 +43,7 @@ struct slave_node;
  * \brief
  * Construction & Destruction
  */
-extern struct pkg_info *package_create(const char *pkgname);
+extern struct pkg_info *package_create(const char *pkgid, const char *lbid);
 extern int package_destroy(struct pkg_info *info);
 extern char *package_lb_pkgname(const char *pkgname);
 extern int package_is_lb_pkgname(const char *pkgname);

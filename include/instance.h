@@ -136,6 +136,7 @@ struct client_node;
 
 extern struct inst_info *instance_create(struct client_node *client, double timestamp, const char *pkgname, const char *content, const char *cluster, const char *category, double period, int width, int height);
 extern int instance_destroy(struct inst_info *inst, enum instance_destroy_type type);
+extern int instance_reload(struct inst_info *inst, enum instance_destroy_type type);
 
 extern struct inst_info * instance_ref(struct inst_info *inst);
 extern struct inst_info * instance_unref(struct inst_info *inst);

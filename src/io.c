@@ -578,7 +578,7 @@ static inline int build_group_info(struct pkg_info *info)
 	return LB_STATUS_SUCCESS;
 }
 
-HAPI int io_is_exists(const char *pkgname) /* Manifest Package Name */
+HAPI int io_is_exists(const char *lbid)
 {
 	sqlite3_stmt *stmt;
 	int ret;
@@ -588,13 +588,13 @@ HAPI int io_is_exists(const char *pkgname) /* Manifest Package Name */
 		return LB_STATUS_ERROR_IO;
 	}
 
-	ret = sqlite3_prepare_v2(s_info.handle, "SELECT COUNT(pkgid) FROM pkgmap WHERE appid = ?", -1, &stmt, NULL);
+	ret = sqlite3_prepare_v2(s_info.handle, "SELECT COUNT(pkgid) FROM pkgmap WHERE pkgid = ?", -1, &stmt, NULL);
 	if (ret != SQLITE_OK) {
 		ErrPrint("Error: %s\n", sqlite3_errmsg(s_info.handle));
 		return LB_STATUS_ERROR_IO;
 	}
 
-	ret = sqlite3_bind_text(stmt, 1, pkgname, -1, SQLITE_TRANSIENT);
+	ret = sqlite3_bind_text(stmt, 1, lbid, -1, SQLITE_TRANSIENT);
 	if (ret != SQLITE_OK) {
 		ErrPrint("Error: %s\n", sqlite3_errmsg(s_info.handle));
 		ret = LB_STATUS_ERROR_IO;
@@ -602,7 +602,7 @@ HAPI int io_is_exists(const char *pkgname) /* Manifest Package Name */
 	}
 
 	if (sqlite3_step(stmt) != SQLITE_ROW) {
-		ErrPrint("%s has no record (%s)\n", pkgname, sqlite3_errmsg(s_info.handle));
+		ErrPrint("%s has no record (%s)\n", lbid, sqlite3_errmsg(s_info.handle));
 		ret = LB_STATUS_ERROR_IO;
 		goto out;
 	}
@@ -665,7 +665,7 @@ out:
 	return pkgid;
 }
 
-HAPI int io_crawling_liveboxes(int (*cb)(const char *pkgname, int prime, void *data), void *data)
+HAPI int io_crawling_liveboxes(int (*cb)(const char *pkgid, const char *lbid, int prime, void *data), void *data)
 {
 	DIR *dir;
 
@@ -675,10 +675,11 @@ HAPI int io_crawling_liveboxes(int (*cb)(const char *pkgname, int prime, void *d
 		int ret;
 		sqlite3_stmt *stmt;
 
-		ret = sqlite3_prepare_v2(s_info.handle, "SELECT pkgid, prime FROM pkgmap", -1, &stmt, NULL);
+		ret = sqlite3_prepare_v2(s_info.handle, "SELECT appid, pkgid, prime FROM pkgmap", -1, &stmt, NULL);
 		if (ret != SQLITE_OK) {
 			ErrPrint("Error: %s\n", sqlite3_errmsg(s_info.handle));
 		} else {
+			const char *lbid;
 			const char *pkgid;
 			int prime;
 
@@ -688,8 +689,14 @@ HAPI int io_crawling_liveboxes(int (*cb)(const char *pkgname, int prime, void *d
 					continue;
 				}
 
+				lbid = (const char *)sqlite3_column_text(stmt, 1);
+				if (!lbid || !strlen(lbid)) {
+					continue;
+				}
+
 				prime = (int)sqlite3_column_int(stmt, 1);
-				if (cb(pkgid, prime, data) < 0) {
+
+				if (cb(pkgid, lbid, prime, data) < 0) {
 					sqlite3_reset(stmt);
 					sqlite3_finalize(stmt);
 					return LB_STATUS_ERROR_CANCEL;
@@ -712,7 +719,7 @@ HAPI int io_crawling_liveboxes(int (*cb)(const char *pkgname, int prime, void *d
 				continue;
 			}
 
-			if (cb(ent->d_name, -1, data) < 0) {
+			if (cb(ent->d_name, ent->d_name, -2, data) < 0) {
 				if (closedir(dir) < 0) {
 					ErrPrint("closedir: %s\n", strerror(errno));
 				}
@@ -728,14 +735,14 @@ HAPI int io_crawling_liveboxes(int (*cb)(const char *pkgname, int prime, void *d
 	return LB_STATUS_SUCCESS;
 }
 
-HAPI int io_update_livebox_package(const char *pkgname, int (*cb)(const char *lb_pkgname, int prime, void *data), void *data)
+HAPI int io_update_livebox_package(const char *pkgid, int (*cb)(const char *pkgid, const char *lbid, int prime, void *data), void *data)
 {
 	sqlite3_stmt *stmt;
-	char *pkgid;
+	char *lbid;
 	int prime;
 	int ret;
 
-	if (!cb || !pkgname) {
+	if (!cb || !pkgid) {
 		return LB_STATUS_ERROR_INVALID;
 	}
 
@@ -750,7 +757,7 @@ HAPI int io_update_livebox_package(const char *pkgname, int (*cb)(const char *lb
 		return LB_STATUS_ERROR_FAULT;
 	}
 
-	ret = sqlite3_bind_text(stmt, 1, pkgname, -1, SQLITE_TRANSIENT);
+	ret = sqlite3_bind_text(stmt, 1, pkgid, -1, SQLITE_TRANSIENT);
 	if (ret != SQLITE_OK) {
 		ErrPrint("Error: %s\n", sqlite3_errmsg(s_info.handle));
 		ret = LB_STATUS_ERROR_FAULT;
@@ -759,14 +766,14 @@ HAPI int io_update_livebox_package(const char *pkgname, int (*cb)(const char *lb
 
 	ret = 0;
 	while (sqlite3_step(stmt) == SQLITE_ROW) {
-		pkgid = (char *)sqlite3_column_text(stmt, 0);
-		if (!pkgid || !strlen(pkgid)) {
+		lbid = (char *)sqlite3_column_text(stmt, 0);
+		if (!lbid || !strlen(lbid)) {
 			continue;
 		}
 
 		prime = sqlite3_column_int(stmt, 1);
 
-		if (cb(pkgid, prime, data) < 0) {
+		if (cb(pkgid, lbid, prime, data) < 0) {
 			DbgPrint("Callback canceled\n");
 			break;
 		}

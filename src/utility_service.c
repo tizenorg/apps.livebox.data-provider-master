@@ -33,7 +33,7 @@
 #include "conf.h"
 
 #ifndef SVC_PKG
-#define SVC_PKG		"com.samsung.data-provider-slave.icon"
+#define SVC_PKG		"org.tizen.data-provider-slave.icon"
 #endif
 
 #ifndef LAUNCH_TIMEOUT

@@ -120,8 +120,6 @@ struct inst_info {
 			struct buffer_info *buffer;
 		} canvas;
 
-		const char *auto_launch;
-		int timeout;
 		double period;
 	} lb;
 
@@ -396,7 +394,7 @@ HAPI int instance_unicast_created_event(struct inst_info *inst, struct client_no
 			inst->pd.width, inst->pd.height,
 			inst->cluster, inst->category,
 			lb_file, pd_file,
-			inst->lb.auto_launch,
+			package_auto_launch(inst->info),
 			inst->lb.priority,
 			package_size_list(inst->info),
 			!!inst->client,
@@ -461,7 +459,7 @@ static int instance_broadcast_created_event(struct inst_info *inst)
 			inst->pd.width, inst->pd.height,
 			inst->cluster, inst->category,
 			lb_file, pd_file,
-			inst->lb.auto_launch,
+			package_auto_launch(inst->info),
 			inst->lb.priority,
 			package_size_list(inst->info),
 			!!inst->client,
@@ -661,14 +659,6 @@ static inline void destroy_instance(struct inst_info *inst)
 		DbgFree(tag_item);
 	}
 
-	/*!
-	 * \note
-	 *
-	 * inst->lb.auto_launch
-	 *
-	 * will be released by the package object
-	 * it is readonly value for instances
-	 */
 	EINA_LIST_FREE(inst->delete_event_list, item) {
 		DbgFree(item);
 	}
@@ -711,11 +701,9 @@ static inline int fork_package(struct inst_info *inst, const char *pkgname)
 	}
 
 	snprintf(inst->id, len, SCHEMA_FILE "%s%s_%d_%lf.png", IMAGE_PATH, package_name(info), client_pid(inst->client), inst->timestamp);
-	inst->lb.auto_launch = package_auto_launch(info);
 
 	instance_set_pd_size(inst, package_pd_width(info), package_pd_height(info));
 
-	inst->lb.timeout = package_timeout(info);
 	inst->lb.period = package_period(info);
 
 	inst->info = info;
@@ -869,16 +857,12 @@ static void deactivate_cb(struct slave_node *slave, const struct packet *packet,
 		 * The instance_reload will care this.
 		 * And it will be called from the slave activate callback.
 		 */
-		inst->changing_state = 0;
-		instance_unref(inst);
-		return;
+		goto out;
 	}
 
 	if (packet_get(packet, "i", &ret) != 1) {
 		ErrPrint("Invalid argument\n");
-		inst->changing_state = 0;
-		instance_unref(inst);
-		return;
+		goto out;
 	}
 
 	if (inst->state == INST_DESTROYED) {
@@ -887,9 +871,7 @@ static void deactivate_cb(struct slave_node *slave, const struct packet *packet,
 		 * Already destroyed.
 		 * Do nothing at here anymore.
 		 */
-		inst->changing_state = 0;
-		instance_unref(inst);
-		return;
+		goto out;
 	}
 
 	switch (ret) {
@@ -946,6 +928,7 @@ static void deactivate_cb(struct slave_node *slave, const struct packet *packet,
 		break;
 	}
 
+out:
 	inst->changing_state = 0;
 	instance_unref(inst);
 }
@@ -1316,6 +1299,49 @@ HAPI int instance_destroy(struct inst_info *inst, enum instance_destroy_type typ
 	return slave_rpc_async_request(package_slave(inst->info), package_name(inst->info), packet, deactivate_cb, instance_ref(inst), 0);
 }
 
+HAPI int instance_reload(struct inst_info *inst, enum instance_destroy_type type)
+{
+	struct packet *packet;
+	int ret;
+
+	DbgPrint("Reload instance (%s)\n", instance_id(inst));
+
+	if (!inst) {
+		ErrPrint("Invalid instance handle\n");
+		return LB_STATUS_ERROR_INVALID;
+	}
+
+	switch (inst->state) {
+	case INST_REQUEST_TO_ACTIVATE:
+	case INST_REQUEST_TO_REACTIVATE:
+		return LB_STATUS_SUCCESS;
+	case INST_INIT:
+		ret = instance_activate(inst);
+		if (ret < 0) {
+			ErrPrint("Failed to activate instance: %d (%s)\n", ret, instance_id(inst));
+		}
+		return LB_STATUS_SUCCESS;
+	case INST_DESTROYED:
+	case INST_REQUEST_TO_DESTROY:
+		DbgPrint("Instance is destroying now\n");
+		return LB_STATUS_SUCCESS;
+	default:
+		break;
+	}
+
+	packet = packet_create("delete", "ssi", package_name(inst->info), inst->id, type);
+	if (!packet) {
+		ErrPrint("Failed to build a packet for %s\n", package_name(inst->info));
+		return LB_STATUS_ERROR_FAULT;
+	}
+
+	inst->destroy_type = type;
+	inst->requested_state = INST_ACTIVATED;
+	inst->state = INST_REQUEST_TO_DESTROY;
+	inst->changing_state = 1;
+	return slave_rpc_async_request(package_slave(inst->info), package_name(inst->info), packet, deactivate_cb, instance_ref(inst), 0);
+}
+
 /* Client Deactivated Callback */
 static int pd_buffer_close_cb(struct client_node *client, void *inst)
 {
@@ -1454,7 +1480,7 @@ HAPI int instance_reactivate(struct inst_info *inst)
 			package_name(inst->info),
 			inst->id,
 			inst->content,
-			inst->lb.timeout,
+			package_timeout(inst->info),
 			!!package_lb_path(inst->info),
 			inst->lb.period,
 			inst->cluster,
@@ -1520,7 +1546,7 @@ HAPI int instance_activate(struct inst_info *inst)
 			package_name(inst->info),
 			inst->id,
 			inst->content,
-			inst->lb.timeout,
+			package_timeout(inst->info),
 			!!package_lb_path(inst->info),
 			inst->lb.period,
 			inst->cluster,
@@ -2538,7 +2564,7 @@ HAPI int instance_change_group(struct inst_info *inst, const char *cluster, cons
 
 HAPI const char * const instance_auto_launch(const struct inst_info *inst)
 {
-	return inst->lb.auto_launch;
+	return package_auto_launch(inst->info);
 }
 
 HAPI const int const instance_priority(const struct inst_info *inst)
@@ -2553,7 +2579,7 @@ HAPI const struct client_node *const instance_client(const struct inst_info *ins
 
 HAPI const int const instance_timeout(const struct inst_info *inst)
 {
-	return inst->lb.timeout;
+	return package_timeout(inst->info);
 }
 
 HAPI const double const instance_period(const struct inst_info *inst)

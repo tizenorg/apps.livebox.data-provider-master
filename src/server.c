@@ -862,7 +862,7 @@ static struct packet *client_new(pid_t pid, int handle, const struct packet *pac
 	struct pkg_info *info;
 	int width;
 	int height;
-	char *lb_pkgname;
+	char *lbid;
 	char *mainappid;
 
 	client = client_find_by_rpc_handle(handle);
@@ -882,25 +882,35 @@ static struct packet *client_new(pid_t pid, int handle, const struct packet *pac
 	DbgPrint("pid[%d] period[%lf] pkgname[%s] content[%s] cluster[%s] category[%s] period[%lf]\n",
 						pid, timestamp, pkgname, content, cluster, category, period);
 
-	lb_pkgname = package_lb_pkgname(pkgname);
-	if (!lb_pkgname) {
+	lbid = package_lb_pkgname(pkgname);
+	if (!lbid) {
 		ErrPrint("This %s has no livebox package\n", pkgname);
 		ret = LB_STATUS_ERROR_INVALID;
 		goto out;
 	}
 
-	mainappid = livebox_service_mainappid(lb_pkgname);
+	mainappid = livebox_service_mainappid(lbid);
 	if (!package_is_enabled(mainappid)) {
 		DbgFree(mainappid);
-		DbgFree(lb_pkgname);
+		DbgFree(lbid);
 		ret = LB_STATUS_ERROR_DISABLED;
 		goto out;
 	}
 	DbgFree(mainappid);
 
-	info = package_find(lb_pkgname);
+	info = package_find(lbid);
 	if (!info) {
-		info = package_create(lb_pkgname);
+		char *pkgid;
+		pkgid = livebox_service_appid(lbid);
+		if (!pkgid) {
+			DbgFree(mainappid);
+			DbgFree(lbid);
+			ret = LB_STATUS_ERROR_FAULT;
+			goto out;
+		}
+
+		info = package_create(pkgid, lbid);
+		DbgFree(pkgid);
 	}
 
 	if (!info) {
@@ -917,7 +927,7 @@ static struct packet *client_new(pid_t pid, int handle, const struct packet *pac
 			period = MINIMUM_PERIOD;
 		}
 
-		inst = instance_create(client, timestamp, lb_pkgname, content, cluster, category, period, width, height);
+		inst = instance_create(client, timestamp, lbid, content, cluster, category, period, width, height);
 		/*!
 		 * \note
 		 * Using the "inst" without validate its value is at my disposal. ;)
@@ -925,7 +935,7 @@ static struct packet *client_new(pid_t pid, int handle, const struct packet *pac
 		ret = inst ? 0 : LB_STATUS_ERROR_FAULT;
 	}
 
-	DbgFree(lb_pkgname);
+	DbgFree(lbid);
 
 out:
 	result = packet_create_reply(packet, "i", ret);
@@ -6235,7 +6245,7 @@ static struct packet *service_update(pid_t pid, int handle, const struct packet 
 	const char *id;
 	const char *cluster;
 	const char *category;
-	char *lb_pkgname;
+	char *lbid;
 	int ret;
 
 	ret = packet_get(packet, "ssss", &pkgname, &id, &cluster, &category);
@@ -6245,30 +6255,30 @@ static struct packet *service_update(pid_t pid, int handle, const struct packet 
 		goto out;
 	}
 
-	lb_pkgname = package_lb_pkgname(pkgname);
-	if (!lb_pkgname) {
+	lbid = package_lb_pkgname(pkgname);
+	if (!lbid) {
 		ErrPrint("Invalid package %s\n", pkgname);
 		ret = LB_STATUS_ERROR_INVALID;
 		goto out;
 	}
 
-	pkg = package_find(lb_pkgname);
+	pkg = package_find(lbid);
 	if (!pkg) {
 		ret = LB_STATUS_ERROR_NOT_EXIST;
-		DbgFree(lb_pkgname);
+		DbgFree(lbid);
 		goto out;
 	}
 
 	if (package_is_fault(pkg)) {
 		ret = LB_STATUS_ERROR_FAULT;
-		DbgFree(lb_pkgname);
+		DbgFree(lbid);
 		goto out;
 	}
 
 	inst_list = package_instance_list(pkg);
 	if (!eina_list_count(inst_list)) {
 		ret = LB_STATUS_ERROR_NOT_EXIST;
-		DbgFree(lb_pkgname);
+		DbgFree(lbid);
 		goto out;
 	}
 
@@ -6285,7 +6295,7 @@ static struct packet *service_update(pid_t pid, int handle, const struct packet 
 		}
 
 		if (ret == LB_STATUS_ERROR_NOT_EXIST) {
-			DbgFree(lb_pkgname);
+			DbgFree(lbid);
 			goto out;
 		}
 	}
@@ -6294,8 +6304,8 @@ static struct packet *service_update(pid_t pid, int handle, const struct packet 
 	 * \TODO
 	 * Validate the update requstor.
 	 */
-	slave_rpc_request_update(lb_pkgname, id, cluster, category);
-	DbgFree(lb_pkgname);
+	slave_rpc_request_update(lbid, id, cluster, category);
+	DbgFree(lbid);
 	ret = LB_STATUS_SUCCESS;
 
 out:

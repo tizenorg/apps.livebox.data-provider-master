@@ -1277,7 +1277,7 @@ static int io_uninstall_cb(const char *pkgid, const char *lbid, int prime, void 
 	 */
 	if (info->inst_list) {
 		EINA_LIST_FOREACH_SAFE(info->inst_list, l, n, inst) {
-			instance_destroy(inst, INSTANCE_DESTROY_PKGMGR);
+			instance_destroy(inst, INSTANCE_DESTROY_DEFAULT);
 		}
 	} else {
 		package_destroy(info);
@@ -1317,7 +1317,7 @@ static inline void reload_package_info(struct pkg_info *info)
 		if (info->lb.size_list & size_type) {
 			instance_reload(inst, INSTANCE_DESTROY_PKGMGR);
 		} else {
-			instance_destroy(inst, INSTANCE_DESTROY_PKGMGR);
+			instance_destroy(inst, INSTANCE_DESTROY_DEFAULT);
 		}
 	}
 }

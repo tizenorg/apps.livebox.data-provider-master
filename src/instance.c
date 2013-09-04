@@ -1733,19 +1733,7 @@ HAPI int instance_pd_update_end(struct inst_info *inst)
 	return CLIENT_SEND_EVENT(inst, packet);
 }
 
-HAPI void instance_lb_updated(const char *pkgname, const char *id)
-{
-	struct inst_info *inst;
-
-	inst = package_find_instance_by_id(pkgname, id);
-	if (!inst) {
-		return;
-	}
-
-	instance_lb_updated_by_instance(inst);
-}
-
-HAPI void instance_lb_updated_by_instance(struct inst_info *inst)
+HAPI void instance_lb_updated_by_instance(struct inst_info *inst, const char *safe_file)
 {
 	struct packet *packet;
 	const char *id;
@@ -1782,9 +1770,9 @@ HAPI void instance_lb_updated_by_instance(struct inst_info *inst)
 		title = "";
 	}
 
-	packet = packet_create_noack("lb_updated", "sssiidss",
+	packet = packet_create_noack("lb_updated", "sssiidsss",
 			package_name(inst->info), inst->id, id,
-			inst->lb.width, inst->lb.height, inst->lb.priority, content, title);
+			inst->lb.width, inst->lb.height, inst->lb.priority, content, title, safe_file);
 	if (!packet) {
 		ErrPrint("Failed to create param (%s - %s)\n", package_name(inst->info), inst->id);
 		return;

@@ -220,8 +220,7 @@ extern int instance_pd_update_begin(struct inst_info *inst);
 extern int instance_pd_update_end(struct inst_info *inst);
 
 extern void instance_pd_updated(const char *pkgname, const char *id, const char *descfile);
-extern void instance_lb_updated(const char *pkgname, const char *id);
-extern void instance_lb_updated_by_instance(struct inst_info *inst);
+extern void instance_lb_updated_by_instance(struct inst_info *inst, const char *safe_file);
 extern void instance_pd_updated_by_instance(struct inst_info *inst, const char *descfile);
 
 extern int instance_client_pd_destroyed(struct inst_info *inst, int status);

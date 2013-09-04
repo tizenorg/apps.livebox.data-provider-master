@@ -5639,6 +5639,7 @@ static struct packet *slave_updated(pid_t pid, int handle, const struct packet *
 {
 	struct slave_node *slave;
 	const char *pkgname;
+	const char *safe_filename;
 	const char *id;
 	const char *content_info;
 	const char *title;
@@ -5654,18 +5655,17 @@ static struct packet *slave_updated(pid_t pid, int handle, const struct packet *
 		goto out;
 	}
 
-	ret = packet_get(packet, "ssiidss", &pkgname, &id,
+	ret = packet_get(packet, "ssiidsss", &pkgname, &id,
 						&w, &h, &priority,
-						&content_info, &title);
-	if (ret != 7) {
+						&content_info, &title,
+						&safe_filename);
+	if (ret != 8) {
 		ErrPrint("Parameter is not matched\n");
 		goto out;
 	}
 
 	ret = validate_request(pkgname, id, &inst, NULL);
 	if (ret == LB_STATUS_SUCCESS) {
-		char *filename;
-
 		if (instance_state(inst) == INST_DESTROYED) {
 			ErrPrint("Package[%s] instance is already destroyed\n", pkgname);
 			goto out;
@@ -5676,12 +5676,15 @@ static struct packet *slave_updated(pid_t pid, int handle, const struct packet *
 		switch (package_lb_type(instance_package(inst))) {
 		case LB_TYPE_SCRIPT:
 			script_handler_resize(instance_lb_script(inst), w, h);
-			filename = util_get_file_kept_in_safe(id);
-			if (filename) {
-				(void)script_handler_parse_desc(pkgname, id, filename, 0);
-				DbgFree(filename);
+			if (safe_filename) {
+				(void)script_handler_parse_desc(inst, safe_filename, 0);
 			} else {
-				(void)script_handler_parse_desc(pkgname, id, util_uri_to_path(id), 0);
+				safe_filename = util_uri_to_path(id);
+				(void)script_handler_parse_desc(inst, safe_filename, 0);
+			}
+
+			if (unlink(safe_filename) < 0) {
+				ErrPrint("unlink: %s - %s\n", strerror(errno), safe_filename);
 			}
 			break;
 		case LB_TYPE_BUFFER:
@@ -5691,7 +5694,7 @@ static struct packet *slave_updated(pid_t pid, int handle, const struct packet *
 			 * text format (inst)
 			 */
 			instance_set_lb_size(inst, w, h);
-			instance_lb_updated_by_instance(inst);
+			instance_lb_updated_by_instance(inst, safe_filename);
 			break;
 		}
 
@@ -5770,7 +5773,7 @@ static struct packet *slave_desc_updated(pid_t pid, int handle, const struct pac
 	switch (package_pd_type(instance_package(inst))) {
 	case PD_TYPE_SCRIPT:
 		if (script_handler_is_loaded(instance_pd_script(inst))) {
-			(void)script_handler_parse_desc(pkgname, id, descfile, 1);
+			(void)script_handler_parse_desc(inst, descfile, 1);
 		}
 		break;
 	case PD_TYPE_TEXT:

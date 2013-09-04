@@ -200,7 +200,7 @@ static void render_post_cb(void *data, Evas *e, void *event_info)
 	info = instance_lb_script(inst);
 	if (info && script_handler_evas(info) == e) {
 		fb_sync(script_handler_fb(info));
-		instance_lb_updated_by_instance(inst);
+		instance_lb_updated_by_instance(inst, NULL);
 		return;
 	}
 
@@ -839,9 +839,8 @@ free_out:
 	delete_block(block);
 }
 
-HAPI int script_handler_parse_desc(const char *pkgname, const char *id, const char *descfile, int is_pd)
+HAPI int script_handler_parse_desc(struct inst_info *inst, const char *descfile, int is_pd)
 {
-	struct inst_info *inst;
 	FILE *fp;
 	int ch;
 	int lineno;
@@ -873,14 +872,7 @@ HAPI int script_handler_parse_desc(const char *pkgname, const char *id, const ch
 	enum state state;
 	register int field_idx;
 	register int idx = 0;
-	struct block *block;
-
-	block = NULL;
-	inst = package_find_instance_by_id(pkgname, id);
-	if (!inst) {
-		ErrPrint("Instance is not exists\n");
-		return LB_STATUS_ERROR_NOT_EXIST;
-	}
+	struct block *block = NULL;
 
 	fp = fopen(descfile, "rt");
 	if (!fp) {
@@ -1223,7 +1215,7 @@ HAPI int script_handler_parse_desc(const char *pkgname, const char *id, const ch
 			break;
 		case BLOCK_CLOSE:
 			if (!block->file) {
-				block->file = strdup(util_uri_to_path(id));
+				block->file = strdup(util_uri_to_path(instance_id(inst)));
 				if (!block->file) {
 					ErrPrint("Heap: %s\n", strerror(errno));
 					goto errout;

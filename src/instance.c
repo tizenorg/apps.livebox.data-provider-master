@@ -1304,12 +1304,12 @@ HAPI int instance_reload(struct inst_info *inst, enum instance_destroy_type type
 	struct packet *packet;
 	int ret;
 
-	DbgPrint("Reload instance (%s)\n", instance_id(inst));
-
 	if (!inst) {
 		ErrPrint("Invalid instance handle\n");
 		return LB_STATUS_ERROR_INVALID;
 	}
+
+	DbgPrint("Reload instance (%s)\n", instance_id(inst));
 
 	switch (inst->state) {
 	case INST_REQUEST_TO_ACTIVATE:

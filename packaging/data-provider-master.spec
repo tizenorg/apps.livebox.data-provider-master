@@ -1,6 +1,6 @@
 Name: data-provider-master
 Summary: Master service provider for liveboxes.
-Version: 0.25.11
+Version: 0.25.12
 Release: 1
 Group: HomeTF/Livebox
 License: Flora License
@@ -116,6 +116,7 @@ chmod 640 /opt/dbspace/.livebox.db
 chown 0:5000 /opt/dbspace/.livebox.db-journal
 chmod 640 /opt/dbspace/.livebox.db-journal
 vconftool set -t bool "memory/data-provider-master/started" 0 -i -u 5000 -f -s system::vconf_system
+vconftool set -t int "memory/private/data-provider-master/restart_count" 0 -i -u 5000 -f -s data-provider-master
 vconftool set -t string "db/data-provider-master/serveraddr" "/opt/usr/share/live_magazine/.client.socket" -i -u 5000 -f -s system::vconf_system
 echo "Successfully installed. Please start a daemon again manually"
 echo "%{_sysconfdir}/init.d/data-provider-master start"

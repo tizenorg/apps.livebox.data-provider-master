@@ -24,75 +24,57 @@
 #include "util.h"
 #include "debug.h"
 
-HAPI struct conf g_conf = {
-	.width = 0,
-	.height = 0,
+static const char *CONF_DEFAULT_PATH_CONF = "/opt/usr/live/%s/etc/%s.conf";
+static const char *CONF_DEFAULT_PATH_IMAGE = "/opt/usr/share/live_magazine/";
+static const char *CONF_DEFAULT_PATH_LOG = "/opt/usr/share/live_magazine/log";
+static const char *CONF_DEFAULT_PATH_READER = "/opt/usr/share/live_magazine/reader";
+static const char *CONF_DEFAULT_PATH_ALWAYS = "/opt/usr/share/live_magazine/always";
+static const char *CONF_DEFAULT_PATH_SCRIPT = "/opt/usr/live/%s/res/script/%s.edj";
+static const char *CONF_DEFAULT_PATH_ROOT = "/opt/usr/live/";
+static const char *CONF_DEFAULT_PATH_SCRIPT_PORT = "/usr/share/data-provider-master/plugin-script/";
+static const char *CONF_DEFAULT_PATH_DB = "/opt/dbspace/.livebox.db";
+static const char *CONF_DEFAULT_PATH_INPUT = "/dev/input/event1";
+static const char *CONF_DEFAULT_SCRIPT_TYPE = "edje";
+static const char *CONF_DEFAULT_ABI = "c";
+static const char *CONF_DEFAULT_PD_GROUP = "disclosure";
+static const char *CONF_DEFAULT_LAUNCH_BUNDLE_NAME = "name";
+static const char *CONF_DEFAULT_LAUNCH_BUNDLE_SECURED = "secured";
+static const char *CONF_DEFAULT_LAUNCH_BUNDLE_ABI = "abi";
+static const char *CONF_DEFAULT_CONTENT = "default";
+static const char *CONF_DEFAULT_TITLE = "";
+static const char *CONF_DEFAULT_EMPTY_CONTENT = "";
+static const char *CONF_DEFAULT_EMPTY_TITLE = "";
+static const char *CONF_DEFAULT_REPLACE_TAG = "/APPID/";
+static const char *CONF_DEFAULT_PROVIDER_METHOD = "pixmap";
+static const int CONF_DEFAULT_WIDTH = 0;
+static const int CONF_DEFAULT_HEIGHT = 0;
+static const int CONF_DEFAULT_BASE_WIDTH = 720;
+static const int CONF_DEFAULT_BASE_HEIGHT = 1280;
+static const double CONF_DEFAULT_MINIMUM_PERIOD = 1.0f;
+static const double CONF_DEFAULT_PERIOD = -1.0f;
+static const double CONF_DEFAULT_PACKET_TIME = 0.0001f;
+static const unsigned long CONF_DEFAULT_MINIMUM_SPACE = 5242880;
+static const double CONF_DEFAULT_SLAVE_TTL = 30.0f;
+static const double CONF_DEFAULT_SLAVE_ACTIVATE_TIME = 30.0f;
+static const double CONF_DEFAULT_SLAVE_RELAUNCH_TIME = 3.0f;
+static const int CONF_DEFAULT_SLAVE_RELAUNCH_COUNT = 3;
+static const int CONF_DEFAULT_MAX_LOG_LINE = 1000;
+static const int CONF_DEFAULT_MAX_LOG_FILE = 3;
+static const int CONF_DEFAULT_SQLITE_FLUSH_MAX = 1048576;
+static const double CONF_DEFAULT_PING_TIME = 240.0f;
+static const int CONF_DEFAULT_SLAVE_MAX_LOAD = 30;
+static const int CONF_DEFAULT_USE_SW_BACKEND = 0;
+static const int CONF_DEFAULT_DEBUG_MODE = 0;
+static const int CONF_DEFAULT_OVERWRITE_CONTENT = 0;
+static const int CONF_DEFAULT_COM_CORE_THREAD = 1;
+static const int CONF_DEFAULT_USE_XMONITOR = 0;
+static const double CONF_DEFAULT_SCALE_WIDTH_FACTOR = 1.0f;
+static const double CONF_DEFAULT_SCALE_HEIGHT_FACTOR = 1.0f;
+static const double CONF_DEFAULT_PD_REQUEST_TIMEOUT = 5.0f;
 
-	.base_width = 720,
-	.base_height = 1280,
+HAPI struct conf g_conf;
 
-	.minimum_period = 1.0f,
-
-	.default_conf.script = "edje",
-	.default_conf.abi = "c",
-	.default_conf.pd_group = "disclosure",
-	.default_conf.period = -1.0f,
-
-	.launch_key.name = "name",
-	.launch_key.secured = "secured",
-	.launch_key.abi = "abi",
-
-	.default_packet_time = 0.0001f,
-
-	.empty_content = "",
-	.empty_title = "",
-
-	.default_content = "default",
-	.default_title = "",
-
-	.minimum_space = 5242880,
-
-	.replace_tag = "/APPID/",
-
-	.slave_ttl = 30.0f,
-	.slave_activate_time = 30.0f,
-	.slave_relaunch_time = 3.0f,
-	.slave_relaunch_count = 3,
-
-	.max_log_line = 1000,
-	.max_log_file = 3,
-
-	.sqlite_flush_max = 1048576,
-
-	.path = {
-		.conf = "/opt/usr/live/%s/etc/%s.conf",
-		.image = "/opt/usr/share/live_magazine/",
-		.slave_log = "/opt/usr/share/live_magazine/log",
-		.reader = "/opt/usr/share/live_magazine/reader",
-		.always = "/opt/usr/share/live_magazine/always",
-		.script = "/opt/usr/live/%s/res/script/%s.edj",
-		.root = "/opt/usr/live/",
-		.script_port = "/usr/share/data-provider-master/plugin-script/",
-		.db = "/opt/dbspace/.livebox.db",
-		.input = "/dev/input/event1",
-	},
-
-	.ping_time = 240.0f,
-	.slave_max_load = 30,
-
-	.use_sw_backend = 0,
-	.provider_method = "pixmap",
-	.debug_mode = 0,
-	.overwrite_content = 0,
-	.com_core_thread = 1,
-	.use_xmonitor = 0,
-
-	.scale_width_factor = 1.0f,
-	.scale_height_factor = 1.0f,
-	.pd_request_timeout = 5.0f,
-};
-
-static void conf_update_size(void)
+HAPI void conf_update_size(void)
 {
 	ecore_x_window_size_get(0, &g_conf.width, &g_conf.height);
 	g_conf.scale_width_factor = (double)g_conf.width / (double)BASE_W;
@@ -356,6 +338,57 @@ static void pd_request_timeout_handler(char *buffer)
 	DbgPrint("Default PD request timeout: %lf\n", g_conf.pd_request_timeout);
 }
 
+HAPI void conf_init(void)
+{
+	g_conf.width = CONF_DEFAULT_WIDTH;
+	g_conf.height = CONF_DEFAULT_HEIGHT;
+	g_conf.base_width = CONF_DEFAULT_BASE_WIDTH;
+	g_conf.base_height = CONF_DEFAULT_BASE_HEIGHT;
+	g_conf.minimum_period = CONF_DEFAULT_MINIMUM_PERIOD;
+	g_conf.default_conf.period = CONF_DEFAULT_PERIOD;
+	g_conf.minimum_space = CONF_DEFAULT_MINIMUM_SPACE;
+	g_conf.default_packet_time = CONF_DEFAULT_PACKET_TIME;
+	g_conf.slave_ttl = CONF_DEFAULT_SLAVE_TTL;
+	g_conf.slave_activate_time = CONF_DEFAULT_SLAVE_ACTIVATE_TIME;
+	g_conf.slave_relaunch_time = CONF_DEFAULT_SLAVE_RELAUNCH_TIME;
+	g_conf.slave_relaunch_count = CONF_DEFAULT_SLAVE_RELAUNCH_COUNT;
+	g_conf.max_log_line = CONF_DEFAULT_MAX_LOG_LINE;
+	g_conf.max_log_file = CONF_DEFAULT_MAX_LOG_FILE;
+	g_conf.sqlite_flush_max = CONF_DEFAULT_SQLITE_FLUSH_MAX;
+	g_conf.ping_time = CONF_DEFAULT_PING_TIME;
+	g_conf.slave_max_load = CONF_DEFAULT_SLAVE_MAX_LOAD;
+	g_conf.use_sw_backend = CONF_DEFAULT_USE_SW_BACKEND;
+	g_conf.debug_mode = CONF_DEFAULT_DEBUG_MODE;
+	g_conf.overwrite_content = CONF_DEFAULT_OVERWRITE_CONTENT;
+	g_conf.com_core_thread = CONF_DEFAULT_COM_CORE_THREAD;
+	g_conf.use_xmonitor = CONF_DEFAULT_USE_XMONITOR;
+	g_conf.scale_width_factor = CONF_DEFAULT_SCALE_WIDTH_FACTOR;
+	g_conf.scale_height_factor = CONF_DEFAULT_SCALE_HEIGHT_FACTOR;
+	g_conf.pd_request_timeout = CONF_DEFAULT_PD_REQUEST_TIMEOUT;
+	g_conf.default_conf.script = (char *)CONF_DEFAULT_SCRIPT_TYPE;
+	g_conf.default_conf.abi = (char *)CONF_DEFAULT_ABI;
+	g_conf.default_conf.pd_group = (char *)CONF_DEFAULT_PD_GROUP;
+	g_conf.launch_key.name = (char *)CONF_DEFAULT_LAUNCH_BUNDLE_NAME;
+	g_conf.launch_key.secured = (char *)CONF_DEFAULT_LAUNCH_BUNDLE_SECURED;
+	g_conf.launch_key.abi = (char *)CONF_DEFAULT_LAUNCH_BUNDLE_ABI;
+	g_conf.empty_content = (char *)CONF_DEFAULT_EMPTY_CONTENT;
+	g_conf.empty_title = (char *)CONF_DEFAULT_EMPTY_TITLE;
+	g_conf.default_content = (char *)CONF_DEFAULT_CONTENT;
+	g_conf.default_title = (char *)CONF_DEFAULT_TITLE;
+	g_conf.replace_tag = (char *)CONF_DEFAULT_REPLACE_TAG;
+	g_conf.path.conf = (char *)CONF_DEFAULT_PATH_CONF;
+	g_conf.path.image = (char *)CONF_DEFAULT_PATH_IMAGE;
+	g_conf.path.slave_log = (char *)CONF_DEFAULT_PATH_LOG;
+	g_conf.path.reader = (char *)CONF_DEFAULT_PATH_READER;
+	g_conf.path.always = (char *)CONF_DEFAULT_PATH_ALWAYS;
+	g_conf.path.script = (char *)CONF_DEFAULT_PATH_SCRIPT;
+	g_conf.path.root = (char *)CONF_DEFAULT_PATH_ROOT;
+	g_conf.path.script_port = (char *)CONF_DEFAULT_PATH_SCRIPT_PORT;
+	g_conf.path.db = (char *)CONF_DEFAULT_PATH_DB;
+	g_conf.path.input = (char *)CONF_DEFAULT_PATH_INPUT;
+	g_conf.provider_method = (char *)CONF_DEFAULT_PROVIDER_METHOD;
+}
+
 HAPI int conf_loader(void)
 {
 	FILE *fp;
@@ -525,9 +558,7 @@ HAPI int conf_loader(void)
 		},
 	};
 
-	conf_update_size();
-
-	fp = fopen("/usr/share/data-provider-master/conf.ini", "rt");
+	fp = fopen(DEFAULT_MASTER_CONF, "rt");
 	if (!fp) {
 		ErrPrint("Error: %s\n", strerror(errno));
 		return LB_STATUS_ERROR_IO;
@@ -698,6 +729,145 @@ HAPI int conf_loader(void)
 		ErrPrint("fclose: %s\n", strerror(errno));
 	}
 	return LB_STATUS_SUCCESS;
+}
+
+HAPI void conf_reset(void)
+{
+	g_conf.width = CONF_DEFAULT_WIDTH;
+	g_conf.height = CONF_DEFAULT_HEIGHT;
+	g_conf.base_width = CONF_DEFAULT_BASE_WIDTH;
+	g_conf.base_height = CONF_DEFAULT_BASE_HEIGHT;
+	g_conf.minimum_period = CONF_DEFAULT_MINIMUM_PERIOD;
+	g_conf.default_conf.period = CONF_DEFAULT_PERIOD;
+	g_conf.minimum_space = CONF_DEFAULT_MINIMUM_SPACE;
+	g_conf.default_packet_time = CONF_DEFAULT_PACKET_TIME;
+	g_conf.slave_ttl = CONF_DEFAULT_SLAVE_TTL;
+	g_conf.slave_activate_time = CONF_DEFAULT_SLAVE_ACTIVATE_TIME;
+	g_conf.slave_relaunch_time = CONF_DEFAULT_SLAVE_RELAUNCH_TIME;
+	g_conf.slave_relaunch_count = CONF_DEFAULT_SLAVE_RELAUNCH_COUNT;
+	g_conf.max_log_line = CONF_DEFAULT_MAX_LOG_LINE;
+	g_conf.max_log_file = CONF_DEFAULT_MAX_LOG_FILE;
+	g_conf.sqlite_flush_max = CONF_DEFAULT_SQLITE_FLUSH_MAX;
+	g_conf.ping_time = CONF_DEFAULT_PING_TIME;
+	g_conf.slave_max_load = CONF_DEFAULT_SLAVE_MAX_LOAD;
+	g_conf.use_sw_backend = CONF_DEFAULT_USE_SW_BACKEND;
+	g_conf.debug_mode = CONF_DEFAULT_DEBUG_MODE;
+	g_conf.overwrite_content = CONF_DEFAULT_OVERWRITE_CONTENT;
+	g_conf.com_core_thread = CONF_DEFAULT_COM_CORE_THREAD;
+	g_conf.use_xmonitor = CONF_DEFAULT_USE_XMONITOR;
+	g_conf.scale_width_factor = CONF_DEFAULT_SCALE_WIDTH_FACTOR;
+	g_conf.scale_height_factor = CONF_DEFAULT_SCALE_HEIGHT_FACTOR;
+	g_conf.pd_request_timeout = CONF_DEFAULT_PD_REQUEST_TIMEOUT;
+
+	if (g_conf.default_conf.script != CONF_DEFAULT_SCRIPT_TYPE) {
+		DbgFree(g_conf.default_conf.script);
+		g_conf.default_conf.script = (char *)CONF_DEFAULT_SCRIPT_TYPE;
+	}
+
+	if (g_conf.default_conf.abi != CONF_DEFAULT_ABI) {
+		DbgFree(g_conf.default_conf.abi);
+		g_conf.default_conf.abi = (char *)CONF_DEFAULT_ABI;
+	}
+
+	if (g_conf.default_conf.pd_group != CONF_DEFAULT_PD_GROUP) {
+		DbgFree(g_conf.default_conf.pd_group);
+		g_conf.default_conf.pd_group = (char *)CONF_DEFAULT_PD_GROUP;
+	}
+
+	if (g_conf.launch_key.name != CONF_DEFAULT_LAUNCH_BUNDLE_NAME) {
+		DbgFree(g_conf.launch_key.name);
+		g_conf.launch_key.name = (char *)CONF_DEFAULT_LAUNCH_BUNDLE_NAME;
+	}
+
+	if (g_conf.launch_key.secured != CONF_DEFAULT_LAUNCH_BUNDLE_SECURED) {
+		DbgFree(g_conf.launch_key.secured);
+		g_conf.launch_key.secured = (char *)CONF_DEFAULT_LAUNCH_BUNDLE_SECURED;
+	}
+
+	if (g_conf.launch_key.abi != CONF_DEFAULT_LAUNCH_BUNDLE_ABI) {
+		DbgFree(g_conf.launch_key.abi);
+		g_conf.launch_key.abi = (char *)CONF_DEFAULT_LAUNCH_BUNDLE_ABI;
+	}
+
+	if (g_conf.empty_content != CONF_DEFAULT_EMPTY_CONTENT) {
+		DbgFree(g_conf.empty_content);
+		g_conf.empty_content = (char *)CONF_DEFAULT_EMPTY_CONTENT;
+	}
+
+	if (g_conf.empty_title != CONF_DEFAULT_EMPTY_TITLE) {
+		DbgFree(g_conf.empty_title);
+		g_conf.empty_title = (char *)CONF_DEFAULT_EMPTY_TITLE;
+	}
+
+	if (g_conf.default_content != CONF_DEFAULT_CONTENT) {
+		DbgFree(g_conf.default_content);
+		g_conf.default_content = (char *)CONF_DEFAULT_CONTENT;
+	}
+
+	if (g_conf.default_title != CONF_DEFAULT_TITLE) {
+		DbgFree(g_conf.default_title);
+		g_conf.default_title = (char *)CONF_DEFAULT_TITLE;
+	}
+
+	if (g_conf.replace_tag != CONF_DEFAULT_REPLACE_TAG) {
+		DbgFree(g_conf.replace_tag);
+		g_conf.replace_tag = (char *)CONF_DEFAULT_REPLACE_TAG;
+	}
+
+	if (g_conf.path.conf != CONF_DEFAULT_PATH_CONF) {
+		DbgFree(g_conf.path.conf);
+		g_conf.path.conf = (char *)CONF_DEFAULT_PATH_CONF;
+	}
+
+	if (g_conf.path.image != CONF_DEFAULT_PATH_IMAGE) {
+		DbgFree(g_conf.path.image);
+		g_conf.path.image = (char *)CONF_DEFAULT_PATH_IMAGE;
+	}
+
+	if (g_conf.path.slave_log != CONF_DEFAULT_PATH_LOG) {
+		DbgFree(g_conf.path.slave_log);
+		g_conf.path.slave_log = (char *)CONF_DEFAULT_PATH_LOG;
+	}
+
+	if (g_conf.path.reader != CONF_DEFAULT_PATH_READER) {
+		DbgFree(g_conf.path.reader);
+		g_conf.path.reader = (char *)CONF_DEFAULT_PATH_READER;
+	}
+
+	if (g_conf.path.always != CONF_DEFAULT_PATH_ALWAYS) {
+		DbgFree(g_conf.path.always);
+		g_conf.path.always = (char *)CONF_DEFAULT_PATH_ALWAYS;
+	}
+
+	if (g_conf.path.script != CONF_DEFAULT_PATH_SCRIPT) {
+		DbgFree(g_conf.path.script);
+		g_conf.path.script = (char *)CONF_DEFAULT_PATH_SCRIPT;
+	}
+
+	if (g_conf.path.root != CONF_DEFAULT_PATH_ROOT) {
+		DbgFree(g_conf.path.root);
+		g_conf.path.root = (char *)CONF_DEFAULT_PATH_ROOT;
+	}
+
+	if (g_conf.path.script_port != CONF_DEFAULT_PATH_SCRIPT_PORT) {
+		DbgFree(g_conf.path.script_port);
+		g_conf.path.script_port = (char *)CONF_DEFAULT_PATH_SCRIPT_PORT;
+	}
+
+	if (g_conf.path.db != CONF_DEFAULT_PATH_DB) {
+		DbgFree(g_conf.path.db);
+		g_conf.path.db = (char *)CONF_DEFAULT_PATH_DB;
+	}
+
+	if (g_conf.path.input != CONF_DEFAULT_PATH_INPUT) {
+		DbgFree(g_conf.path.input);
+		g_conf.path.input = (char *)CONF_DEFAULT_PATH_INPUT;
+	}
+
+	if (g_conf.provider_method != CONF_DEFAULT_PROVIDER_METHOD) {
+		DbgFree(g_conf.provider_method);
+		g_conf.provider_method = (char *)CONF_DEFAULT_PROVIDER_METHOD;
+	}
 }
 
 /* End of a file */

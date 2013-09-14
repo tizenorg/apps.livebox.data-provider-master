@@ -135,10 +135,185 @@ struct script_info {
 
 static inline void consuming_parsed_block(int lineno, struct inst_info *inst, int is_pd, struct block *block);
 
+static int load_all_ports(void)
+{
+	struct script_port *item;
+	struct dirent *ent;
+	DIR *dir;
+	char *path;
+	int pathlen;
+
+	dir = opendir(SCRIPT_PORT_PATH);
+	if (!dir) {
+		ErrPrint("Error: %s\n", strerror(errno));
+		return LB_STATUS_ERROR_IO;
+	}
+
+	while ((ent = readdir(dir))) {
+		if (ent->d_name[0] == '.') {
+			continue;
+		}
+
+		pathlen = strlen(ent->d_name) + strlen(SCRIPT_PORT_PATH) + 1;
+		path = malloc(pathlen);
+		if (!path) {
+			ErrPrint("Heap: %s %d\n", strerror(errno), pathlen);
+			if (closedir(dir) < 0) {
+				ErrPrint("closedir: %s\n", strerror(errno));
+			}
+			return LB_STATUS_ERROR_MEMORY;
+		}
+
+		snprintf(path, pathlen, "%s%s", SCRIPT_PORT_PATH, ent->d_name);
+
+		item = malloc(sizeof(*item));
+		if (!item) {
+			ErrPrint("Heap: %s\n", strerror(errno));
+			DbgFree(path);
+			if (closedir(dir) < 0) {
+				ErrPrint("closedir: %s\n", strerror(errno));
+			}
+			return LB_STATUS_ERROR_MEMORY;
+		}
+
+		DbgPrint("Open SCRIPT PORT: %s\n", path);
+		item->handle = dlopen(path, RTLD_GLOBAL | RTLD_NOW | RTLD_DEEPBIND);
+		DbgFree(path);
+		if (!item->handle) {
+			ErrPrint("Error: %s\n", dlerror());
+			DbgFree(item);
+			if (closedir(dir) < 0) {
+				ErrPrint("closedir: %s\n", strerror(errno));
+			}
+			return LB_STATUS_ERROR_FAULT;
+		}
+
+		item->magic_id = dlsym(item->handle, "script_magic_id");
+		if (!item->magic_id) {
+			goto errout;
+		}
+
+		DbgPrint("SCRIPT PORT magic id: %s\n", item->magic_id());
+
+		item->update_color = dlsym(item->handle, "script_update_color");
+		if (!item->update_color) {
+			goto errout;
+		}
+
+		item->update_text = dlsym(item->handle, "script_update_text");
+		if (!item->update_text) {
+			goto errout;
+		}
+
+		item->update_image = dlsym(item->handle, "script_update_image");
+		if (!item->update_image) {
+			goto errout;
+		}
+
+		item->update_access = dlsym(item->handle, "script_update_access");
+		if (!item->update_access) {
+			goto errout;
+		}
+
+		item->update_script = dlsym(item->handle, "script_update_script");
+		if (!item->update_script) {
+			goto errout;
+		}
+
+		item->update_signal = dlsym(item->handle, "script_update_signal");
+		if (!item->update_signal) {
+			goto errout;
+		}
+
+		item->update_drag = dlsym(item->handle, "script_update_drag");
+		if (!item->update_drag) {
+			goto errout;
+		}
+
+		item->update_size = dlsym(item->handle, "script_update_size");
+		if (!item->update_size) {
+			goto errout;
+		}
+
+		item->update_category = dlsym(item->handle, "script_update_category");
+		if (!item->update_category) {
+			goto errout;
+		}
+
+		item->create = dlsym(item->handle, "script_create");
+		if (!item->create) {
+			goto errout;
+		}
+
+		item->destroy = dlsym(item->handle, "script_destroy");
+		if (!item->destroy) {
+			goto errout;
+		}
+
+		item->load = dlsym(item->handle, "script_load");
+		if (!item->load) {
+			goto errout;
+		}
+
+		item->unload = dlsym(item->handle, "script_unload");
+		if (!item->unload) {
+			goto errout;
+		}
+
+		item->init = dlsym(item->handle, "script_init");
+		if (!item->init) {
+			goto errout;
+		}
+
+		item->fini = dlsym(item->handle, "script_fini");
+		if (!item->fini) {
+			goto errout;
+		}
+
+		item->feed_event = dlsym(item->handle, "script_feed_event");
+		if (!item->feed_event) {
+			goto errout;
+		}
+
+		if (item->init() < 0) {
+			ErrPrint("Failed to initialize script engine\n");
+			goto errout;
+		}
+
+		s_info.script_port_list = eina_list_append(s_info.script_port_list, item);
+	}
+
+	if (closedir(dir) < 0) {
+		ErrPrint("closedir: %s\n", strerror(errno));
+	}
+
+	return LB_STATUS_SUCCESS;
+
+errout:
+	ErrPrint("Error: %s\n", dlerror());
+	if (dlclose(item->handle) != 0) {
+		ErrPrint("dlclose: %s\n", strerror(errno));
+	}
+	DbgFree(item);
+	if (closedir(dir) < 0) {
+		ErrPrint("closedir: %s\n", strerror(errno));
+	}
+	return LB_STATUS_ERROR_FAULT;
+}
+
 static inline struct script_port *find_port(const char *magic_id)
 {
 	Eina_List *l;
 	struct script_port *item;
+
+	if (!s_info.script_port_list) {
+		int ret;
+
+		ret = load_all_ports();
+		if (ret < 0) {
+			ErrPrint("load_all_ports: %d\n", ret);
+		}
+	}
 
 	EINA_LIST_FOREACH(s_info.script_port_list, l, item) {
 		if (!strcmp(item->magic_id(), magic_id)) {
@@ -1255,174 +1430,13 @@ errout:
 
 HAPI int script_init(void)
 {
-	struct script_port *item;
-	struct dirent *ent;
-	DIR *dir;
-	char *path;
-	int pathlen;
-
 	if (!strcasecmp(PROVIDER_METHOD, "shm")) {
 		s_info.env_buf_type = BUFFER_TYPE_SHM;
 	} else if (!strcasecmp(PROVIDER_METHOD, "pixmap")) {
 		s_info.env_buf_type = BUFFER_TYPE_PIXMAP;
 	}
 
-	dir = opendir(SCRIPT_PORT_PATH);
-	if (!dir) {
-		ErrPrint("Error: %s\n", strerror(errno));
-		return LB_STATUS_ERROR_IO;
-	}
-
-	while ((ent = readdir(dir))) {
-		if (ent->d_name[0] == '.') {
-			continue;
-		}
-
-		pathlen = strlen(ent->d_name) + strlen(SCRIPT_PORT_PATH) + 1;
-		path = malloc(pathlen);
-		if (!path) {
-			ErrPrint("Heap: %s %d\n", strerror(errno), pathlen);
-			if (closedir(dir) < 0) {
-				ErrPrint("closedir: %s\n", strerror(errno));
-			}
-			return LB_STATUS_ERROR_MEMORY;
-		}
-
-		snprintf(path, pathlen, "%s%s", SCRIPT_PORT_PATH, ent->d_name);
-
-		item = malloc(sizeof(*item));
-		if (!item) {
-			ErrPrint("Heap: %s\n", strerror(errno));
-			DbgFree(path);
-			if (closedir(dir) < 0) {
-				ErrPrint("closedir: %s\n", strerror(errno));
-			}
-			return LB_STATUS_ERROR_MEMORY;
-		}
-
-		DbgPrint("Open SCRIPT PORT: %s\n", path);
-		item->handle = dlopen(path, RTLD_GLOBAL | RTLD_NOW | RTLD_DEEPBIND);
-		DbgFree(path);
-		if (!item->handle) {
-			ErrPrint("Error: %s\n", dlerror());
-			DbgFree(item);
-			if (closedir(dir) < 0) {
-				ErrPrint("closedir: %s\n", strerror(errno));
-			}
-			return LB_STATUS_ERROR_FAULT;
-		}
-
-		item->magic_id = dlsym(item->handle, "script_magic_id");
-		if (!item->magic_id) {
-			goto errout;
-		}
-
-		DbgPrint("SCRIPT PORT magic id: %s\n", item->magic_id());
-
-		item->update_color = dlsym(item->handle, "script_update_color");
-		if (!item->update_color) {
-			goto errout;
-		}
-
-		item->update_text = dlsym(item->handle, "script_update_text");
-		if (!item->update_text) {
-			goto errout;
-		}
-
-		item->update_image = dlsym(item->handle, "script_update_image");
-		if (!item->update_image) {
-			goto errout;
-		}
-
-		item->update_access = dlsym(item->handle, "script_update_access");
-		if (!item->update_access) {
-			goto errout;
-		}
-
-		item->update_script = dlsym(item->handle, "script_update_script");
-		if (!item->update_script) {
-			goto errout;
-		}
-
-		item->update_signal = dlsym(item->handle, "script_update_signal");
-		if (!item->update_signal) {
-			goto errout;
-		}
-
-		item->update_drag = dlsym(item->handle, "script_update_drag");
-		if (!item->update_drag) {
-			goto errout;
-		}
-
-		item->update_size = dlsym(item->handle, "script_update_size");
-		if (!item->update_size) {
-			goto errout;
-		}
-
-		item->update_category = dlsym(item->handle, "script_update_category");
-		if (!item->update_category) {
-			goto errout;
-		}
-
-		item->create = dlsym(item->handle, "script_create");
-		if (!item->create) {
-			goto errout;
-		}
-
-		item->destroy = dlsym(item->handle, "script_destroy");
-		if (!item->destroy) {
-			goto errout;
-		}
-
-		item->load = dlsym(item->handle, "script_load");
-		if (!item->load) {
-			goto errout;
-		}
-
-		item->unload = dlsym(item->handle, "script_unload");
-		if (!item->unload) {
-			goto errout;
-		}
-
-		item->init = dlsym(item->handle, "script_init");
-		if (!item->init) {
-			goto errout;
-		}
-
-		item->fini = dlsym(item->handle, "script_fini");
-		if (!item->fini) {
-			goto errout;
-		}
-
-		item->feed_event = dlsym(item->handle, "script_feed_event");
-		if (!item->feed_event) {
-			goto errout;
-		}
-
-		if (item->init() < 0) {
-			ErrPrint("Failed to initialize script engine\n");
-			goto errout;
-		}
-
-		s_info.script_port_list = eina_list_append(s_info.script_port_list, item);
-	}
-
-	if (closedir(dir) < 0) {
-		ErrPrint("closedir: %s\n", strerror(errno));
-	}
-
 	return LB_STATUS_SUCCESS;
-
-errout:
-	ErrPrint("Error: %s\n", dlerror());
-	if (dlclose(item->handle) != 0) {
-		ErrPrint("dlclose: %s\n", strerror(errno));
-	}
-	DbgFree(item);
-	if (closedir(dir) < 0) {
-		ErrPrint("closedir: %s\n", strerror(errno));
-	}
-	return LB_STATUS_ERROR_FAULT;
 }
 
 HAPI int script_fini(void)

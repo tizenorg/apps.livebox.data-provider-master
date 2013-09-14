@@ -62,6 +62,8 @@ ADD_DEFINITIONS("-DSHORTCUT_SMACK_LABEL=\"data-provider-master::shortcut\"")
 ADD_DEFINITIONS("-DNOTIFICATION_SMACK_LABEL=\"data-provider-master::notification\"")
 ADD_DEFINITIONS("-DBADGE_SMACK_LABEL=\"data-provider-master::badge\"")
 
+ADD_DEFINITIONS("-DDEFAULT_MASTER_CONF=\"/usr/share/data-provider-master/conf.ini\"")
+
 ADD_DEFINITIONS("-DNDEBUG")
 #ADD_DEFINITIONS("-DFLOG")
 ADD_DEFINITIONS(${pkg_CFLAGS})

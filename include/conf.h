@@ -95,6 +95,9 @@ struct conf {
 extern struct conf g_conf;
 
 extern int conf_loader(void);
+extern void conf_update_size(void);
+extern void conf_reset(void);
+extern void conf_init(void);
 
 #define BASE_W			g_conf.base_width
 #define BASE_H			g_conf.base_height
@@ -165,6 +168,10 @@ extern int conf_loader(void);
 
 #if !defined(VCONFKEY_MASTER_STARTED)
 #define VCONFKEY_MASTER_STARTED	"memory/data-provider-master/started"
+#endif
+
+#if !defined(VCONFKEY_MASTER_RESTART_COUNT)
+#define VCONFKEY_MASTER_RESTART_COUNT	"memory/private/data-provider-master/restart_count"
 #endif
 
 #define USE_XMONITOR		g_conf.use_xmonitor

@@ -244,8 +244,12 @@ static Eina_Bool signal_cb(void *data, Ecore_Fd_Handler *handler)
 int main(int argc, char *argv[])
 {
 	int ret;
+	int restart_count = 0;
 	sigset_t mask;
 	Ecore_Fd_Handler *signal_handler = NULL;
+
+	conf_init();
+	conf_loader();
 
 	/*!
 	 * \note
@@ -336,9 +340,17 @@ int main(int argc, char *argv[])
 
 	g_type_init();
 
-	conf_loader();
+	/*!
+ 	 * \note
+	 * conf_update_size requires ecore_x_init.
+	 */
+	conf_update_size();
 
 	app_create();
+
+	vconf_get_int(VCONFKEY_MASTER_RESTART_COUNT, &restart_count);
+	restart_count++;
+	vconf_set_int(VCONFKEY_MASTER_RESTART_COUNT, restart_count);
 
 	vconf_set_bool(VCONFKEY_MASTER_STARTED, 1);
 	ecore_main_loop_begin();
@@ -363,6 +375,8 @@ int main(int argc, char *argv[])
 		fclose(__file_log_fp);
 	}
 #endif
+
+	conf_reset();
 	return 0;
 }
 

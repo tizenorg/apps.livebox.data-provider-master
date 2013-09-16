@@ -701,7 +701,7 @@ static inline int db_insert_client(struct livebox *livebox)
 		goto out;
 	}
 
-	ret = sqlite3_bind_text(stmt, 6, livebox->content ? (char *)livebox->content : "default", -1, SQLITE_TRANSIENT);
+	ret = sqlite3_bind_text(stmt, 6, livebox->content ? (char *)livebox->content : "", -1, SQLITE_TRANSIENT);
 	if (ret != SQLITE_OK) {
 		DbgPrint("Error: %s\n", sqlite3_errmsg(s_info.handle));
 		ret = -EIO;

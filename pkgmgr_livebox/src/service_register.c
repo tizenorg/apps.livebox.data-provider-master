@@ -83,7 +83,7 @@
  * +-------+------+---------+-------------+---------+---------+-----------+-------+-------------+
  * |   -   |   -  |    -    |      -      |    -    |    -    |     -     |   -   |      -      }
  * +-------+------+---------+-------------+---------+---------+-----------+-------+-------------+
- * CREATE TABLE client ( pkgid TEXT PRIMARY KEY NOT NULL, icon TEXT, name TEXT, auto_launch TEXT, pd_size TEXT, content TEXT DEFAULT "default", nodisplay INTEGER, setup TEXT, mouse_event, FOREIGN KEY(pkgid) REFERENCES pkgmap(pkgid) )
+ * CREATE TABLE client ( pkgid TEXT PRIMARY KEY NOT NULL, icon TEXT, name TEXT, auto_launch TEXT, pd_size TEXT, content TEXT, nodisplay INTEGER, setup TEXT, mouse_event, FOREIGN KEY(pkgid) REFERENCES pkgmap(pkgid) )
  *
  * = auto_launch = UI-APPID
  * = pd_size = WIDTHxHEIGHT
@@ -640,7 +640,7 @@ static inline int db_create_client(void)
 
 	ddl = "CREATE TABLE client (" \
 		"pkgid TEXT PRIMARY KEY NOT NULL, icon TEXT, name TEXT, " \
-		"auto_launch TEXT, pd_size TEXT, content TEXT DEFAULT 'default', nodisplay INTEGER, setup TEXT, mouse_event INTEGER, FOREIGN KEY(pkgid) REFERENCES pkgmap(pkgid) ON DELETE CASCADE)";
+		"auto_launch TEXT, pd_size TEXT, content TEXT, nodisplay INTEGER, setup TEXT, mouse_event INTEGER, FOREIGN KEY(pkgid) REFERENCES pkgmap(pkgid) ON DELETE CASCADE)";
 	if (sqlite3_exec(s_info.handle, ddl, NULL, NULL, &err) != SQLITE_OK) {
 		ErrPrint("Failed to execute the DDL (%s)\n", err);
 		return -EIO;

@@ -1764,7 +1764,10 @@ int main(int argc, char *argv[])
 	} while (c != -1);
 
 	ecore_init();
+
+#if (GLIB_MAJOR_VERSION <= 2 && GLIB_MINOR_VERSION < 36)
 	g_type_init();
+#endif
 
 	com_core_add_event_callback(CONNECTOR_DISCONNECTED, disconnected_cb, NULL);
 	com_core_add_event_callback(CONNECTOR_CONNECTED, connected_cb, NULL);

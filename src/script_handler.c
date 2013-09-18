@@ -87,7 +87,7 @@ struct script_port {
 	int (*load)(void *handle, Evas *e, int w, int h);
 	int (*unload)(void *handle, Evas *e);
 
-	int (*init)(void);
+	int (*init)(double scale);
 	int (*fini)(void);
 };
 
@@ -112,6 +112,8 @@ struct block {
 
 	char *target_id;
 	int target_len;
+
+	int (*handler)(struct inst_info *inst, struct block *block, int is_pd);
 };
 
 struct script_info {
@@ -275,7 +277,7 @@ static int load_all_ports(void)
 			goto errout;
 		}
 
-		if (item->init() < 0) {
+		if (item->init(SCALE_WIDTH_FACTOR) < 0) {
 			ErrPrint("Failed to initialize script engine\n");
 			goto errout;
 		}

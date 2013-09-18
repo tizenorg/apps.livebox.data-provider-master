@@ -77,6 +77,7 @@ HAPI struct conf g_conf;
 HAPI void conf_update_size(void)
 {
 	ecore_x_window_size_get(0, &g_conf.width, &g_conf.height);
+
 	g_conf.scale_width_factor = (double)g_conf.width / (double)BASE_W;
 	g_conf.scale_height_factor = (double)g_conf.height / (double)BASE_H;
 }

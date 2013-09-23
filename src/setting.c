@@ -15,6 +15,7 @@
  */
 
 #include <stdio.h>
+#include <malloc.h>
 #include <unistd.h>
 #include <stdlib.h>
 #include <string.h>
@@ -44,6 +45,12 @@
 #include "instance.h"
 
 int errno;
+
+static struct {
+	int deactivated;
+} s_info = {
+	.deactivated = 0,
+};
 
 static void lcd_state_cb(keynode_t *node, void *user_data)
 {
@@ -211,6 +218,30 @@ out:
 	DbgFree(event);
 }
 
+static void low_mem_cb(keynode_t *node, void *user_data)
+{
+	int val;
+
+	val = vconf_keynode_get_int(node);
+
+	if (val >= VCONFKEY_SYSMAN_LOW_MEMORY_SOFT_WARNING)     {
+		CRITICAL_LOG("Low memory: level %d\n", val);
+		if (s_info.deactivated == 0) {
+			s_info.deactivated = 1;
+			slave_deactivate_all(0, 1);
+			malloc_trim(0);
+			ErrPrint("Fall into the low mem status\n");
+		}
+	} else {
+		CRITICAL_LOG("Normal memory: level %d\n", val);
+		if (s_info.deactivated == 1) {
+			s_info.deactivated = 0;
+			slave_activate_all();
+			ErrPrint("Recover from the low mem status\n");
+		}
+	}
+}
+
 HAPI int setting_init(void)
 {
 	int ret;
@@ -240,6 +271,11 @@ HAPI int setting_init(void)
 		ErrPrint("Failed to add vconf for ail info state: %d\n", ret);
 	}
 
+	ret = vconf_notify_key_changed(VCONFKEY_SYSMAN_LOW_MEMORY, low_mem_cb, NULL);
+	if (ret < 0) {
+		ErrPrint("Failed to add vconf for low mem monitor: %d\n", ret);
+	}
+
 	lang_changed_cb(NULL, NULL);
 	region_changed_cb(NULL, NULL);
 	return ret;
@@ -248,6 +284,11 @@ HAPI int setting_init(void)
 HAPI int setting_fini(void)
 {
 	int ret;
+
+	ret = vconf_ignore_key_changed(VCONFKEY_SYSMAN_LOW_MEMORY, low_mem_cb);
+	if (ret < 0) {
+		ErrPrint("Failed to ignore vconf key (%d)\n", ret);
+	}
 
 	ret = vconf_ignore_key_changed(VCONFKEY_REGIONFORMAT, region_changed_cb);
 	if (ret < 0) {

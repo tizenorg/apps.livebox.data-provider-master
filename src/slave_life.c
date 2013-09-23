@@ -97,8 +97,10 @@ struct priv_data {
 
 static struct {
 	Eina_List *slave_list;
+	int deactivate_all_refcnt;
 } s_info = {
 	.slave_list = NULL,
+	.deactivate_all_refcnt = 0,
 };
 
 static Eina_Bool slave_ttl_cb(void *data)
@@ -1495,6 +1497,12 @@ HAPI int slave_deactivate_all(int reactivate, int reactivate_instances)
 	struct slave_node *slave;
 	int cnt = 0;
 
+	s_info.deactivate_all_refcnt++;
+	if (s_info.deactivate_all_refcnt > 1) {
+		return 0;
+	}
+	DbgPrint("Deactivate all\n");
+
 	EINA_LIST_FOREACH_SAFE(s_info.slave_list, l, n, slave) {
 		slave_set_reactivate_instances(slave, reactivate_instances);
 		slave_set_reactivation(slave, reactivate);
@@ -1514,6 +1522,12 @@ HAPI int slave_activate_all(void)
 	Eina_List *l;
 	struct slave_node *slave;
 	int cnt = 0;
+
+	s_info.deactivate_all_refcnt--;
+	if (s_info.deactivate_all_refcnt > 0) {
+		return 0;
+	}
+	DbgPrint("Activate all\n");
 
 	EINA_LIST_FOREACH(s_info.slave_list, l, slave) {
 		slave_activate(slave);

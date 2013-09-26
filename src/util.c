@@ -50,8 +50,10 @@ HAPI unsigned long util_string_hash(const char *str)
 
 HAPI double util_timestamp(void)
 {
+#if defined(_USE_ECORE_TIME_GET)
+	return ecore_time_get();
+#else
 	struct timeval tv;
-
 	if (gettimeofday(&tv, NULL) < 0) {
 		static unsigned long internal_count = 0;
 		ErrPrint("failed to get time of day: %s\n", strerror(errno));
@@ -60,6 +62,7 @@ HAPI double util_timestamp(void)
 	}
 
 	return (double)tv.tv_sec + (double)tv.tv_usec / 1000000.0f;
+#endif
 }
 
 HAPI int util_check_ext(const char *filename, const char *check_ptr)
@@ -354,7 +357,6 @@ HAPI const char *util_uri_to_path(const char *uri)
 
 HAPI double util_time_delay_for_compensation(double period)
 {
-	struct timeval tv;
 	unsigned long long curtime;
 	unsigned long long _period;
 	unsigned long long remain;
@@ -365,12 +367,20 @@ HAPI double util_time_delay_for_compensation(double period)
 		return 0.0f;
 	}
 
+#if defined(_USE_ECORE_TIME_GET)
+	double tv;
+	tv = ecore_time_get();
+	curtime = tv * 1000000llu;
+#else
+	struct timeval tv;
 	if (gettimeofday(&tv, NULL) < 0){
 		ErrPrint("gettimeofday: %s\n", strerror(errno));
 		return period;
 	}
 
 	curtime = (unsigned long long)tv.tv_sec * 1000000llu + (unsigned long long)tv.tv_usec;
+#endif
+
 	_period = (unsigned long long)(period * (double)1000000);
 	if (_period == 0llu) {
 		ErrPrint("%lf <> %llu\n", period, _period);

@@ -80,7 +80,11 @@ struct slave_node {
 	Ecore_Timer *relaunch_timer; /* Try to relaunch service app */
 	int relaunch_count;
 
+#if defined(_USE_ECORE_TIME_GET)
+	double activated_at;
+#else
 	struct timeval activated_at;
+#endif
 };
 
 struct event {
@@ -673,11 +677,15 @@ HAPI int slave_activated(struct slave_node *slave)
 	slave_set_reactivation(slave, 0);
 	slave_set_reactivate_instances(slave, 0);
 
+#if defined(_USE_ECORE_TIME_GET)
+	slave->activated_at = ecore_time_get();
+#else
 	if (gettimeofday(&slave->activated_at, NULL) < 0) {
 		ErrPrint("Failed to get time of day: %s\n", strerror(errno));
 		slave->activated_at.tv_sec = 0;
 		slave->activated_at.tv_usec = 0;
 	}
+#endif
 
 	if (slave->activate_timer) {
 		ecore_timer_del(slave->activate_timer);
@@ -803,7 +811,6 @@ HAPI struct slave_node *slave_deactivated(struct slave_node *slave)
 HAPI struct slave_node *slave_deactivated_by_fault(struct slave_node *slave)
 {
 	int ret;
-	struct timeval faulted_at;
 	int reactivate = 1;
 	int reactivate_instances = 1;
 
@@ -828,6 +835,31 @@ HAPI struct slave_node *slave_deactivated_by_fault(struct slave_node *slave)
 		}
 	}
 
+#if defined(_USE_ECORE_TIME_GET)
+	double faulted_at;
+
+	faulted_at = ecore_time_get();
+	if (faulted_at - slave->activated_at < MINIMUM_REACTIVATION_TIME) {
+		slave->critical_fault_count++;
+		if (!slave_loaded_instance(slave) || slave->critical_fault_count >= SLAVE_MAX_LOAD) {
+			ErrPrint("Reactivation time is too fast and frequently occurred - Stop to auto reactivation\n");
+			reactivate = 0;
+			reactivate_instances = 0;
+			slave->critical_fault_count = 0;
+			/*!
+			 * \note
+			 * Fault callback can access the slave information.
+			 */
+			invoke_fault_cb(slave);
+		} else {
+			slave->critical_fault_count = 0;
+		}
+	} else {
+		ErrPrint("Failed to get time of day: %s\n", strerror(errno));
+	}
+#else
+	struct timeval faulted_at;
+
 	if (gettimeofday(&faulted_at, NULL) == 0) {
 		struct timeval rtv;
 
@@ -851,6 +883,7 @@ HAPI struct slave_node *slave_deactivated_by_fault(struct slave_node *slave)
 	} else {
 		ErrPrint("Failed to get time of day: %s\n", strerror(errno));
 	}
+#endif
 
 	slave_set_reactivation(slave, reactivate);
 	slave_set_reactivate_instances(slave, reactivate_instances);

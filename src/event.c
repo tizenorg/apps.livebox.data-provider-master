@@ -83,7 +83,11 @@ struct event_listener {
 
 	enum event_state state;
 
+#if defined(_USE_ECORE_TIME_GET)
+	double tv;
+#else
 	struct timeval tv; /* Recording Activate / Deactivate time */
+#endif
 	int x; /* RelX */
 	int y; /* RelY */
 };
@@ -132,9 +136,13 @@ static inline int processing_input_event(struct input_event *event)
 			if (item) {
 				char event_ch = EVENT_CH;
 
+#if defined(_USE_ECORE_TIME_GET)
+				s_info.event_data.tv = ecore_time_get();
+#else
 				if (gettimeofday(&s_info.event_data.tv, NULL) < 0) {
 					ErrPrint("gettimeofday: %s\n", strerror(errno));
 				}
+#endif
 
 				memcpy(item, &s_info.event_data, sizeof(*item));
 
@@ -376,21 +384,36 @@ static Eina_Bool event_read_cb(void *data, Ecore_Fd_Handler *handler)
 		EINA_LIST_FOREACH_SAFE(s_info.event_listener_list, l, n, listener) {
 			switch (listener->state) {
 			case EVENT_STATE_ACTIVATE:
+#if defined(_USE_ECORE_TIME_GET)
+				if (listener->tv > item->tv) {
+					continue;
+				}
+#else
 				if (timercmp(&listener->tv, &item->tv, >)) {
 					/* Ignore previous events before activating this listener */
 					continue;
 				}
+#endif
 
 				next_state = EVENT_STATE_ACTIVATED;
 				cur_state = listener->state;
 				break;
 			case EVENT_STATE_DEACTIVATE:
+#if defined(_USE_ECORE_TIME_GET)
+				if (listener->tv > item->tv) {
+					/* Consuming all events occurred while activating this listener */
+					cur_state = EVENT_STATE_ACTIVATED;
+					next_state = EVENT_STATE_ACTIVATED;
+					break;
+				}
+#else
 				if (timercmp(&listener->tv, &item->tv, >)) {
 					/* Consuming all events occurred while activating this listener */
 					cur_state = EVENT_STATE_ACTIVATED;
 					next_state = EVENT_STATE_ACTIVATED;
 					break;
 				}
+#endif
 
 				cur_state = listener->state;
 				next_state = EVENT_STATE_DEACTIVATED;
@@ -536,11 +559,15 @@ HAPI int event_activate(int x, int y, int (*event_cb)(enum event_state state, st
 		return LB_STATUS_ERROR_MEMORY;
 	}
 
+#if defined(_USE_ECORE_TIME_GET)
+	listener->tv = ecore_time_get();
+#else
 	if (gettimeofday(&listener->tv, NULL) < 0) {
 		ErrPrint("gettimeofday: %s\n", strerror(errno));
 		DbgFree(listener);
 		return LB_STATUS_ERROR_FAULT;
 	}
+#endif
 
 	listener->event_cb = event_cb;
 	listener->cbdata = data;

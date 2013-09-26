@@ -183,19 +183,23 @@ static inline void timer_thaw(struct inst_info *inst)
 
 static inline void timer_freeze(struct inst_info *inst)
 {
-	struct timeval tv;
 	ecore_timer_freeze(inst->update_timer);
 
 	if (ecore_timer_interval_get(inst->update_timer) <= 1.0f) {
 		return;
 	}
 
+#if defined(_USE_ECORE_TIME_GET)
+	inst->sleep_at = ecore_time_get();
+#else
+	struct timeval tv;
 	if (gettimeofday(&tv, NULL) < 0) {
 		ErrPrint("gettimeofday: %s\n", strerror(errno));
 		tv.tv_sec = 0;
 		tv.tv_usec = 0;
 	}
 	inst->sleep_at = (double)tv.tv_sec + (double)tv.tv_usec / 1000000.0f;
+#endif
 }
 
 

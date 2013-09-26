@@ -28,7 +28,11 @@ struct event_data {
 		int minor;
 	} width;
 	int distance;	/* Hovering */
+#if defined(_USE_ECORE_TIME_GET)
+	double tv;
+#else
 	struct timeval tv;
+#endif
 };
 
 enum event_state {

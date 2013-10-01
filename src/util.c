@@ -360,6 +360,7 @@ HAPI double util_time_delay_for_compensation(double period)
 	unsigned long long curtime;
 	unsigned long long _period;
 	unsigned long long remain;
+	struct timeval tv;
 	double ret;
 
 	if (period == 0.0f) {
@@ -367,19 +368,12 @@ HAPI double util_time_delay_for_compensation(double period)
 		return 0.0f;
 	}
 
-#if defined(_USE_ECORE_TIME_GET)
-	double tv;
-	tv = ecore_time_get();
-	curtime = tv * 1000000llu;
-#else
-	struct timeval tv;
 	if (gettimeofday(&tv, NULL) < 0){
 		ErrPrint("gettimeofday: %s\n", strerror(errno));
 		return period;
 	}
 
 	curtime = (unsigned long long)tv.tv_sec * 1000000llu + (unsigned long long)tv.tv_usec;
-#endif
 
 	_period = (unsigned long long)(period * (double)1000000);
 	if (_period == 0llu) {

@@ -238,6 +238,8 @@ static Eina_Bool created_cb(void *data)
 	 * Client PAUSE/RESUME event must has to be sent after created event.
 	 */
 	xmonitor_update_state(client_pid(data));
+
+	(void)client_unref(data);
 	return ECORE_CALLBACK_CANCEL;
 }
 
@@ -274,9 +276,10 @@ HAPI struct client_node *client_create(pid_t pid, int handle)
 		 * \note
 		 * To save the time to send reply packet to the client.
 		 */
-		if (ecore_timer_add(DELAY_TIME, created_cb, client) == NULL) {
+		if (ecore_timer_add(DELAY_TIME, created_cb, client_ref(client)) == NULL) {
 			ErrPrint("Failed to add a timer for client created event\n");
-			client = client_unref(client);
+			client = client_unref(client); /* Decrease refcnt for argument */
+			client = client_unref(client); /* Destroy client object */
 			return NULL;
 		}
 	}

@@ -51,6 +51,7 @@
 #define TYPE_INFO "info"
 #define TYPE_DRAG "drag"
 #define TYPE_ACCESS "access"
+#define TYPE_OPERATE_ACCESS "access,operation"
 
 #define INFO_SIZE "size"
 #define INFO_CATEGORY "category"
@@ -74,6 +75,7 @@ struct script_port {
 	int (*update_text)(void *handle, Evas *e, const char *id, const char *part, const char *text);
 	int (*update_image)(void *handle, Evas *e, const char *id, const char *part, const char *path, const char *option);
 	int (*update_access)(void *handle, Evas *e, const char *id, const char *part, const char *text, const char *option);
+	int (*operate_access)(void *handle, Evas *e, const char *id, const char *part, const char *operation, const char *option);
 	int (*update_script)(void *handle, Evas *e, const char *src_id, const char *target_id, const char *part, const char *path, const char *option);
 	int (*update_signal)(void *handle, Evas *e, const char *id, const char *part, const char *signal);
 	int (*update_drag)(void *handle, Evas *e, const char *id, const char *part, double x, double y);
@@ -214,6 +216,11 @@ static int load_all_ports(void)
 
 		item->update_access = dlsym(item->handle, "script_update_access");
 		if (!item->update_access) {
+			goto errout;
+		}
+
+		item->operate_access = dlsym(item->handle, "script_operate_access");
+		if (!item->operate_access) {
 			goto errout;
 		}
 
@@ -751,6 +758,36 @@ static int update_access(struct inst_info *inst, struct block *block, int is_pd)
 	return LB_STATUS_SUCCESS;
 }
 
+static int operate_access(struct inst_info *inst, struct block *block, int is_pd)
+{
+	struct script_info *info;
+	Evas *e;
+
+	if (!block || !block->part) {
+		ErrPrint("Block or block->part is NIL\n");
+		return LB_STATUS_ERROR_INVALID;
+	}
+
+	info = is_pd ? instance_pd_script(inst) : instance_lb_script(inst);
+	if (!info) {
+		ErrPrint("info is NIL (%d, %s)\n", is_pd, instance_id(inst));
+		return LB_STATUS_ERROR_FAULT;
+	}
+
+	if (!info->port) {
+		ErrPrint("info->port is NIL\n");
+		return LB_STATUS_ERROR_INVALID;
+	}
+
+	e = script_handler_evas(info);
+	if (e) {
+		info->port->operate_access(info->port_data, e, block->id, block->part, block->data, block->option);
+	} else {
+		ErrPrint("Evas: (nil) id[%s] part[%s] data[%s]\n", block->id, block->part, block->data);
+	}
+	return LB_STATUS_SUCCESS;
+}
+
 static int update_script_script(struct inst_info *inst, struct block *block, int is_pd)
 {
 	struct script_info *info;
@@ -976,6 +1013,10 @@ static inline void consuming_parsed_block(int lineno, struct inst_info *inst, in
 		{
 			.type = TYPE_ACCESS,
 			.handler = update_access,
+		},
+		{
+			.type = TYPE_OPERATE_ACCESS,
+			.handler = operate_access,
 		},
 		{
 			.type = NULL,

@@ -854,8 +854,6 @@ HAPI struct slave_node *slave_deactivated_by_fault(struct slave_node *slave)
 		} else {
 			slave->critical_fault_count = 0;
 		}
-	} else {
-		ErrPrint("Failed to get time of day: %s\n", strerror(errno));
 	}
 #else
 	struct timeval faulted_at;

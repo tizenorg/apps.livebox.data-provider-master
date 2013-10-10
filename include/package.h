@@ -126,5 +126,6 @@ extern int package_init(void);
 extern int package_fini(void);
 
 extern int package_is_enabled(const char *appid);
+extern int package_faulted(struct pkg_info *info);
 
 /* End of a file */

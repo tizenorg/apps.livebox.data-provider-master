@@ -170,8 +170,9 @@ static void provider_del_cb(struct node *node)
 	struct slave *info;
 
 	info = node_data(node);
-	if (!info)
+	if (!info) {
 		return;
+	}
 
 	free(info->pkgname);
 	free(info->abi);
@@ -184,8 +185,9 @@ static void package_del_cb(struct node *node)
 	struct package *info;
 
 	info = node_data(node);
-	if (!info)
+	if (!info) {
 		return;
+	}
 
 	free(info->pkgid);
 	free(info->slavename);
@@ -198,8 +200,9 @@ static void inst_del_cb(struct node *node)
 	struct instance *info;
 
 	info = node_data(node);
-	if (!info)
+	if (!info) {
 		return;
+	}
 
 	free(info->id);
 	free(info->cluster);
@@ -269,16 +272,18 @@ static void ls(void)
 
 			printf(" %5.2f %6s %10s %10s %4dx%-4d ", info->period, info->state, info->cluster, info->category, info->width, info->height);
 			snprintf(buf, sizeof(buf), "/opt/usr/share/live_magazine/reader/%s", node_name(node));
-			if (lstat(buf, &stat) < 0)
+			if (lstat(buf, &stat) < 0) {
 				printf("%3d ERR ", errno);
-			else
+			} else {
 				printf("%2.2lf KB ", (double)stat.st_size / 1024.0f);
+			}
 		}
 
-		if (node_type(node) == NODE_DIR)
+		if (node_type(node) == NODE_DIR) {
 			printf("%s/", node_name(node));
-		else if (node_type(node) == NODE_FILE)
+		} else if (node_type(node) == NODE_FILE) {
 			printf("%s", node_name(node));
+		}
 
 		printf("\n");
 		node = node_next_sibling(node);
@@ -478,6 +483,56 @@ static void send_inst_delete(void)
 	s_info.age++;
 }
 
+static void send_inst_fault(void)
+{
+	struct packet *packet;
+	struct node *parent;
+	const char *name;
+	struct instance *inst;
+	int ret;
+
+	if (s_info.cmd != NOP) {
+		printf("Previous command is not finished\n");
+		return;
+	}
+
+	parent = node_parent(s_info.targetdir);
+	if (!parent) {
+		printf("Invalid argument\n");
+		return;
+	}
+
+	if (!node_parent(parent)) {
+		printf("Invalid argument\n");
+		return;
+	}
+
+	name = node_name(node_parent(parent));
+	if (!name || strcmp(name, "package")) {
+		printf("Invalid argument\n");
+		return;
+	}
+
+	inst = node_data(s_info.targetdir);
+	name = node_name(parent);
+
+	packet = packet_create_noack("pkg_ctrl", "sss", "faultinst", name, inst->id);
+	if (!packet) {
+		printf("Failed to create a packet\n");
+		return;
+	}
+
+	ret = com_core_packet_send_only(s_info.fd, packet);
+	packet_destroy(packet);
+	if (ret < 0) {
+		printf("Failed to send a packet: %d\n", ret);
+		return;
+	}
+
+	s_info.cmd = INST_CTRL;
+	s_info.age++;
+}
+
 static void send_inst_list(const char *pkgname)
 {
 	struct packet *packet;
@@ -533,8 +588,9 @@ static inline void init_directory(void)
 {
 	struct node *node;
 	s_info.rootdir = node_create(NULL, NULL, NODE_DIR);
-	if (!s_info.rootdir)
+	if (!s_info.rootdir) {
 		return;
+	}
 	node_set_mode(s_info.rootdir, NODE_READ | NODE_EXEC);
 
 	node = node_create(s_info.rootdir, "provider", NODE_DIR);
@@ -562,7 +618,7 @@ static inline void fini_directory(void)
 {
 }
 
-static inline struct node *update_target_dir(const char *cmd)
+static struct node *update_target_dir(const char *cmd)
 {
 	struct node *node;
 
@@ -577,8 +633,9 @@ static int get_token(const char *src, char *out)
 	int len = 0;
 	while (*src && *src == ' ') src++;
 
-	if (!*src)
+	if (!*src) {
 		return 0;
+	}
 
 	while (*src && *src != ' ') {
 		*out++ = *src++;
@@ -707,7 +764,9 @@ static int do_set(const char *cmd)
 	i = get_token(cmd, variable);
 
 	cmd += i;
-	while (*cmd && *cmd == ' ') cmd++;
+	while (*cmd && *cmd == ' ') {
+		cmd++;
+	}
 
 	if (!i || !*cmd) {
 		printf("Invalid argument(%s): set [VAR] [VAL]\n", cmd);
@@ -739,8 +798,9 @@ static inline int do_ls(const char *cmd)
 
 	cmd += 2;
 
-	while (*cmd && *cmd == ' ')
+	while (*cmd && *cmd == ' ') {
 		cmd++;
+	}
 
 	s_info.targetdir = *cmd ? update_target_dir(cmd) : s_info.curdir;
 	if (!s_info.targetdir) {
@@ -790,11 +850,13 @@ static inline int do_cd(const char *cmd)
 {
 	cmd += 2;
 
-	while (*cmd && *cmd == ' ')
+	while (*cmd && *cmd == ' ') {
 		 cmd++;
+	}
 
-	if (!*cmd)
+	if (!*cmd) {
 		return -1;
+	}
 
 	if (s_info.cmd != NOP) {
 		printf("Waiting the server response\n");
@@ -825,8 +887,9 @@ static inline int do_rm(const char *cmd)
 {
 	cmd += 2;
 	while (*cmd && *cmd == ' ') cmd++;
-	if (!*cmd)
+	if (!*cmd) {
 		return -1;
+	}
 
 	if (s_info.cmd != NOP) {
 		printf("Waiting the server response\n");
@@ -848,6 +911,34 @@ static inline int do_rm(const char *cmd)
 	return 0;
 }
 
+static inline int do_fault(const char *cmd)
+{
+	cmd += 5;
+	while (*cmd && *cmd == ' ') cmd++;
+	if (!*cmd) {
+		return -1;
+	}
+
+	if (s_info.cmd != NOP) {
+		printf("Waiting the server response\n");
+		return -EBUSY;
+	}
+
+	s_info.targetdir = update_target_dir(cmd);
+	if (!s_info.targetdir) {
+		printf("%s is not exists\n", cmd);
+		return -ENOENT;
+	}
+
+	if (!(node_mode(s_info.targetdir) & NODE_WRITE)) {
+		printf("Access denied %s\n", cmd);
+		return -EACCES;
+	}
+
+	send_inst_fault();
+	return 0;
+}
+
 #if !defined(WCOREDUMP)
 #define WCOREDUMP(a)	0
 #endif
@@ -858,9 +949,13 @@ static void do_sh(const char *cmd)
 
 	cmd += 3;
 
-	while (*cmd && *cmd == ' ') cmd++;
-	if (!*cmd)
+	while (*cmd && *cmd == ' ') {
+		cmd++;
+	}
+
+	if (!*cmd) {
 		return;
+	}
 
 	pid = fork();
 	if (pid == 0) {
@@ -868,12 +963,14 @@ static void do_sh(const char *cmd)
 		int idx;
 		idx = 0;
 
-		while (idx < (sizeof(command) - 1) && *cmd && *cmd != ' ')
+		while (idx < (sizeof(command) - 1) && *cmd && *cmd != ' ') {
 			command[idx++] = *cmd++;
+		}
 		command[idx] = '\0';
 
-		if (execl(command, cmd, NULL) < 0)
+		if (execl(command, cmd, NULL) < 0) {
 			printf("Failed to execute: %s\n", strerror(errno));
+		}
 
 		exit(0);
 	} else if (pid < 0) {
@@ -903,13 +1000,17 @@ static inline int get_pixmap_size(Display *disp, Pixmap id, int *x, int *y, unsi
 	int _x;
 	int _y;
 
-	if (!x)
+	if (!x) {
 		x = &_x;
-	if (!y)
-		y = &_y;
+	}
 
-	if (!XGetGeometry(disp, id, &dummy_win, x, y, w, h, &dummy_border, &dummy_depth))
+	if (!y) {
+		y = &_y;
+	}
+
+	if (!XGetGeometry(disp, id, &dummy_win, x, y, w, h, &dummy_border, &dummy_depth)) {
 		return -EFAULT;
+	}
 
 	return 0;
 }
@@ -946,8 +1047,9 @@ static inline int do_capture(Display *disp, Pixmap id, const char *filename)
 	si.shmaddr = shmat(si.shmid, NULL, 0);
 	if (si.shmaddr == (void *)-1) {
 
-		if (shmctl(si.shmid, IPC_RMID, 0) < 0)
+		if (shmctl(si.shmid, IPC_RMID, 0) < 0) {
 			printf("shmctl: %s\n", strerror(errno));
+		}
 
 		return -EFAULT;
 	}
@@ -958,11 +1060,13 @@ static inline int do_capture(Display *disp, Pixmap id, const char *filename)
 	 */
 	xim = XShmCreateImage(disp, visual, 24 /* (depth << 3) */, ZPixmap, NULL, &si, w, h);
 	if (xim == NULL) {
-		if (shmdt(si.shmaddr) < 0)
+		if (shmdt(si.shmaddr) < 0) {
 			printf("shmdt: %s\n", strerror(errno));
+		}
 
-		if (shmctl(si.shmid, IPC_RMID, 0) < 0)
+		if (shmctl(si.shmid, IPC_RMID, 0) < 0) {
 			printf("shmctl: %s\n", strerror(errno));
+		}
 
 		return -EFAULT;
 	}
@@ -975,10 +1079,13 @@ static inline int do_capture(Display *disp, Pixmap id, const char *filename)
 
 	fd = open(filename, O_CREAT | O_RDWR, 0644);
 	if (fd >= 0) {
-		if (write(fd, xim->data, bufsz) != bufsz)
+		if (write(fd, xim->data, bufsz) != bufsz) {
 			printf("Data is not fully written\n");
+		}
 
-		close(fd);
+		if (close(fd) < 0) {
+			printf("close: %s\n", strerror(errno));
+		}
 	} else {
 		printf("Error: %sn\n", strerror(errno));
 	}
@@ -986,11 +1093,13 @@ static inline int do_capture(Display *disp, Pixmap id, const char *filename)
 	XShmDetach(disp, &si);
 	XDestroyImage(xim);
 
-	if (shmdt(si.shmaddr) < 0)
+	if (shmdt(si.shmaddr) < 0) {
 		printf("shmdt: %s\n", strerror(errno));
+	}
 
-	if (shmctl(si.shmid, IPC_RMID, 0) < 0)
+	if (shmctl(si.shmid, IPC_RMID, 0) < 0) {
 		printf("shmctl: %s\n", strerror(errno));
+	}
 
 	return 0;
 }
@@ -1001,9 +1110,13 @@ static void do_x(const char *cmd)
 
 	cmd += 2;
 
-	while (*cmd && *cmd == ' ') cmd++;
-	if (!*cmd)
+	while (*cmd && *cmd == ' ') {
+		cmd++;
+	}
+
+	if (!*cmd) {
 		return;
+	}
 
 	disp = XOpenDisplay(NULL);
 	if (!disp) {
@@ -1043,8 +1156,9 @@ static void do_x(const char *cmd)
 			printf("Invalid argument\nx capture WINID_DEC FILENAME (%s)\n", cmd);
 			return;
 		}
-		if (do_capture(disp, winId, filename) == 0)
+		if (do_capture(disp, winId, filename) == 0) {
 			printf("Captured: %s\n", filename);
+		}
 	} else if (!strncasecmp(cmd, "resize ", 7)) {
 		unsigned int winId;
 		int w;
@@ -1111,8 +1225,9 @@ static inline void put_command(const char *cmd)
 static inline const char *get_command(int idx)
 {
 	idx = s_info.history_top + idx;
-	while (idx < 0)
+	while (idx < 0) {
 		idx += (sizeof(s_info.history) / sizeof(s_info.history[0]));
+	}
 
 	return s_info.history[idx];
 }
@@ -1120,28 +1235,39 @@ static inline const char *get_command(int idx)
 static inline void do_command(const char *cmd)
 {
 	/* Skip the first spaces */
-	while (*cmd && *cmd == ' ') cmd++;
+	while (*cmd && *cmd == ' ') {
+		cmd++;
+	}
 
 	if (strlen(cmd) && *cmd != '#') {
 		if (!strncasecmp(cmd, "exit", 4) || !strncasecmp(cmd, "quit", 4)) {
 			ecore_main_loop_quit();
 		} else if (!strncasecmp(cmd, "set ", 4)) {
-			if (do_set(cmd) == 0)
+			if (do_set(cmd) == 0) {
 				return;
+			}
 		} else if (!strncasecmp(cmd, "stat ", 5)) {
 			do_stat(cmd);
 		} else if (!strncasecmp(cmd, "get ", 4)) {
-			if (do_get(cmd) == 0)
+			if (do_get(cmd) == 0) {
 				return;
+			}
 		} else if (!strncasecmp(cmd, "ls", 2)) {
-			if (do_ls(cmd) == 0)
+			if (do_ls(cmd) == 0) {
 				return;
+			}
 		} else if (!strncasecmp(cmd, "cd", 2)) {
-			if (do_cd(cmd) == 0)
+			if (do_cd(cmd) == 0) {
 				return;
+			}
 		} else if (!strncasecmp(cmd, "rm", 2)) {
-			if (do_rm(cmd) == 0)
+			if (do_rm(cmd) == 0) {
 				return;
+			}
+		} else if (!strncasecmp(cmd, "fault", 5)) {
+			if (do_fault(cmd) == 0) {
+				return;
+			}
 		} else if (!strncasecmp(cmd, "sh ", 3)) {
 			do_sh(cmd);
 		} else if (!strncasecmp(cmd, "x ", 2)) {
@@ -1202,8 +1328,9 @@ static Eina_Bool input_cb(void *data, Ecore_Fd_Handler *fd_handler)
 				}
 				break;
 			case 0x42: /* DOWN */
-				if (s_info.history_idx >= 0)
+				if (s_info.history_idx >= 0) {
 					break;
+				}
 
 				printf("%s2K%s1G", escape_str, escape_str);
 				tmp = get_command(++s_info.history_idx);
@@ -1255,8 +1382,9 @@ static Eina_Bool input_cb(void *data, Ecore_Fd_Handler *fd_handler)
 				idx = s_info.quick_idx;
 			}
 
-			if (!s_info.quick_search_node)
+			if (!s_info.quick_search_node) {
 				break;
+			}
 
 			printf("%s2K%s1G", escape_str, escape_str);
 			strcpy(cmd_buffer + idx, node_name(s_info.quick_search_node));
@@ -1267,8 +1395,9 @@ static Eina_Bool input_cb(void *data, Ecore_Fd_Handler *fd_handler)
 		case '\r':
 			cmd_buffer[idx] = '\0';
 			idx = 0;
-			if (s_info.input_fd == STDIN_FILENO || s_info.verbose)
+			if (s_info.input_fd == STDIN_FILENO || s_info.verbose) {
 				putc((int)'\n', stdout);
+			}
 			do_command(cmd_buffer);
 			put_command(cmd_buffer);
 			memset(cmd_buffer, 0, sizeof(cmd_buffer));
@@ -1280,8 +1409,9 @@ static Eina_Bool input_cb(void *data, Ecore_Fd_Handler *fd_handler)
 		default:
 			cmd_buffer[idx++] = ch;
 
-			if (s_info.input_fd == STDIN_FILENO || s_info.verbose)
+			if (s_info.input_fd == STDIN_FILENO || s_info.verbose) {
 				putc((int)ch, stdout);
+			}
 
 			if (idx == sizeof(cmd_buffer) - 1) {
 				cmd_buffer[idx] = '\0';
@@ -1292,8 +1422,9 @@ static Eina_Bool input_cb(void *data, Ecore_Fd_Handler *fd_handler)
 		}
 	}
 
-	if (ret < 0 && !fd_handler)
+	if (ret < 0 && !fd_handler) {
 		ecore_main_loop_quit();
+	}
 
 	return ECORE_CALLBACK_RENEW;
 }
@@ -1340,8 +1471,9 @@ static void processing_line_buffer(const char *buffer)
 			}
 
 			pkginfo->pkgid = strdup("conf.file");
-			if (!pkginfo->pkgid)
+			if (!pkginfo->pkgid) {
 				printf("Error: %s\n", strerror(errno));
+			}
 
 			pkginfo->primary = 1;
 
@@ -1372,12 +1504,14 @@ static void processing_line_buffer(const char *buffer)
 		node_set_age(node, s_info.age);
 
 		pkginfo->slavename = strdup(slavename);
-		if (!pkginfo->slavename)
+		if (!pkginfo->slavename) {
 			printf("Error: %s\n", strerror(errno));
+		}
 
 		pkginfo->abi = strdup(abi);
-		if (!pkginfo->abi)
+		if (!pkginfo->abi) {
 			printf("Error: %s\n", strerror(errno));
+		}
 
 		pkginfo->pid = pid;
 		pkginfo->refcnt = refcnt;
@@ -1416,16 +1550,19 @@ static void processing_line_buffer(const char *buffer)
 		free(slaveinfo->state);
 
 		slaveinfo->pkgname = strdup(pkgname);
-		if (!slaveinfo->pkgname)
+		if (!slaveinfo->pkgname) {
 			printf("Error: %s\n", strerror(errno));
+		}
 
 		slaveinfo->abi = strdup(abi);
-		if (!slaveinfo->abi)
+		if (!slaveinfo->abi) {
 			printf("Error: %s\n", strerror(errno));
+		}
 
 		slaveinfo->state = strdup(state);
-		if (!slaveinfo->state)
+		if (!slaveinfo->state) {
 			printf("Error: %s\n", strerror(errno));
+		}
 
 		slaveinfo->pid = pid;
 		slaveinfo->secured = secured;
@@ -1472,20 +1609,24 @@ static void processing_line_buffer(const char *buffer)
 		free(instinfo->state);
 
 		instinfo->id = strdup(inst_id);
-		if (!instinfo->id)
+		if (!instinfo->id) {
 			printf("Error: %s\n", strerror(errno));
+		}
 
 		instinfo->cluster = strdup(cluster);
-		if (!instinfo->cluster)
+		if (!instinfo->cluster) {
 			printf("Error: %s\n", strerror(errno));
+		}
 
 		instinfo->category = strdup(category);
-		if (!instinfo->category)
+		if (!instinfo->category) {
 			printf("Error: %s\n", strerror(errno));
+		}
 
 		instinfo->state = strdup(state);
-		if (!instinfo->state)
+		if (!instinfo->state) {
 			printf("Error: %s\n", strerror(errno));
+		}
 
 		instinfo->period = period;
 		instinfo->width = width;
@@ -1641,7 +1782,9 @@ static int ret_cb(pid_t pid, int handle, const struct packet *packet, void *data
 	s_info.fd_handler = ecore_main_fd_handler_add(s_info.fifo_handle, ECORE_FD_READ, read_cb, NULL, NULL, NULL);
 	if (!s_info.fd_handler) {
 		printf("Failed to add a fd handler\n");
-		close(s_info.fifo_handle);
+		if (close(s_info.fifo_handle) < 0) {
+			printf("close: %s\n", strerror(errno));
+		}
 		s_info.fifo_handle = -EINVAL;
 		ecore_main_loop_quit();
 		return -EFAULT;
@@ -1650,8 +1793,9 @@ static int ret_cb(pid_t pid, int handle, const struct packet *packet, void *data
 	prompt(NULL);
 
 	if (s_info.input_fd == STDIN_FILENO) {
-		if (fcntl(s_info.input_fd, F_SETFL, O_NONBLOCK) < 0)
+		if (fcntl(s_info.input_fd, F_SETFL, O_NONBLOCK) < 0) {
 			printf("Error: %s\n", strerror(errno));
+		}
 
 		s_info.in_handler = ecore_main_fd_handler_add(s_info.input_fd, ECORE_FD_READ, input_cb, NULL, NULL, NULL);
 		if (!s_info.in_handler) {
@@ -1730,7 +1874,9 @@ int main(int argc, char *argv[])
 
 			if (s_info.input_fd != STDIN_FILENO) {
 				/* Close the previously, opened file */
-				close(s_info.input_fd);
+				if (close(s_info.input_fd) < 0) {
+					printf("close: %s\n", strerror(errno));
+				}
 			}
 
 			s_info.input_fd = open(optarg, O_RDONLY);
@@ -1788,15 +1934,17 @@ int main(int argc, char *argv[])
 			ttystate.c_lflag &= ~(ICANON | ECHO);
 			ttystate.c_cc[VMIN] = 1;
 
-			if (tcsetattr(s_info.input_fd, TCSANOW, &ttystate) < 0)
+			if (tcsetattr(s_info.input_fd, TCSANOW, &ttystate) < 0) {
 				printf("Error: %s\n", strerror(errno));
+			}
 		}
 	} else {
 		printf("Batch mode enabled\n");
 	}
 
-	if (setvbuf(stdout, (char *)NULL, _IONBF, 0) != 0)
+	if (setvbuf(stdout, (char *)NULL, _IONBF, 0) != 0) {
 		printf("Error: %s\n", strerror(errno));
+	}
 
 	init_directory();
 
@@ -1817,14 +1965,19 @@ int main(int argc, char *argv[])
 
 	if (s_info.input_fd == STDIN_FILENO) {
 		ttystate.c_lflag |= ICANON | ECHO;
-		if (tcsetattr(s_info.input_fd, TCSANOW, &ttystate) < 0)
+		if (tcsetattr(s_info.input_fd, TCSANOW, &ttystate) < 0) {
 			printf("Error: %s\n", strerror(errno));
+		}
 	} else {
-		close(s_info.input_fd);
+		if (close(s_info.input_fd) < 0) {
+			printf("close: %s\n", strerror(errno));
+		}
 	}
 
 	if (s_info.fifo_handle > 0) {
-		close(s_info.fifo_handle);
+		if (close(s_info.fifo_handle) < 0) {
+			printf("close: %s\n", strerror(errno));
+		}
 		s_info.fifo_handle = -EINVAL;
 	}
 

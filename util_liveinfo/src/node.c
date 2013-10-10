@@ -39,8 +39,9 @@ char *node_to_abspath(const struct node *node)
 	}
 
 	path = malloc(len + 3); /* '/' and '\0' */
-	if (!path)
+	if (!path) {
 		return NULL;
+	}
 
 	if (!len) {
 		path[0] = '/';
@@ -64,14 +65,18 @@ char *node_to_abspath(const struct node *node)
 
 static inline int next_state(int from, char ch)
 {
-	switch ( ch )
-	{
-		case '\0':
-		case '/':
-			return 1;
-		case '.':
-			if ( from == 1 ) return 2;
-			if ( from == 2 ) return 3;
+	switch (ch) {
+	case '\0':
+	case '/':
+		return 1;
+	case '.':
+		if (from == 1) {
+			return 2;
+		}
+
+		if (from == 2) {
+			return 3;
+		}
 	}
 
 	return 4;
@@ -85,45 +90,55 @@ static inline void abspath(const char* pBuffer, char* pRet)
 	int src_idx = 0;
 	int src_len = strlen(pBuffer);
 	pRet[idx] = '/';
-	idx ++;
+	idx++;
 
 	while (src_idx <= src_len) {
 		from = state;
 		state = next_state(from, pBuffer[src_idx]);
 
 		switch (from) {
-			case 1:
-				if ( state != 1 ) {
-					pRet[idx] = pBuffer[src_idx];
-					idx ++;
+		case 1:
+			if (state != 1) {
+				pRet[idx] = pBuffer[src_idx];
+				idx++;
+			}
+			break;
+		case 2:
+			if (state == 1) {
+				if (idx > 1) {
+					idx--;
 				}
-				break;
-			case 2:
-				if ( state == 1 ) {
-					if ( idx > 1 ) idx --;
-				} else {
-					pRet[idx] = pBuffer[src_idx];
-					idx ++;
-				}
-				break;
-			case 3:
-				// Only can go to the 1 or 4
-				if ( state == 1 ) {
-					idx -= 2;
-					if ( idx < 1 ) idx = 1;
-
-					while ( idx > 1 && pRet[idx] != '/' ) idx --; /* Remove .. */
-					if ( idx > 1 && pRet[idx] == '/' ) idx --;
-					while ( idx > 1 && pRet[idx] != '/' ) idx --; /* Remove parent folder */
-				}
-			case 4:
+			} else {
 				pRet[idx] = pBuffer[src_idx];
 				idx ++;
-				break;
+			}
+			break;
+		case 3:
+			// Only can go to the 1 or 4
+			if (state == 1) {
+				idx -= 2;
+				if (idx < 1) {
+					idx = 1;
+				}
+
+				while (idx > 1 && pRet[idx] != '/') {
+					idx--; /* Remove .. */
+				}
+				if (idx > 1 && pRet[idx] == '/') {
+					idx--;
+				}
+				while (idx > 1 && pRet[idx] != '/') {
+					idx--; /* Remove parent folder */
+				}
+			}
+		case 4:
+			pRet[idx] = pBuffer[src_idx];
+			idx++;
+			break;
 		}
 
 		pRet[idx] = '\0';
-		src_idx ++;
+		src_idx++;
 	}
 }
 
@@ -135,8 +150,9 @@ struct node *node_find(const struct node *node, const char *path)
 
 	if (*path != '/') {
 		while (node->parent && path[0] == '.' && path[1] == '.') {
-			if (path[2] != '/' && path[2] != '\0')
+			if (path[2] != '/' && path[2] != '\0') {
 				break;
+			}
 
 			path += 2;
 			path += (path[2] == '/');
@@ -156,8 +172,9 @@ struct node *node_find(const struct node *node, const char *path)
 	do {
 		ptr += (*ptr == '/');
 		for (len = 0; ptr[len] && ptr[len] != '/'; len++);
-		if (!len)
+		if (!len) {
 			break;
+		}
 
 		if (!strncmp("..", ptr, len)) {
 			ptr += len;
@@ -171,8 +188,9 @@ struct node *node_find(const struct node *node, const char *path)
 		}
 
 		node = node->child;
-		if (!node)
+		if (!node) {
 			break;
+		}
 
 		while (node) {
 			if (!strncmp(node->name, ptr, len) && node->name[len] == '\0') {
@@ -223,8 +241,9 @@ struct node *node_create(struct node *parent, const char *name, enum node_type t
 		if (parent->child) {
 			struct node *tmp;
 			tmp = parent->child;
-			while (tmp->sibling.next)
+			while (tmp->sibling.next) {
 				tmp = tmp->sibling.next;
+			}
 
 			tmp->sibling.next = node;
 			node->sibling.prev = tmp;
@@ -252,19 +271,22 @@ void node_delete(struct node *node, void (del_cb)(struct node *node))
 	struct node *next;
 	struct node *parent;
 
-	if (node->sibling.prev)
+	if (node->sibling.prev) {
 		node->sibling.prev->sibling.next = node->sibling.next;
+	}
 
-	if (node->sibling.next)
+	if (node->sibling.next) {
 		node->sibling.next->sibling.prev = node->sibling.prev;
+	}
 
 	/* Isolate the node */
 	node->sibling.prev = NULL;
 	node->sibling.next = NULL;
 
 	if (node->parent) {
-		if (node->parent->child == node)
+		if (node->parent->child == node) {
 			node->parent->child = NULL;
+		}
 
 		node->parent = NULL;
 	}
@@ -272,25 +294,30 @@ void node_delete(struct node *node, void (del_cb)(struct node *node))
 	tmp = node;
 	while (tmp) {
 		/* Reach to the leaf node */
-		while (tmp->child) tmp = tmp->child;
+		while (tmp->child) {
+			tmp = tmp->child;
+		}
 
 		parent = tmp->parent;
 		next = tmp->sibling.next;
 
-		if (parent && parent->child == tmp)
+		if (parent && parent->child == tmp) {
 			parent->child = NULL;
+		}
 
-		if (del_cb)
+		if (del_cb) {
 			del_cb(tmp);
+		}
 
 		node_destroy(tmp);
 
-		if (next)
+		if (next) {
 			tmp = next;
-		else if (parent)
+		} else if (parent) {
 			tmp = parent;
-		else
+		} else {
 			tmp = NULL;
+		}
 	}
 }
 

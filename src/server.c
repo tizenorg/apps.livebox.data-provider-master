@@ -6586,6 +6586,22 @@ static struct packet *liveinfo_pkg_ctrl(pid_t pid, int handle, const struct pack
 			(void)instance_destroy(inst, INSTANCE_DESTROY_DEFAULT);
 			fprintf(fp, "%d\n", 0);
 		}
+	} else if (!strcmp(cmd, "faultinst")) {
+		struct inst_info *inst;
+		inst = package_find_instance_by_id(pkgname, id);
+		if (!inst) {
+			fprintf(fp, "%d\n", ENOENT);
+		} else {
+			struct pkg_info *pkg;
+
+			pkg = instance_package(inst);
+			if (!pkg) {
+				fprintf(fp, "%d\n", EFAULT);
+			} else {
+				(void)package_faulted(pkg);
+				fprintf(fp, "%d\n", 0);
+			}
+		}
 	}
 
 	fprintf(fp, "EOD\n");

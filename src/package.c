@@ -1574,4 +1574,30 @@ HAPI int package_is_enabled(const char *appid)
 	return enabled == true;
 }
 
+HAPI int package_faulted(struct pkg_info *pkg)
+{
+	Eina_List *l;
+	Eina_List *n;
+	struct slave_node *slave;
+	struct inst_info *inst;
+
+	slave = package_slave(pkg);
+	if (!slave) {
+		ErrPrint("Package has no slave?\n");
+		return LB_STATUS_ERROR_FAULT;
+	}
+
+	/* Emulated fault routine */
+	// (void)package_set_fault_info(pkg, util_timestamp(), slave_name(slave), __func__);
+	fault_broadcast_info(package_name(pkg), slave_name(slave), __func__);
+
+	DbgPrint("package: %s (forucely faulted %s)\n", package_name(pkg), slave_name(slave));
+	EINA_LIST_FOREACH_SAFE(pkg->inst_list, l, n, inst) {
+		DbgPrint("Destroy instance %p\n", inst);
+		instance_destroy(inst, INSTANCE_DESTROY_FAULT);
+	}
+
+	return LB_STATUS_SUCCESS;
+}
+
 /* End of a file */

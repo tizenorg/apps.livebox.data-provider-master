@@ -53,4 +53,23 @@ extern FILE *__file_log_fp;
 
 #define LOG_TAG "DATA_PROVIDER_MASTER"
 
+#define PERF_INIT() \
+	struct timeval __stv; \
+	struct timeval __etv; \
+	struct timeval __rtv
+
+#define PERF_BEGIN() do { \
+	if (gettimeofday(&__stv, NULL) < 0) { \
+		ErrPrint("gettimeofday: %s\n", strerror(errno)); \
+	} \
+} while (0)
+
+#define PERF_MARK(tag) do { \
+	if (gettimeofday(&__etv, NULL) < 0) { \
+		ErrPrint("gettimeofday: %s\n", strerror(errno)); \
+	} \
+	timersub(&__etv, &__stv, &__rtv); \
+	DbgPrint("[%s] %u.%06u\n", tag, __rtv.tv_sec, __rtv.tv_usec); \
+} while (0)
+
 /* End of a file */

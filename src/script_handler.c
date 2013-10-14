@@ -22,10 +22,15 @@
 #include <sys/types.h>
 #include <dirent.h>
 #include <string.h>
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 
 #include <Ecore_Evas.h>
 #include <Ecore.h>
 #include <Evas.h>
+#include <Eina.h>
 
 #include <dlog.h>
 #include <packet.h>
@@ -43,19 +48,33 @@
 #include "conf.h"
 #include "util.h"
 
-#define TYPE_COLOR "color"
-#define TYPE_TEXT "text"
-#define TYPE_IMAGE "image"
-#define TYPE_EDJE "script"
-#define TYPE_SIGNAL "signal"
-#define TYPE_INFO "info"
-#define TYPE_DRAG "drag"
-#define TYPE_ACCESS "access"
-#define TYPE_OPERATE_ACCESS "access,operation"
-
 #define INFO_SIZE "size"
 #define INFO_CATEGORY "category"
 #define ADDEND 256
+
+static const char *type_list[] = {
+	"access",
+	"access,operation",
+	"color",
+	"drag",
+	"image",
+	"info",
+	"script",
+	"signal",
+	"text",
+	NULL
+};
+
+static const char *field_list[] = {
+	"type",
+	"part",
+	"data",
+	"option",
+	"id",
+	"target",
+	"file",
+	NULL
+};
 
 int errno;
 
@@ -93,29 +112,41 @@ struct script_port {
 	int (*fini)(void);
 };
 
+enum block_type {
+	TYPE_ACCESS,
+	TYPE_ACCESS_OP,
+	TYPE_COLOR,
+	TYPE_DRAG,
+	TYPE_IMAGE,
+	TYPE_INFO,
+	TYPE_SCRIPT,
+	TYPE_SIGNAL,
+	TYPE_TEXT,
+	TYPE_MAX
+};
+
+enum field_type {
+	FIELD_TYPE,
+	FIELD_PART,
+	FIELD_DATA,
+	FIELD_OPTION,
+	FIELD_ID,
+	FIELD_TARGET,
+	FIELD_FILE
+};
+
 struct block {
-	char *type;
-	int type_len;
-
+	enum block_type type;
 	char *part;
-	int part_len;
-
 	char *data;
-	int data_len;
-
-	char *file;
-	int file_len;
-
 	char *option;
-	int option_len;
-
 	char *id;
-	int id_len;
+	char *target;
+	char *file;
 
-	char *target_id;
-	int target_len;
-
-	int (*handler)(struct inst_info *inst, struct block *block, int is_pd);
+	/* Should be released */
+	char *filebuf;
+	const char *filename;
 };
 
 struct script_info {
@@ -137,7 +168,7 @@ struct script_info {
 	Eina_List *cached_blocks;
 };
 
-static inline void consuming_parsed_block(int lineno, struct inst_info *inst, int is_pd, struct block *block);
+static inline void consuming_parsed_block(struct inst_info *inst, int is_pd, struct block *block);
 
 static int load_all_ports(void)
 {
@@ -335,42 +366,42 @@ static inline struct script_port *find_port(const char *magic_id)
 
 static inline void delete_block(struct block *block)
 {
-	DbgFree(block->file);
-	DbgFree(block->type);
-	DbgFree(block->part);
-	DbgFree(block->data);
-	DbgFree(block->option);
-	DbgFree(block->id);
-	DbgFree(block->target_id);
+	DbgFree(block->filebuf);
 	DbgFree(block);
 }
 
 static void render_pre_cb(void *data, Evas *e, void *event_info)
 {
+	//PERF_INIT();
+	//PERF_BEGIN();
 	struct inst_info *inst = data;
 	struct script_info *info;
 
 	if (instance_state(inst) != INST_ACTIVATED) {
 		ErrPrint("Render pre invoked but instance is not activated\n");
-		return;
+		goto out;
 	}
 
 	info = instance_lb_script(inst);
 	if (info && script_handler_evas(info) == e) {
-		return;
+		goto out;
 	}
 
 	info = instance_pd_script(inst);
 	if (info && script_handler_evas(info) == e) {
-		return;
+		goto out;
 	}
 
 	ErrPrint("Failed to do sync\n");
+out:
+	//PERF_MARK("render,pre");
 	return;
 }
 
 static void render_post_cb(void *data, Evas *e, void *event_info)
 {
+	//PERF_INIT();
+	//PERF_BEGIN();
 	struct inst_info *inst;
 	struct script_info *info;
 
@@ -385,6 +416,8 @@ static void render_post_cb(void *data, Evas *e, void *event_info)
 	if (info && script_handler_evas(info) == e) {
 		fb_sync(script_handler_fb(info));
 		instance_lb_updated_by_instance(inst, NULL);
+
+		//PERF_MARK("lb,update");
 		return;
 	}
 
@@ -392,6 +425,7 @@ static void render_post_cb(void *data, Evas *e, void *event_info)
 	if (info && script_handler_evas(info) == e) {
 		fb_sync(script_handler_fb(info));
 		instance_pd_updated_by_instance(inst, NULL);
+		//PERF_MARK("pd,update");
 		return;
 	}
 
@@ -436,7 +470,7 @@ static inline void flushing_cached_block(struct script_info *info)
 	struct block *block;
 
 	EINA_LIST_FREE(info->cached_blocks, block) {
-		consuming_parsed_block(-1, info->inst, (instance_pd_script(info->inst) == info), block);
+		consuming_parsed_block(info->inst, (instance_pd_script(info->inst) == info), block);
 	}
 }
 
@@ -639,6 +673,8 @@ HAPI void *script_handler_evas(struct script_info *info)
 
 static int update_script_color(struct inst_info *inst, struct block *block, int is_pd)
 {
+	//PERF_INIT();
+	//PERF_BEGIN();
 	struct script_info *info;
 	Evas *e;
 
@@ -664,12 +700,15 @@ static int update_script_color(struct inst_info *inst, struct block *block, int 
 	} else {
 		ErrPrint("Evas(nil) id[%s] part[%s] data[%s]\n", block->id, block->part, block->data);
 	}
+	//PERF_MARK("color");
 
 	return LB_STATUS_SUCCESS;
 }
 
 static int update_script_text(struct inst_info *inst, struct block *block, int is_pd)
 {
+	//PERF_INIT();
+	//PERF_BEGIN();
 	struct script_info *info;
 	Evas *e;
 
@@ -695,11 +734,15 @@ static int update_script_text(struct inst_info *inst, struct block *block, int i
 	} else {
 		ErrPrint("Evas(nil) id[%s] part[%s] data[%s]\n", block->id, block->part, block->data);
 	}
+
+	//PERF_MARK("text");
 	return LB_STATUS_SUCCESS;
 }
 
 static int update_script_image(struct inst_info *inst, struct block *block, int is_pd)
 {
+	//PERF_INIT();
+	//PERF_BEGIN();
 	struct script_info *info;
 	Evas *e;
 
@@ -725,11 +768,14 @@ static int update_script_image(struct inst_info *inst, struct block *block, int 
 	} else {
 		ErrPrint("Evas: (nil) id[%s] part[%s] data[%s]\n", block->id, block->part, block->data);
 	}
+	//PERF_MARK("image");
 	return LB_STATUS_SUCCESS;
 }
 
 static int update_access(struct inst_info *inst, struct block *block, int is_pd)
 {
+	//PERF_INIT();
+	//PERF_BEGIN();
 	struct script_info *info;
 	Evas *e;
 
@@ -755,11 +801,14 @@ static int update_access(struct inst_info *inst, struct block *block, int is_pd)
 	} else {
 		ErrPrint("Evas: (nil) id[%s] part[%s] data[%s]\n", block->id, block->part, block->data);
 	}
+	//PERF_MARK("access");
 	return LB_STATUS_SUCCESS;
 }
 
 static int operate_access(struct inst_info *inst, struct block *block, int is_pd)
 {
+	//PERF_INIT();
+	//PERF_BEGIN();
 	struct script_info *info;
 	Evas *e;
 
@@ -785,11 +834,14 @@ static int operate_access(struct inst_info *inst, struct block *block, int is_pd
 	} else {
 		ErrPrint("Evas: (nil) id[%s] part[%s] data[%s]\n", block->id, block->part, block->data);
 	}
+	//PERF_MARK("operate_access");
 	return LB_STATUS_SUCCESS;
 }
 
 static int update_script_script(struct inst_info *inst, struct block *block, int is_pd)
 {
+	//PERF_INIT();
+	//PERF_BEGIN();
 	struct script_info *info;
 	Evas *e;
 
@@ -811,16 +863,19 @@ static int update_script_script(struct inst_info *inst, struct block *block, int
 
 	e = script_handler_evas(info);
 	if (e) {
-		info->port->update_script(info->port_data, e, block->id, block->target_id, block->part, block->data, block->option);
+		info->port->update_script(info->port_data, e, block->id, block->target, block->part, block->data, block->option);
 	} else {
 		ErrPrint("Evas: (nil) id[%s] part[%s] data[%s] option[%s]\n",
 						block->id, block->part, block->data, block->option);
 	}
+	//PERF_MARK("script");
 	return LB_STATUS_SUCCESS;
 }
 
 static int update_script_signal(struct inst_info *inst, struct block *block, int is_pd)
 {
+	//PERF_INIT();
+	//PERF_BEGIN();
 	struct script_info *info;
 	Evas *e;
 
@@ -846,11 +901,14 @@ static int update_script_signal(struct inst_info *inst, struct block *block, int
 	} else {
 		ErrPrint("Evas(nil) id[%s] part[%s] data[%s]\n", block->id, block->part, block->data);
 	}
+	//PERF_MARK("signal");
 	return LB_STATUS_SUCCESS;
 }
 
 static int update_script_drag(struct inst_info *inst, struct block *block, int is_pd)
 {
+	//PERF_INIT();
+	//PERF_BEGIN();
 	struct script_info *info;
 	double dx, dy;
 	Evas *e;
@@ -882,11 +940,14 @@ static int update_script_drag(struct inst_info *inst, struct block *block, int i
 	} else {
 		ErrPrint("Evas(nil) id[%s] part[%s] %lfx%lf\n", block->id, block->part, dx, dy);
 	}
+	//PERF_MARK("drag");
 	return LB_STATUS_SUCCESS;
 }
 
 HAPI int script_handler_resize(struct script_info *info, int w, int h)
 {
+	//PERF_INIT();
+	//PERF_BEGIN();
 	if (!info) {
 	//|| (info->w == w && info->h == h)) {
 		ErrPrint("info[%p] resize is ignored\n", info);
@@ -915,12 +976,15 @@ HAPI int script_handler_resize(struct script_info *info, int w, int h)
 
 	info->w = w;
 	info->h = h;
+	//PERF_MARK("resize");
 
 	return LB_STATUS_SUCCESS;
 }
 
 static int update_info(struct inst_info *inst, struct block *block, int is_pd)
 {
+	//PERF_INIT();
+	//PERF_BEGIN();
 	struct script_info *info;
 
 	if (!block || !block->part || !block->data) {
@@ -967,61 +1031,28 @@ static int update_info(struct inst_info *inst, struct block *block, int is_pd)
 			ErrPrint("Evas(nil): id[%s] data[%s]\n", block->id, block->data);
 		}
 	}
+	//PERF_MARK("info");
 
 	return LB_STATUS_SUCCESS;
 }
 
-static inline void consuming_parsed_block(int lineno, struct inst_info *inst, int is_pd, struct block *block)
+static inline void consuming_parsed_block(struct inst_info *inst, int is_pd, struct block *block)
 {
+	//PERF_INIT();
+	//PERF_BEGIN();
 	struct script_info *info;
-	/*!
-	 * To speed up, use the static.
-	 * But this will increase the memory slightly.
-	 */
-	static struct {
-		const char *type;
-		int (*handler)(struct inst_info *inst, struct block *block, int is_pd);
-	} handlers[] = {
-		{
-			.type = TYPE_COLOR,
-			.handler = update_script_color,
-		},
-		{
-			.type = TYPE_TEXT,
-			.handler = update_script_text,
-		},
-		{
-			.type = TYPE_IMAGE,
-			.handler = update_script_image,
-		},
-		{
-			.type = TYPE_EDJE,
-			.handler = update_script_script,
-		},
-		{
-			.type = TYPE_SIGNAL,
-			.handler = update_script_signal,
-		},
-		{
-			.type = TYPE_DRAG,
-			.handler = update_script_drag,
-		},
-		{
-			.type = TYPE_INFO,
-			.handler = update_info,
-		},
-		{
-			.type = TYPE_ACCESS,
-			.handler = update_access,
-		},
-		{
-			.type = TYPE_OPERATE_ACCESS,
-			.handler = operate_access,
-		},
-		{
-			.type = NULL,
-			.handler = NULL,
-		},
+	typedef int (*update_function_t)(struct inst_info *inst, struct block *block, int is_pd);
+	update_function_t updators[] = {
+		update_access,
+		operate_access,
+		update_script_color,
+		update_script_drag,
+		update_script_image,
+		update_info,
+		update_script_script,
+		update_script_signal,
+		update_script_text,
+		NULL
 	};
 
 	info = is_pd ? instance_pd_script(inst) : instance_lb_script(inst);
@@ -1031,444 +1062,19 @@ static inline void consuming_parsed_block(int lineno, struct inst_info *inst, in
 	}
 
 	if (script_handler_is_loaded(info)) {
-		register int i = 0;
-
-		while (handlers[i].type) {
-			if (!strcasecmp(handlers[i].type, block->type)) {
-				handlers[i].handler(inst, block, is_pd);
-				break;
-			}
-			i++;
+		if (block->type >= 0 || block->type < TYPE_MAX) {
+			(void)updators[block->type](inst, block, is_pd);
 		}
-
-		if (!handlers[i].type) {
-			ErrPrint("%d: Unknown block type: %s\n", lineno, block->type);
-		}
-
-		goto free_out;
 	} else {
 		info->cached_blocks = eina_list_append(info->cached_blocks, block);
-		DbgPrint("%d: Block is cached (%p), %d, %s\n", lineno, block, eina_list_count(info->cached_blocks), instance_id(inst));
+		DbgPrint("Block is cached (%p), %d, %s\n", block, eina_list_count(info->cached_blocks), instance_id(inst));
+		//PERF_MARK(type_list[block->type]);
+		return;
 	}
-
-	return;
 
 free_out:
+	//PERF_MARK(type_list[block->type]);
 	delete_block(block);
-}
-
-HAPI int script_handler_parse_desc(struct inst_info *inst, const char *descfile, int is_pd)
-{
-	FILE *fp;
-	int ch;
-	int lineno;
-	enum state {
-		UNKNOWN = 0x10,
-		BLOCK_OPEN = 0x11,
-		FIELD = 0x12,
-		VALUE = 0x13,
-		BLOCK_CLOSE = 0x14,
-
-		VALUE_TYPE = 0x00,
-		VALUE_PART = 0x01,
-		VALUE_DATA = 0x02,
-		VALUE_FILE = 0x03,
-		VALUE_OPTION = 0x04,
-		VALUE_ID = 0x05,
-		VALUE_TARGET = 0x06
-	};
-	const char *field_name[] = {
-		"type",
-		"part",
-		"data",
-		"file",
-		"option",
-		"id",
-		"target",
-		NULL
-	};
-	enum state state;
-	register int field_idx;
-	register int idx = 0;
-	struct block *block = NULL;
-
-	fp = fopen(descfile, "rt");
-	if (!fp) {
-		ErrPrint("Error: %s [%s]\n", descfile, strerror(errno));
-		return LB_STATUS_ERROR_IO;
-	}
-
-	DbgPrint("Start parsing %s\n", descfile);
-
-	state = UNKNOWN;
-	field_idx = 0;
-	lineno = 1;
-
-	block = NULL;
-	while (!feof(fp)) {
-		ch = getc(fp);
-		if (ch == '\n') {
-			lineno++;
-		}
-
-		switch (state) {
-		case UNKNOWN:
-			if (ch == '{') {
-				state = BLOCK_OPEN;
-				break;
-			}
-
-			if (!isspace(ch) && ch != EOF) {
-				ErrPrint("%d: Syntax error: Desc is not started with '{' or space - (%c = 0x%x)\n", lineno, ch, ch);
-				if (fclose(fp) != 0) {
-					ErrPrint("fclose: %s\n", strerror(errno));
-				}
-				return LB_STATUS_ERROR_INVALID;
-			}
-			break;
-
-		case BLOCK_OPEN:
-			if (isblank(ch)) {
-				break;
-			}
-
-			if (ch != '\n') {
-				ErrPrint("%d: Syntax error: New line must has to be started right after '{'\n", lineno);
-				goto errout;
-			}
-
-			block = calloc(1, sizeof(*block));
-			if (!block) {
-				ErrPrint("Heap: %s\n", strerror(errno));
-				if (fclose(fp) != 0) {
-					ErrPrint("fclose: %s\n", strerror(errno));
-				}
-				return LB_STATUS_ERROR_MEMORY;
-			}
-
-			state = FIELD;
-			idx = 0;
-			field_idx = 0;
-			break;
-
-		case FIELD:
-			if (isspace(ch)) {
-				break;
-			}
-
-			if (ch == '}') {
-				state = BLOCK_CLOSE;
-				break;
-			}
-
-			if (ch == '=') {
-				if (field_name[field_idx][idx] != '\0') {
-					ErrPrint("%d: Syntax error: Unrecognized field\n", lineno);
-					goto errout;
-				}
-
-				switch (field_idx) {
-				case 0:
-					state = VALUE_TYPE;
-					if (block->type) {
-						DbgFree(block->type);
-						block->type = NULL;
-						block->type_len = 0;
-					}
-					idx = 0;
-					break;
-				case 1:
-					state = VALUE_PART;
-					if (block->part) {
-						DbgFree(block->part);
-						block->part = NULL;
-						block->part_len = 0;
-					}
-					idx = 0;
-					break;
-				case 2:
-					state = VALUE_DATA;
-					if (block->data) {
-						DbgFree(block->data);
-						block->data = NULL;
-						block->data_len = 0;
-					}
-					idx = 0;
-					break;
-				case 3:
-					state = VALUE_FILE;
-					if (block->file) {
-						DbgFree(block->file);
-						block->file = NULL;
-						block->file_len = 0;
-					}
-					idx = 0;
-					break;
-				case 4:
-					state = VALUE_OPTION;
-					if (block->option) {
-						DbgFree(block->option);
-						block->option = NULL;
-						block->option_len = 0;
-					}
-					idx = 0;
-					break;
-				case 5:
-					state = VALUE_ID;
-					if (block->id) {
-						DbgFree(block->id);
-						block->id = NULL;
-						block->id_len = 0;
-					}
-					idx = 0;
-					break;
-				case 6:
-					state = VALUE_TARGET;
-					if (block->target_id) {
-						DbgFree(block->target_id);
-						block->target_id = NULL;
-						block->target_len = 0;
-					}
-					idx = 0;
-					break;
-				default:
-					ErrPrint("%d: Syntax error: Unrecognized field\n", lineno);
-					goto errout;
-				}
-
-				break;
-			}
-
-			if (ch == '\n') {
-				goto errout;
-			}
-
-			if (field_name[field_idx][idx] != ch) {
-				ungetc(ch, fp);
-				if (ch == '\n') {
-					lineno--;
-				}
-
-				while (--idx >= 0) {
-					ungetc(field_name[field_idx][idx], fp);
-				}
-
-				field_idx++;
-				if (field_name[field_idx] == NULL) {
-					ErrPrint("%d: Syntax error: Unrecognized field\n", lineno);
-					goto errout;
-				}
-
-				idx = 0;
-				break;
-			}
-
-			idx++;
-			break;
-
-		case VALUE_TYPE:
-			if (idx == block->type_len) {
-				char *tmp;
-				block->type_len += ADDEND;
-				tmp = realloc(block->type, block->type_len);
-				if (!tmp) {
-					ErrPrint("Heap: %s\n", strerror(errno));
-					goto errout;
-				}
-				block->type = tmp;
-			}
-
-			if (ch == '\n') {
-				block->type[idx] = '\0';
-				state = FIELD;
-				idx = 0;
-				field_idx = 0;
-				break;
-			}
-
-			block->type[idx] = ch;
-			idx++;
-			break;
-
-		case VALUE_PART:
-			if (idx == block->part_len) {
-				char *tmp;
-				block->part_len += ADDEND;
-				tmp = realloc(block->part, block->part_len);
-				if (!tmp) {
-					ErrPrint("Heap: %s\n", strerror(errno));
-					goto errout;
-				}
-				block->part = tmp;
-			}
-
-			if (ch == '\n') {
-				block->part[idx] = '\0';
-				state = FIELD;
-				idx = 0;
-				field_idx = 0;
-				break;
-			}
-
-			block->part[idx] = ch;
-			idx++;
-			break;
-
-		case VALUE_DATA:
-			if (idx == block->data_len) {
-				char *tmp;
-				block->data_len += ADDEND;
-				tmp = realloc(block->data, block->data_len);
-				if (!tmp) {
-					ErrPrint("Heap: %s\n", strerror(errno));
-					goto errout;
-				}
-				block->data = tmp;
-			}
-
-			if (ch == '\n') {
-				block->data[idx] = '\0';
-				state = FIELD;
-				idx = 0;
-				field_idx = 0;
-				break;
-			}
-
-			block->data[idx] = ch;
-			idx++;
-			break;
-
-		case VALUE_FILE:
-			if (idx == block->file_len) {
-				char *tmp;
-				block->file_len += ADDEND;
-				tmp = realloc(block->file, block->file_len);
-				if (!tmp) {
-					ErrPrint("Heap: %s\n", strerror(errno));
-					goto errout;
-				}
-				block->file = tmp;
-			}
-
-			if (ch == '\n') {
-				block->file[idx] = '\0';
-				state = FIELD;
-				idx = 0;
-				field_idx = 0;
-				break;
-			}
-
-			block->file[idx] = ch;
-			idx++;
-			break;
-
-		case VALUE_OPTION:
-			if (idx == block->option_len) {
-				char *tmp;
-				block->option_len += ADDEND;
-				tmp = realloc(block->option, block->option_len);
-				if (!tmp) {
-					ErrPrint("Heap: %s\n", strerror(errno));
-					goto errout;
-				}
-				block->option = tmp;
-			}
-
-			if (ch == '\n') {
-				block->option[idx] = '\0';
-				state = FIELD;
-				idx = 0;
-				field_idx = 0;
-				break;
-			}
-
-			block->option[idx] = ch;
-			idx++;
-			break;
-		case VALUE_ID:
-			if (idx == block->id_len) {
-				char *tmp;
-				block->id_len += ADDEND;
-				tmp = realloc(block->id, block->id_len);
-				if (!tmp) {
-					ErrPrint("Heap: %s\n", strerror(errno));
-					goto errout;
-				}
-				block->id = tmp;
-			}
-
-			if (ch == '\n') {
-				block->id[idx] = '\0';
-				state = FIELD;
-				idx = 0;
-				field_idx = 0;
-				break;
-			}
-
-			block->id[idx] = ch;
-			idx++;
-			break;
-		case VALUE_TARGET:
-			if (idx == block->target_len) {
-				char *tmp;
-				block->target_len += ADDEND;
-				tmp = realloc(block->target_id, block->target_len);
-				if (!tmp) {
-					ErrPrint("Heap: %s\n", strerror(errno));
-					goto errout;
-				}
-				block->target_id = tmp;
-			}
-
-			if (ch == '\n') {
-				block->target_id[idx] = '\0';
-				state = FIELD;
-				idx = 0;
-				field_idx = 0;
-				break;
-			}
-
-			block->target_id[idx] = ch;
-			idx++;
-			break;
-		case BLOCK_CLOSE:
-			if (!block->file) {
-				block->file = strdup(util_uri_to_path(instance_id(inst)));
-				if (!block->file) {
-					ErrPrint("Heap: %s\n", strerror(errno));
-					goto errout;
-				}
-			}
-
-			consuming_parsed_block(lineno, inst, is_pd, block);
-			block = NULL;
-			state = UNKNOWN;
-			break;
-
-		default:
-			break;
-		} /* switch */
-	} /* while */
-
-	if (state != UNKNOWN) {
-		ErrPrint("%d: Unknown state\n", lineno);
-		goto errout;
-	}
-
-	if (fclose(fp) != 0) {
-		ErrPrint("fclose: %s\n", strerror(errno));
-	}
-	return LB_STATUS_SUCCESS;
-
-errout:
-	ErrPrint("Parse error at %d file %s\n", lineno, util_basename(descfile));
-	if (block) {
-		delete_block(block);
-	}
-	if (fclose(fp) != 0) {
-		ErrPrint("fclose: %s\n", strerror(errno));
-	}
-	return LB_STATUS_ERROR_INVALID;
 }
 
 HAPI int script_init(void)
@@ -1533,6 +1139,405 @@ HAPI int script_handler_feed_event(struct script_info *info, int event, double t
 	}
 
 	return info->port->feed_event(info->port_data, e, event, info->x, info->y, info->down, timestamp);
+}
+
+static inline char *load_file(const char *filename)
+{
+	char *filebuf = NULL;
+	int fd;
+	off_t filesize;
+	int ret;
+	size_t readsize = 0;
+
+	fd = open(filename, O_RDONLY);
+	if (fd < 0) {
+		ErrPrint("open: %s\n", strerror(errno));
+		return NULL;
+	}
+
+	filesize = lseek(fd, 0L, SEEK_END);
+	if (filesize == (off_t)-1) {
+		ErrPrint("lseek: %s\n", strerror(errno));
+		goto errout;
+	}
+
+	if (lseek(fd, 0L, SEEK_SET) < 0) {
+		ErrPrint("lseek: %s\n", strerror(errno));
+		goto errout;
+	}
+
+	filebuf = malloc(filesize);
+	if (!filebuf) {
+		ErrPrint("malloc: %s\n", strerror(errno));
+		goto errout;
+	}
+
+	while (readsize < filesize) {
+		ret = read(fd, filebuf + readsize, (size_t)filesize - readsize);
+		if (ret < 0) {
+			if (errno == EINTR) {
+				DbgPrint("Read is interrupted\n");
+				continue;
+			}
+
+			ErrPrint("read: %s\n", strerror(errno));
+			free(filebuf);
+			filebuf = NULL;
+			break;
+		}
+
+		readsize += ret;
+	}
+
+	/*!
+	 * \note
+	 * Now, we are ready to parse the filebuf.
+	 */
+
+errout:
+	if (close(fd) < 0) {
+		ErrPrint("close: %s\n", strerror(errno));
+	}
+
+	return filebuf;
+}
+
+#if defined(_APPLY_SCRIPT_ASYNC_UPDATE)
+struct apply_data {
+	struct inst_info *inst;
+	Eina_List *block_list;
+	int is_pd;
+};
+
+static Eina_Bool apply_changes_cb(void *_data)
+{
+	struct apply_data *data = _data;
+	struct block *block;
+
+	block = eina_list_nth(data->block_list, 0);
+	data->block_list = eina_list_remove(data->block_list, block);
+	consuming_parsed_block(data->inst, data->is_pd, block);
+
+	if (!data->block_list) {
+		free(data);
+		return ECORE_CALLBACK_CANCEL;
+	}
+
+	return ECORE_CALLBACK_RENEW;
+}
+#endif
+
+
+HAPI int script_handler_parse_desc(struct inst_info *inst, const char *filename, int is_pd)
+{
+	//PERF_INIT();
+	//PERF_BEGIN();
+	int type_idx = 0;
+	int type_len = 0;
+	int field_idx = 0;
+	int field_len = 0;
+	char *filebuf;
+	char *fileptr;
+	char *ptr = NULL;
+	struct block *block = NULL;
+	Eina_List *block_list = NULL;
+	enum state {
+		BEGIN,
+		FIELD,
+		DATA,
+		END,
+		DONE,
+		ERROR,
+	} state;
+
+	filebuf = load_file(filename);
+	if (!filebuf) {
+		return LB_STATUS_ERROR_IO;
+	}
+
+	fileptr = filebuf;
+
+	state = BEGIN;
+	while (*fileptr && state != ERROR) {
+		switch (state) {
+		case BEGIN:
+			if (*fileptr == '{') {
+				block = calloc(1, sizeof(*block));
+				if (!block) {
+					ErrPrint("calloc: %s\n", strerror(errno));
+					state = ERROR;
+					continue;
+				}
+				state = FIELD;
+				ptr = NULL;
+			}
+			break;
+		case FIELD:
+			if (isspace(*fileptr)) {
+				if (ptr != NULL) {
+					*fileptr = '\0';
+				}
+			} else if (*fileptr == '=') {
+				*fileptr = '\0';
+				ptr = NULL;
+				state = DATA;
+			} else if (ptr == NULL) {
+				ptr = fileptr;
+				field_idx = 0;
+				field_len = 0;
+
+				while (field_list[field_idx]) {
+					if (field_list[field_idx][field_len] == *fileptr) {
+						break;
+					}
+					field_idx++;
+				}
+
+				if (!field_list[field_idx]) {
+					ErrPrint("Invalid field\n");
+					state = ERROR;
+					continue;
+				}
+
+				field_len++;
+			} else {
+				if (field_list[field_idx][field_len] != *fileptr) {
+					field_idx++;
+					while (field_list[field_idx]) {
+						if (!strncmp(field_list[field_idx], fileptr - field_len, field_len)) {
+							break;
+						} else {
+							field_idx++;
+						}
+					}
+
+					if (!field_list[field_idx]) {
+						state = ERROR;
+						ErrPrint("field is not valid\n");
+						continue;
+					}
+				}
+
+				field_len++;
+			}
+			break;
+		case DATA:
+			switch (field_idx) {
+			case FIELD_TYPE:
+				if (ptr == NULL) {
+					if (isspace(*fileptr)) {
+						break;
+					}
+
+					if (*fileptr == '\0') {
+						state = ERROR;
+						ErrPrint("Type is not valid\n");
+						continue;
+					}
+
+					ptr = fileptr;
+					type_idx = 0;
+					type_len = 0;
+				}
+
+				if (*fileptr && (*fileptr == '\n' || *fileptr == '\r' || *fileptr == '\f')) {
+					*fileptr = '\0';
+				}
+
+				if (type_list[type_idx][type_len] != *fileptr) {
+					type_idx++;
+					while (type_list[type_idx]) {
+						if (!strncmp(type_list[type_idx], fileptr - type_len, type_len)) {
+							break;
+						} else {
+							type_idx++;
+						}
+					}
+
+					if (!type_list[type_idx]) {
+						state = ERROR;
+						ErrPrint("type is not valid (%s)\n", fileptr - type_len);
+						continue;
+					}
+				}
+
+				if (!*fileptr) {
+					block->type = type_idx;
+					state = DONE;
+					ptr = NULL;
+				}
+
+				type_len++;
+				break;
+			case FIELD_PART:
+				if (ptr == NULL) {
+					ptr = fileptr;
+				}
+
+				if (*fileptr && (*fileptr == '\n' || *fileptr == '\r' || *fileptr == '\f')) {
+					*fileptr = '\0';
+				}
+
+				if (!*fileptr) {
+					block->part = ptr;
+					state = DONE;
+					ptr = NULL;
+				}
+				break;
+			case FIELD_DATA:
+				if (ptr == NULL) {
+					ptr = fileptr;
+				}
+
+				if (*fileptr && (*fileptr == '\n' || *fileptr == '\r' || *fileptr == '\f')) {
+					*fileptr = '\0';
+				}
+
+				if (!*fileptr) {
+					block->data = ptr;
+					state = DONE;
+					ptr = NULL;
+				}
+				break;
+			case FIELD_OPTION:
+				if (ptr == NULL) {
+					ptr = fileptr;
+				}
+
+				if (*fileptr && (*fileptr == '\n' || *fileptr == '\r' || *fileptr == '\f')) {
+					*fileptr = '\0';
+				}
+
+				if (!*fileptr) {
+					block->option = ptr;
+					state = DONE;
+					ptr = NULL;
+				}
+				break;
+			case FIELD_ID:
+				if (ptr == NULL) {
+					ptr = fileptr;
+				}
+
+				if (*fileptr && (*fileptr == '\n' || *fileptr == '\r' || *fileptr == '\f')) {
+					*fileptr = '\0';
+				}
+
+				if (!*fileptr) {
+					block->id = ptr;
+					state = DONE;
+					ptr = NULL;
+				}
+				break;
+			case FIELD_TARGET:
+				if (ptr == NULL) {
+					ptr = fileptr;
+				}
+
+				if (*fileptr && (*fileptr == '\n' || *fileptr == '\r' || *fileptr == '\f')) {
+					*fileptr = '\0';
+				}
+
+				if (!*fileptr) {
+					block->target = ptr;
+					state = DONE;
+					ptr = NULL;
+				}
+				break;
+			case FIELD_FILE:
+				if (ptr == NULL) {
+					ptr = fileptr;
+				}
+
+				if (*fileptr && (*fileptr == '\n' || *fileptr == '\r' || *fileptr == '\f')) {
+					*fileptr = '\0';
+				}
+
+				if (!*fileptr) {
+					block->target = ptr;
+					state = DONE;
+					ptr = NULL;
+				}
+			default:
+				break;
+			}
+
+			break;
+		case DONE:
+			if (isspace(*fileptr)) {
+			} else if (*fileptr == '}') {
+					state = BEGIN;
+					block->filename = filename;
+					block_list = eina_list_append(block_list, block);
+			} else {
+				state = FIELD;
+				continue;
+			}
+			break;
+		case END:
+		default:
+			break;
+		}
+
+		fileptr++;
+	}
+
+	if (state != BEGIN) {
+		ErrPrint("State %d\n", state);
+
+		free(filebuf);
+		free(block);
+
+		EINA_LIST_FREE(block_list, block) {
+			free(block);
+		}
+
+		return LB_STATUS_ERROR_FAULT;
+	}
+
+	if (block) {
+		block->filebuf = filebuf;
+	}
+
+	//PERF_MARK("parser");
+
+#if defined(_APPLY_SCRIPT_ASYNC_UPDATE)
+	struct apply_data *data;
+
+	data = malloc(sizeof(*data));
+	if (data) {
+		data->inst = inst;
+		data->is_pd = is_pd;
+		data->block_list = block_list;
+		if (!ecore_timer_add(0.001f, apply_changes_cb, data)) {
+			ErrPrint("Failed to add timer\n");
+			free(data);
+			EINA_LIST_FREE(block_list, block) {
+				consuming_parsed_block(inst, is_pd, block);
+			}
+		}
+	} else {
+		ErrPrint("Heap: %s\n", strerror(errno));
+		EINA_LIST_FREE(block_list, block) {
+			consuming_parsed_block(inst, is_pd, block);
+		}
+	}
+#else
+	EINA_LIST_FREE(block_list, block) {
+		consuming_parsed_block(inst, is_pd, block);
+	}
+
+	/*!
+	 * Doesn't need to force to render the contents.
+	struct script_info *info;
+	info = is_pd ? instance_pd_script(inst) : instance_lb_script(inst);
+	if (info && info->ee) {
+		ecore_evas_manual_render(info->ee);
+	}
+	*/
+#endif
+
+	return LB_STATUS_SUCCESS;
 }
 
 /* End of a file */

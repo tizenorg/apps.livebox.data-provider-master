@@ -1254,6 +1254,9 @@ HAPI void buffer_handler_flush(struct buffer_info *info)
 
 	if (buffer->type == BUFFER_TYPE_PIXMAP) {
 		if (s_info.fd > 0) {
+			//return;
+			//PERF_INIT();
+			//PERF_BEGIN();
 			XRectangle rect;
 			XserverRegion region;
 
@@ -1266,6 +1269,7 @@ HAPI void buffer_handler_flush(struct buffer_info *info)
 			XDamageAdd(ecore_x_display_get(), buffer_handler_pixmap(info), region);
 			XFixesDestroyRegion(ecore_x_display_get(), region);
 			XFlush(ecore_x_display_get());
+			//PERF_MARK("XFlush");
 		} else {
 			if (sync_for_pixmap(buffer) < 0) {
 				ErrPrint("Failed to sync via S/W Backend\n");

@@ -1,0 +1,8 @@
+* Wed Sep 11 2013 Rusty Lynch <rusty.lynch@intel.com> accepted/tizen/20130620.160431@d15ede1
+- Add support for systemd socket activation for notification service
+
+* Thu Jun 20 2013 Victor Hakoun <victor.hakoun@eurogiciel.fr> accepted/tizen/20130620.115235@e8bd452
+- Replace manifest with default floor
+
+* Fri Jun 07 2013 Victor Hakoun <victor.hakoun@eurogiciel.fr> accepted/tizen/20130530.164904@68752b5
+- Fix build x86_64

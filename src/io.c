@@ -823,7 +823,7 @@ static inline int db_init(void)
 	int ret;
 	struct stat stat;
 
-	ret = db_util_open(DBFILE, &s_info.handle, DB_UTIL_REGISTER_HOOK_METHOD);
+	ret = db_util_open_with_options(DBFILE, &s_info.handle, SQLITE_OPEN_READONLY, NULL);
 	if (ret != SQLITE_OK) {
 		ErrPrint("Failed to open a DB\n");
 		return LB_STATUS_ERROR_IO;

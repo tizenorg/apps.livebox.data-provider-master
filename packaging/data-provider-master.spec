@@ -1,6 +1,6 @@
 Name: data-provider-master
-Summary: Master service provider for liveboxes.
-Version: 0.25.16
+Summary: Master service provider for liveboxes
+Version: 0.25.17
 Release: 1
 Group: HomeTF/Livebox
 License: Flora License
@@ -62,7 +62,7 @@ export LIVEBOX_SHM=baltic
 export LIVEBOX_SHM=private
 %endif
 
-cmake . -DCMAKE_INSTALL_PREFIX=%{_prefix} -DPRODUCT=${LIVEBOX_SHM} -DENGINEER_BINARY=${ENGINEER}
+%cmake . -DPRODUCT=${LIVEBOX_SHM} -DENGINEER_BINARY=${ENGINEER}
 
 CFLAGS="${CFLAGS} -Wall -Winline -Werror" LDFLAGS="${LDFLAGS}" make %{?jobs:-j%jobs}
 

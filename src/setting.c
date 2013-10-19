@@ -228,7 +228,7 @@ static void low_mem_cb(keynode_t *node, void *user_data)
 		CRITICAL_LOG("Low memory: level %d\n", val);
 		if (s_info.deactivated == 0) {
 			s_info.deactivated = 1;
-			slave_deactivate_all(0, 1);
+			//slave_deactivate_all(0, 1);
 			malloc_trim(0);
 			ErrPrint("Fall into the low mem status\n");
 		}
@@ -236,7 +236,7 @@ static void low_mem_cb(keynode_t *node, void *user_data)
 		CRITICAL_LOG("Normal memory: level %d\n", val);
 		if (s_info.deactivated == 1) {
 			s_info.deactivated = 0;
-			slave_activate_all();
+			//slave_activate_all();
 			ErrPrint("Recover from the low mem status\n");
 		}
 	}

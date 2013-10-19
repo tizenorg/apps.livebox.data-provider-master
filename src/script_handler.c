@@ -372,8 +372,8 @@ static inline void delete_block(struct block *block)
 
 static void render_pre_cb(void *data, Evas *e, void *event_info)
 {
-	//PERF_INIT();
-	//PERF_BEGIN();
+	PERF_INIT();
+	PERF_BEGIN();
 	struct inst_info *inst = data;
 	struct script_info *info;
 
@@ -394,14 +394,14 @@ static void render_pre_cb(void *data, Evas *e, void *event_info)
 
 	ErrPrint("Failed to do sync\n");
 out:
-	//PERF_MARK("render,pre");
+	PERF_MARK("render,pre");
 	return;
 }
 
 static void render_post_cb(void *data, Evas *e, void *event_info)
 {
-	//PERF_INIT();
-	//PERF_BEGIN();
+	PERF_INIT();
+	PERF_BEGIN();
 	struct inst_info *inst;
 	struct script_info *info;
 
@@ -417,7 +417,7 @@ static void render_post_cb(void *data, Evas *e, void *event_info)
 		fb_sync(script_handler_fb(info));
 		instance_lb_updated_by_instance(inst, NULL);
 
-		//PERF_MARK("lb,update");
+		PERF_MARK("lb,update");
 		return;
 	}
 
@@ -425,7 +425,7 @@ static void render_post_cb(void *data, Evas *e, void *event_info)
 	if (info && script_handler_evas(info) == e) {
 		fb_sync(script_handler_fb(info));
 		instance_pd_updated_by_instance(inst, NULL);
-		//PERF_MARK("pd,update");
+		PERF_MARK("pd,update");
 		return;
 	}
 
@@ -673,8 +673,8 @@ HAPI void *script_handler_evas(struct script_info *info)
 
 static int update_script_color(struct inst_info *inst, struct block *block, int is_pd)
 {
-	//PERF_INIT();
-	//PERF_BEGIN();
+	PERF_INIT();
+	PERF_BEGIN();
 	struct script_info *info;
 	Evas *e;
 
@@ -700,15 +700,15 @@ static int update_script_color(struct inst_info *inst, struct block *block, int 
 	} else {
 		ErrPrint("Evas(nil) id[%s] part[%s] data[%s]\n", block->id, block->part, block->data);
 	}
-	//PERF_MARK("color");
+	PERF_MARK("color");
 
 	return LB_STATUS_SUCCESS;
 }
 
 static int update_script_text(struct inst_info *inst, struct block *block, int is_pd)
 {
-	//PERF_INIT();
-	//PERF_BEGIN();
+	PERF_INIT();
+	PERF_BEGIN();
 	struct script_info *info;
 	Evas *e;
 
@@ -735,14 +735,14 @@ static int update_script_text(struct inst_info *inst, struct block *block, int i
 		ErrPrint("Evas(nil) id[%s] part[%s] data[%s]\n", block->id, block->part, block->data);
 	}
 
-	//PERF_MARK("text");
+	PERF_MARK("text");
 	return LB_STATUS_SUCCESS;
 }
 
 static int update_script_image(struct inst_info *inst, struct block *block, int is_pd)
 {
-	//PERF_INIT();
-	//PERF_BEGIN();
+	PERF_INIT();
+	PERF_BEGIN();
 	struct script_info *info;
 	Evas *e;
 
@@ -768,14 +768,14 @@ static int update_script_image(struct inst_info *inst, struct block *block, int 
 	} else {
 		ErrPrint("Evas: (nil) id[%s] part[%s] data[%s]\n", block->id, block->part, block->data);
 	}
-	//PERF_MARK("image");
+	PERF_MARK("image");
 	return LB_STATUS_SUCCESS;
 }
 
 static int update_access(struct inst_info *inst, struct block *block, int is_pd)
 {
-	//PERF_INIT();
-	//PERF_BEGIN();
+	PERF_INIT();
+	PERF_BEGIN();
 	struct script_info *info;
 	Evas *e;
 
@@ -801,14 +801,14 @@ static int update_access(struct inst_info *inst, struct block *block, int is_pd)
 	} else {
 		ErrPrint("Evas: (nil) id[%s] part[%s] data[%s]\n", block->id, block->part, block->data);
 	}
-	//PERF_MARK("access");
+	PERF_MARK("access");
 	return LB_STATUS_SUCCESS;
 }
 
 static int operate_access(struct inst_info *inst, struct block *block, int is_pd)
 {
-	//PERF_INIT();
-	//PERF_BEGIN();
+	PERF_INIT();
+	PERF_BEGIN();
 	struct script_info *info;
 	Evas *e;
 
@@ -834,14 +834,14 @@ static int operate_access(struct inst_info *inst, struct block *block, int is_pd
 	} else {
 		ErrPrint("Evas: (nil) id[%s] part[%s] data[%s]\n", block->id, block->part, block->data);
 	}
-	//PERF_MARK("operate_access");
+	PERF_MARK("operate_access");
 	return LB_STATUS_SUCCESS;
 }
 
 static int update_script_script(struct inst_info *inst, struct block *block, int is_pd)
 {
-	//PERF_INIT();
-	//PERF_BEGIN();
+	PERF_INIT();
+	PERF_BEGIN();
 	struct script_info *info;
 	Evas *e;
 
@@ -868,14 +868,14 @@ static int update_script_script(struct inst_info *inst, struct block *block, int
 		ErrPrint("Evas: (nil) id[%s] part[%s] data[%s] option[%s]\n",
 						block->id, block->part, block->data, block->option);
 	}
-	//PERF_MARK("script");
+	PERF_MARK("script");
 	return LB_STATUS_SUCCESS;
 }
 
 static int update_script_signal(struct inst_info *inst, struct block *block, int is_pd)
 {
-	//PERF_INIT();
-	//PERF_BEGIN();
+	PERF_INIT();
+	PERF_BEGIN();
 	struct script_info *info;
 	Evas *e;
 
@@ -901,14 +901,14 @@ static int update_script_signal(struct inst_info *inst, struct block *block, int
 	} else {
 		ErrPrint("Evas(nil) id[%s] part[%s] data[%s]\n", block->id, block->part, block->data);
 	}
-	//PERF_MARK("signal");
+	PERF_MARK("signal");
 	return LB_STATUS_SUCCESS;
 }
 
 static int update_script_drag(struct inst_info *inst, struct block *block, int is_pd)
 {
-	//PERF_INIT();
-	//PERF_BEGIN();
+	PERF_INIT();
+	PERF_BEGIN();
 	struct script_info *info;
 	double dx, dy;
 	Evas *e;
@@ -940,14 +940,14 @@ static int update_script_drag(struct inst_info *inst, struct block *block, int i
 	} else {
 		ErrPrint("Evas(nil) id[%s] part[%s] %lfx%lf\n", block->id, block->part, dx, dy);
 	}
-	//PERF_MARK("drag");
+	PERF_MARK("drag");
 	return LB_STATUS_SUCCESS;
 }
 
 HAPI int script_handler_resize(struct script_info *info, int w, int h)
 {
-	//PERF_INIT();
-	//PERF_BEGIN();
+	PERF_INIT();
+	PERF_BEGIN();
 	if (!info) {
 	//|| (info->w == w && info->h == h)) {
 		ErrPrint("info[%p] resize is ignored\n", info);
@@ -976,15 +976,15 @@ HAPI int script_handler_resize(struct script_info *info, int w, int h)
 
 	info->w = w;
 	info->h = h;
-	//PERF_MARK("resize");
+	PERF_MARK("resize");
 
 	return LB_STATUS_SUCCESS;
 }
 
 static int update_info(struct inst_info *inst, struct block *block, int is_pd)
 {
-	//PERF_INIT();
-	//PERF_BEGIN();
+	PERF_INIT();
+	PERF_BEGIN();
 	struct script_info *info;
 
 	if (!block || !block->part || !block->data) {
@@ -1031,7 +1031,7 @@ static int update_info(struct inst_info *inst, struct block *block, int is_pd)
 			ErrPrint("Evas(nil): id[%s] data[%s]\n", block->id, block->data);
 		}
 	}
-	//PERF_MARK("info");
+	PERF_MARK("info");
 
 	return LB_STATUS_SUCCESS;
 }
@@ -1068,7 +1068,6 @@ static inline void consuming_parsed_block(struct inst_info *inst, int is_pd, str
 	} else {
 		info->cached_blocks = eina_list_append(info->cached_blocks, block);
 		DbgPrint("Block is cached (%p), %d, %s\n", block, eina_list_count(info->cached_blocks), instance_id(inst));
-		//PERF_MARK(type_list[block->type]);
 		return;
 	}
 
@@ -1230,8 +1229,8 @@ static Eina_Bool apply_changes_cb(void *_data)
 
 HAPI int script_handler_parse_desc(struct inst_info *inst, const char *filename, int is_pd)
 {
-	//PERF_INIT();
-	//PERF_BEGIN();
+	PERF_INIT();
+	PERF_BEGIN();
 	int type_idx = 0;
 	int type_len = 0;
 	int field_idx = 0;
@@ -1499,7 +1498,7 @@ HAPI int script_handler_parse_desc(struct inst_info *inst, const char *filename,
 		block->filebuf = filebuf;
 	}
 
-	//PERF_MARK("parser");
+	PERF_MARK("parser");
 
 #if defined(_APPLY_SCRIPT_ASYNC_UPDATE)
 	struct apply_data *data;

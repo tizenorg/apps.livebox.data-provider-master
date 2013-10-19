@@ -53,6 +53,7 @@ extern FILE *__file_log_fp;
 
 #define LOG_TAG "DATA_PROVIDER_MASTER"
 
+#if defined(_ENABLE_PERF)
 #define PERF_INIT() \
 	struct timeval __stv; \
 	struct timeval __etv; \
@@ -71,5 +72,10 @@ extern FILE *__file_log_fp;
 	timersub(&__etv, &__stv, &__rtv); \
 	DbgPrint("[%s] %u.%06u\n", tag, __rtv.tv_sec, __rtv.tv_usec); \
 } while (0)
+#else
+#define PERF_INIT()
+#define PERF_BEGIN()
+#define PERF_MARK(tag)
+#endif
 
 /* End of a file */

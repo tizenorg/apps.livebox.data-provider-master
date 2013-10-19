@@ -112,7 +112,7 @@ static void *client_packet_pump_main(void *data)
 	int packet_offset = 0;
 	int recv_offset = 0;
 	int pid;
-	int ret;
+	long ret;
 	int fd;
 	char evt_ch = EVT_CH;
 	enum {
@@ -395,7 +395,7 @@ static inline void tcb_teminate_all(struct service_context *svc_ctx)
 		if (status != 0) {
 			ErrPrint("Unable to join a thread: %s\n", strerror(status));
 		} else {
-			DbgPrint("Thread returns: %d\n", (int)ret);
+			DbgPrint("Thread returns: %p\n", ret);
 		}
 
 		secure_socket_destroy_handle(tcb->fd);
@@ -430,7 +430,7 @@ static inline void tcb_destroy(struct service_context *svc_ctx, struct tcb *tcb)
 	if (status != 0) {
 		ErrPrint("Unable to join a thread: %s\n", strerror(status));
 	} else {
-		DbgPrint("Thread returns: %d\n", (int)ret);
+		DbgPrint("Thread returns: %p\n", ret);
 	}
 
 	secure_socket_destroy_handle(tcb->fd);
@@ -532,7 +532,7 @@ static void *server_main(void *data)
 	struct service_context *svc_ctx = data;
 	fd_set set;
 	fd_set except_set;
-	int ret;
+	long ret;
 	int client_fd;
 	struct tcb *tcb;
 	int fd;
@@ -818,7 +818,7 @@ HAPI int service_common_destroy(struct service_context *svc_ctx)
 	if (status != 0) {
 		ErrPrint("Join: %s\n", strerror(status));
 	} else {
-		DbgPrint("Thread returns: %d\n", (int)ret);
+		DbgPrint("Thread returns: %p\n", ret);
 	}
 
 	secure_socket_destroy_handle(svc_ctx->fd);

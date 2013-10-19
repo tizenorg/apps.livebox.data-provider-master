@@ -35,8 +35,7 @@ pkg_check_modules(pkg REQUIRED
 )
 
 SET(PACKAGE "${PROJECT_NAME}")
-SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -fpie -Winline -Werror -fno-builtin-malloc -fno-omit-frame-pointer -g")
-SET(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -pie")
+SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Winline -Werror -fno-builtin-malloc -fno-omit-frame-pointer -g")
 
 INCLUDE_DIRECTORIES(${CMAKE_CURRENT_SOURCE_DIR}/include)
 
@@ -67,6 +66,7 @@ ADD_DEFINITIONS("-DDEFAULT_MASTER_CONF=\"/usr/share/data-provider-master/conf.in
 ADD_DEFINITIONS("-DNDEBUG")
 
 ADD_DEFINITIONS("-D_USE_ECORE_TIME_GET")
+#ADD_DEFINITIONS("-D_APPLY_SCRIPT_ASYNC_UPDATE")
 #ADD_DEFINITIONS("-DFLOG")
 ADD_DEFINITIONS(${pkg_CFLAGS})
 ADD_DEFINITIONS(${pkg_LDFLAGS})

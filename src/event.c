@@ -245,7 +245,7 @@ static inline int processing_input_event(struct input_event *event)
 static void *event_thread_main(void *data)
 {
 	fd_set set;
-	int ret = 0;
+	long ret = 0;
 	struct input_event input_event;
 	char *ptr = (char *)&input_event;
 	int offset = 0;
@@ -642,7 +642,7 @@ HAPI int event_deactivate(int (*event_cb)(enum event_state state, struct event_d
 	if (status != 0) {
 		ErrPrint("Failed to join a thread: %s\n", strerror(errno));
 	} else {
-		DbgPrint("Thread returns: %d\n", (int)ret);
+		DbgPrint("Thread returns: %p\n", ret);
 	}
 
 	if (close(s_info.handle) < 0) {

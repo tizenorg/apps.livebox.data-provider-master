@@ -33,6 +33,12 @@
 static Eina_List *s_list;
 int errno;
 
+#if __x86__64__
+#define RETURN_TYPE long long
+#else
+#define RETURN_TYPE int
+#endif
+
 struct parser {
 	char *filename;
 	double period;
@@ -157,7 +163,7 @@ HAPI int parser_buffer_pd(struct parser *handle)
 	return handle->buffer_pd;
 }
 
-HAPI int parser_find(const char *pkgname)
+HAPI RETURN_TYPE parser_find(const char *pkgname)
 {
 	Eina_List *l;
 	struct parser *item;
@@ -169,13 +175,13 @@ HAPI int parser_find(const char *pkgname)
 
 	filename = malloc(len);
 	if (!filename) {
-		return LB_STATUS_SUCCESS;
+		return (RETURN_TYPE)0;
 	}
 
 	ret = snprintf(filename, len, CONF_PATH, pkgname, pkgname);
 	if (ret < 0) {
 		DbgFree(filename);
-		return LB_STATUS_ERROR_FAULT;
+		return (RETURN_TYPE)0;
 	}
 
 	DbgPrint("Conf file %s for package %s\n", filename, pkgname);
@@ -183,12 +189,12 @@ HAPI int parser_find(const char *pkgname)
 	EINA_LIST_FOREACH(s_list, l, item) {
 		if (!strcmp(item->filename, filename)) {
 			DbgFree(filename);
-			return (int)item;
+			return (RETURN_TYPE)item;
 		}
 	}
 
 	DbgFree(filename);
-	return LB_STATUS_SUCCESS;
+	return (RETURN_TYPE)0;
 }
 
 static inline int parse_size(const char *buffer, unsigned int *size)

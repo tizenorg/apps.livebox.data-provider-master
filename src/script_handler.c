@@ -1165,7 +1165,7 @@ static inline char *load_file(const char *filename)
 		goto errout;
 	}
 
-	filebuf = malloc(filesize);
+	filebuf = malloc(filesize + 1);
 	if (!filebuf) {
 		ErrPrint("malloc: %s\n", strerror(errno));
 		goto errout;
@@ -1186,6 +1186,10 @@ static inline char *load_file(const char *filename)
 		}
 
 		readsize += ret;
+	}
+
+	if (filebuf) {
+		filebuf[readsize] = '\0';
 	}
 
 	/*!
@@ -1468,6 +1472,7 @@ HAPI int script_handler_parse_desc(struct inst_info *inst, const char *filename,
 					state = BEGIN;
 					block->filename = filename;
 					block_list = eina_list_append(block_list, block);
+					block = NULL;
 			} else {
 				state = FIELD;
 				continue;

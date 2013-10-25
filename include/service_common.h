@@ -36,6 +36,7 @@ extern int service_common_multicast_packet(struct tcb *tcb, struct packet *packe
 extern int service_common_unicast_packet(struct tcb *tcb, struct packet *packet);
 
 extern struct service_event_item *service_common_add_timer(struct service_context *svc_ctx, double timer, int (*timer_cb)(struct service_context *svc_cx, void *data), void *data);
+extern int service_common_update_timer(struct service_event_item *item, double timer);
 extern int service_common_del_timer(struct service_context *svc_ctx, struct service_event_item *item);
 
 extern int service_common_fd(struct service_context *ctx);

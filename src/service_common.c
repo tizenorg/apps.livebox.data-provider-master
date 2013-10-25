@@ -24,6 +24,7 @@
 #include <sys/timerfd.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <time.h>
 
 #include <dlog.h>
 #include <Eina.h>
@@ -971,7 +972,6 @@ HAPI int service_common_multicast_packet(struct tcb *tcb, struct packet *packet,
 HAPI struct service_event_item *service_common_add_timer(struct service_context *svc_ctx, double timer, int (*timer_cb)(struct service_context *svc_cx, void *data), void *data)
 {
 	struct service_event_item *item;
-	struct itimerspec spec;
 
 	item = calloc(1, sizeof(*item));
 	if (!item) {
@@ -987,13 +987,7 @@ HAPI struct service_event_item *service_common_add_timer(struct service_context 
 		return NULL;
 	}
 
-	spec.it_interval.tv_sec = (time_t)timer;
-	spec.it_interval.tv_nsec = (timer - spec.it_interval.tv_sec) * 1000000000;
-	spec.it_value.tv_sec = 0;
-	spec.it_value.tv_nsec = 0;
-
-	if (timerfd_settime(item->info.timer.fd, 0, &spec, NULL) < 0) {
-		ErrPrint("Error: %s\n", strerror(errno));
+	if (service_common_update_timer(item, timer) < 0) {
 		if (close(item->info.timer.fd) < 0) {
 			ErrPrint("close: %s\n", strerror(errno));
 		}
@@ -1006,6 +1000,30 @@ HAPI struct service_event_item *service_common_add_timer(struct service_context 
 
 	svc_ctx->event_list = eina_list_append(svc_ctx->event_list, item);
 	return item;
+}
+
+HAPI int service_common_update_timer(struct service_event_item *item, double timer)
+{
+	struct itimerspec spec;
+
+	spec.it_interval.tv_sec = (time_t)timer;
+	spec.it_interval.tv_nsec = (timer - spec.it_interval.tv_sec) * 1000000000;
+
+	if (clock_gettime(CLOCK_MONOTONIC, &spec.it_value) < 0) {
+		ErrPrint("clock_gettime: %s\n", strerror(errno));
+		return -EFAULT;
+	}
+
+	spec.it_value.tv_sec += spec.it_interval.tv_sec;
+	spec.it_value.tv_nsec += spec.it_interval.tv_nsec;
+
+	if (timerfd_settime(item->info.timer.fd, TFD_TIMER_ABSTIME, &spec, NULL) < 0) {
+		ErrPrint("Error: %s\n", strerror(errno));
+		return -EFAULT;
+	}
+
+	DbgPrint("Armed interval: %u %u\n", spec.it_interval.tv_sec, spec.it_interval.tv_nsec);
+	return 0;
 }
 
 /*!

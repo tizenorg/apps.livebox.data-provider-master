@@ -40,6 +40,10 @@
 #define LAUNCH_TIMEOUT	10.0f
 #endif
 
+#ifndef TTL_TIMEOUT
+#define TTL_TIMEOUT	30.0f
+#endif
+
 static struct info {
 	Eina_List *pending_list;
 	Eina_List *context_list;
@@ -47,9 +51,11 @@ static struct info {
 
 	struct tcb *svc_daemon;
 	int svc_daemon_is_launched;
+	int svc_daemon_pid;
 
 	struct service_event_item *launch_timer; 
 	struct service_event_item *delay_launcher;
+	struct service_event_item *ttl_timer;
 } s_info = {
 	.pending_list = NULL,
 	.context_list = NULL, /*!< \WARN: This is only used for SERVICE THREAD */
@@ -57,9 +63,11 @@ static struct info {
 
 	.svc_daemon = NULL,
 	.svc_daemon_is_launched = 0,
+	.svc_daemon_pid = -1,
 
 	.launch_timer = NULL,
 	.delay_launcher = NULL,
+	.ttl_timer = NULL,
 };
 
 struct pending_item {
@@ -187,6 +195,7 @@ static int launch_timeout_cb(struct service_context *svc_ctx, void *data)
 
 	s_info.launch_timer = NULL;
 	s_info.svc_daemon_is_launched = 0;
+	s_info.svc_daemon_pid = -1;
 	return -ECANCELED; /* Delete this timer */
 }
 
@@ -224,6 +233,7 @@ static inline int launch_svc(struct service_context *svc_ctx)
 	default:
 		DbgPrint("Launched: %s(%d)\n", SVC_PKG, pid);
 		s_info.svc_daemon_is_launched = 1;
+		s_info.svc_daemon_pid = pid;
 		s_info.launch_timer = service_common_add_timer(svc_ctx, LAUNCH_TIMEOUT, launch_timeout_cb, NULL);
 		if (!s_info.launch_timer) {
 			ErrPrint("Unable to create launch timer\n");
@@ -235,8 +245,21 @@ static inline int launch_svc(struct service_context *svc_ctx)
 
 static int lazy_launcher_cb(struct service_context *svc_ctx, void *data)
 {
-	s_info.svc_daemon_is_launched = launch_svc(svc_ctx) == LB_STATUS_SUCCESS;
 	s_info.delay_launcher = NULL;
+
+	(void)launch_svc(svc_ctx);
+	return -ECANCELED;
+}
+
+static int ttl_timer_cb(struct service_context *svc_ctx, void *data)
+{
+	DbgPrint("TTL Timer is expired: PID(%d)\n", s_info.svc_daemon_pid);
+	(void)aul_terminate_pid(s_info.svc_daemon_pid);
+
+	s_info.ttl_timer = NULL;
+	s_info.svc_daemon_is_launched = 0;
+	s_info.svc_daemon_pid = -1;
+	s_info.svc_daemon = NULL;
 	return -ECANCELED;
 }
 
@@ -247,11 +270,17 @@ static int service_thread_main(struct tcb *tcb, struct packet *packet, void *dat
 	int ret;
 
 	if (!packet) {
-		DbgPrint("TCB %p is terminated (NIL packet)\n", tcb);
+		DbgPrint("TCB %p is terminated (NIL packet), %d\n", tcb, s_info.svc_daemon_pid);
 
 		if (tcb == s_info.svc_daemon) {
 			s_info.svc_daemon = NULL;
 			s_info.svc_daemon_is_launched = 0;
+			s_info.svc_daemon_pid = -1;
+
+			if (s_info.ttl_timer) {
+				service_common_del_timer(tcb_svc_ctx(tcb), s_info.ttl_timer);
+				s_info.ttl_timer = NULL;
+			}
 		}
 
 		return LB_STATUS_SUCCESS;
@@ -284,6 +313,10 @@ static int service_thread_main(struct tcb *tcb, struct packet *packet, void *dat
 			}
 
 			put_reply_tcb(tcb, packet_seq(packet));
+
+			if (s_info.ttl_timer && service_common_update_timer(s_info.ttl_timer, TTL_TIMEOUT) < 0) {
+				ErrPrint("Failed to update timer\n");
+			}
 		}
 
 		break;
@@ -303,6 +336,19 @@ static int service_thread_main(struct tcb *tcb, struct packet *packet, void *dat
 				service_common_del_timer(tcb_svc_ctx(tcb), s_info.launch_timer);
 				s_info.launch_timer = NULL;
 			}
+
+			s_info.ttl_timer = service_common_add_timer(tcb_svc_ctx(tcb), TTL_TIMEOUT, ttl_timer_cb, NULL);
+			if (!s_info.ttl_timer) {
+				ErrPrint("Failed to add TTL timer\n");
+				if (s_info.svc_daemon_pid > 0) {
+					ret = aul_terminate_pid(s_info.svc_daemon_pid);
+					ErrPrint("Terminate: %d\n", ret);
+					s_info.svc_daemon_pid = -1;
+				}
+				s_info.svc_daemon_is_launched = 0;
+				return LB_STATUS_ERROR_FAULT;
+			}
+			DbgPrint("TTL Timer is added: %p\n", s_info.ttl_timer);
 
 			s_info.svc_daemon = tcb;
 			flush_pended_request();

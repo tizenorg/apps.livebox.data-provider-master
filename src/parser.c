@@ -22,8 +22,9 @@
 #include <Eina.h>
 #include <dlog.h>
 
-#include <livebox-service.h>
-#include <livebox-errno.h>
+#include <dynamicbox_service.h>
+#include <dynamicbox_errno.h>
+#include <dynamicbox_conf.h>
 
 #include "util.h"
 #include "debug.h"
@@ -46,20 +47,20 @@ struct parser {
 	int network;
 	char *auto_launch;
 	unsigned int size;
-	unsigned int pd_width;
-	unsigned int pd_height;
+	unsigned int gbar_width;
+	unsigned int gbar_height;
 	char *group;
 	int secured;
 
-	char *pd_path;
-	char *pd_group;
+	char *gbar_path;
+	char *gbar_group;
 
-	char *lb_path;
-	char *lb_group;
+	char *dbox_path;
+	char *dbox_group;
 	int pinup;
-	int text_pd;
+	int text_gbar;
 	int text_lb;
-	int buffer_pd;
+	int buffer_gbar;
 	int buffer_lb;
 
 	char *abi;
@@ -102,24 +103,24 @@ HAPI unsigned int parser_size(struct parser *handle)
 	return handle->size;
 }
 
-HAPI const char *parser_lb_path(struct parser *handle)
+HAPI const char *parser_dbox_path(struct parser *handle)
 {
-	return handle->lb_path;
+	return handle->dbox_path;
 }
 
-HAPI const char *parser_lb_group(struct parser *handle)
+HAPI const char *parser_dbox_group(struct parser *handle)
 {
-	return handle->lb_group;
+	return handle->dbox_group;
 }
 
-HAPI const char *parser_pd_path(struct parser *handle)
+HAPI const char *parser_gbar_path(struct parser *handle)
 {
-	return handle->pd_path;
+	return handle->gbar_path;
 }
 
-HAPI const char *parser_pd_group(struct parser *handle)
+HAPI const char *parser_gbar_group(struct parser *handle)
 {
-	return handle->pd_group;
+	return handle->gbar_group;
 }
 
 HAPI const char *parser_group_str(struct parser *handle)
@@ -132,10 +133,10 @@ HAPI int parser_secured(struct parser *handle)
 	return handle->secured;
 }
 
-HAPI void parser_get_pdsize(struct parser *handle, unsigned int *width, unsigned int *height)
+HAPI void parser_get_gbar_size(struct parser *handle, unsigned int *width, unsigned int *height)
 {
-	*width = handle->pd_width;
-	*height = handle->pd_height;
+	*width = handle->gbar_width;
+	*height = handle->gbar_height;
 }
 
 HAPI int parser_pinup(struct parser *handle)
@@ -143,24 +144,24 @@ HAPI int parser_pinup(struct parser *handle)
 	return handle->pinup;
 }
 
-HAPI int parser_text_lb(struct parser *handle)
+HAPI int parser_text_dbox(struct parser *handle)
 {
 	return handle->text_lb;
 }
 
-HAPI int parser_text_pd(struct parser *handle)
+HAPI int parser_text_gbar(struct parser *handle)
 {
-	return handle->text_pd;
+	return handle->text_gbar;
 }
 
-HAPI int parser_buffer_lb(struct parser *handle)
+HAPI int parser_buffer_dbox(struct parser *handle)
 {
 	return handle->buffer_lb;
 }
 
-HAPI int parser_buffer_pd(struct parser *handle)
+HAPI int parser_buffer_gbar(struct parser *handle)
 {
-	return handle->buffer_pd;
+	return handle->buffer_gbar;
 }
 
 HAPI RETURN_TYPE parser_find(const char *pkgname)
@@ -171,14 +172,14 @@ HAPI RETURN_TYPE parser_find(const char *pkgname)
 	int len;
 	int ret;
 
-	len = strlen(pkgname) * 2 + strlen(CONF_PATH);
+	len = strlen(pkgname) * 2 + strlen(DYNAMICBOX_CONF_CONF_PATH);
 
 	filename = malloc(len);
 	if (!filename) {
 		return (RETURN_TYPE)0;
 	}
 
-	ret = snprintf(filename, len, CONF_PATH, pkgname, pkgname);
+	ret = snprintf(filename, len, DYNAMICBOX_CONF_CONF_PATH, pkgname, pkgname);
 	if (ret < 0) {
 		DbgFree(filename);
 		return (RETURN_TYPE)0;
@@ -286,25 +287,25 @@ static inline int parse_size(const char *buffer, unsigned int *size)
 			break;
 		case STOP:
 			if (w == 1 && h == 1) {
-				*size |= LB_SIZE_TYPE_1x1;
+				*size |= DBOX_SIZE_TYPE_1x1;
 			} else if (w == 2 && h == 1) {
-				*size |= LB_SIZE_TYPE_2x1;
+				*size |= DBOX_SIZE_TYPE_2x1;
 			} else if (w == 2 && h == 2) {
-				*size |= LB_SIZE_TYPE_2x2;
+				*size |= DBOX_SIZE_TYPE_2x2;
 			} else if (w == 4 && h == 1) {
-				*size |= LB_SIZE_TYPE_4x1;
+				*size |= DBOX_SIZE_TYPE_4x1;
 			} else if (w == 4 && h == 2) {
-				*size |= LB_SIZE_TYPE_4x2;
+				*size |= DBOX_SIZE_TYPE_4x2;
 			} else if (w == 4 && h == 3) {
-				*size |= LB_SIZE_TYPE_4x3;
+				*size |= DBOX_SIZE_TYPE_4x3;
 			} else if (w == 4 && h == 4) {
-				*size |= LB_SIZE_TYPE_4x4;
+				*size |= DBOX_SIZE_TYPE_4x4;
 			} else if (w == 21 && h == 21) {
-				*size |= LB_SIZE_TYPE_EASY_1x1;
+				*size |= DBOX_SIZE_TYPE_EASY_1x1;
 			} else if (w == 23 && h == 21) {
-				*size |= LB_SIZE_TYPE_EASY_3x1;
+				*size |= DBOX_SIZE_TYPE_EASY_3x1;
 			} else if (w == 23 && h == 23) {
-				*size |= LB_SIZE_TYPE_EASY_3x3;
+				*size |= DBOX_SIZE_TYPE_EASY_3x3;
 			} else {
 				ErrPrint("Invalid size type: %dx%d\n", w, h);
 			}
@@ -419,14 +420,14 @@ static void size_handler(struct parser *item, char *buffer)
 	}
 }
 
-static void pd_size_handler(struct parser *item, char *buffer)
+static void gbar_size_handler(struct parser *item, char *buffer)
 {
-	if (sscanf(buffer, "%ux%u", &item->pd_width, &item->pd_height) != 2) {
+	if (sscanf(buffer, "%ux%u", &item->gbar_width, &item->gbar_height) != 2) {
 		ErrPrint("parse pd size\n");
 	}
 }
 
-static void text_lb_handler(struct parser *item, char *buffer)
+static void text_dbox_handler(struct parser *item, char *buffer)
 {
 	if (!rtrim(buffer)) {
 		return;
@@ -445,16 +446,16 @@ static void script_handler(struct parser *item, char *buffer)
 	item->script = dup_rtrim(buffer);
 }
 
-static void buffer_pd_handler(struct parser *item, char *buffer)
+static void buffer_gbar_handler(struct parser *item, char *buffer)
 {
 	if (!rtrim(buffer)) {
 		return;
 	}
 
-	item->buffer_pd = !!atoi(buffer);
+	item->buffer_gbar = !!atoi(buffer);
 }
 
-static void buffer_lb_handler(struct parser *item, char *buffer)
+static void buffer_dbox_handler(struct parser *item, char *buffer)
 {
 	if (!rtrim(buffer)) {
 		return;
@@ -463,13 +464,13 @@ static void buffer_lb_handler(struct parser *item, char *buffer)
 	item->buffer_lb = !!atoi(buffer);
 }
 
-static void text_pd_handler(struct parser *item, char *buffer)
+static void text_gbar_handler(struct parser *item, char *buffer)
 {
 	if (!rtrim(buffer)) {
 		return;
 	}
 
-	item->text_pd = !!atoi(buffer);
+	item->text_gbar = !!atoi(buffer);
 }
 
 static void pinup_handler(struct parser *item, char *buffer)
@@ -481,14 +482,14 @@ static void pinup_handler(struct parser *item, char *buffer)
 	item->pinup = !!atoi(buffer);
 }
 
-static void lb_path_handler(struct parser *item, char *buffer)
+static void dbox_path_handler(struct parser *item, char *buffer)
 {
-	if (item->lb_path) {
-		DbgFree(item->lb_path);
+	if (item->dbox_path) {
+		DbgFree(item->dbox_path);
 	}
 
-	item->lb_path = dup_rtrim(buffer);
-	if (!item->lb_path) {
+	item->dbox_path = dup_rtrim(buffer);
+	if (!item->dbox_path) {
 		ErrPrint("Error: %s\n", strerror(errno));
 	}
 }
@@ -514,38 +515,38 @@ static void secured_handler(struct parser *item, char *buffer)
 	item->secured = !!atoi(buffer);
 }
 
-static void lb_group_handler(struct parser *item, char *buffer)
+static void dbox_group_handler(struct parser *item, char *buffer)
 {
-	if (item->lb_group) {
-		DbgFree(item->lb_group);
+	if (item->dbox_group) {
+		DbgFree(item->dbox_group);
 	}
 
-	item->lb_group = dup_rtrim(buffer);
-	if (!item->lb_group) {
+	item->dbox_group = dup_rtrim(buffer);
+	if (!item->dbox_group) {
 		ErrPrint("Error: %s\n", strerror(errno));
 	}
 }
 
-static void pd_path_handler(struct parser *item, char *buffer)
+static void gbar_path_handler(struct parser *item, char *buffer)
 {
-	if (item->pd_path) {
-		DbgFree(item->pd_path);
+	if (item->gbar_path) {
+		DbgFree(item->gbar_path);
 	}
 
-	item->pd_path = dup_rtrim(buffer);
-	if (!item->pd_path) {
+	item->gbar_path = dup_rtrim(buffer);
+	if (!item->gbar_path) {
 		ErrPrint("Error: %s\n", strerror(errno));
 	}
 }
 
-static void pd_group_handler(struct parser *item, char *buffer)
+static void gbar_group_handler(struct parser *item, char *buffer)
 {
-	if (item->pd_group) {
-		DbgFree(item->pd_group);
+	if (item->gbar_group) {
+		DbgFree(item->gbar_group);
 	}
 
-	item->pd_group = dup_rtrim(buffer);
-	if (!item->pd_group) {
+	item->gbar_group = dup_rtrim(buffer);
+	if (!item->gbar_group) {
 		ErrPrint("Error: %s\n", strerror(errno));
 	}
 }
@@ -604,44 +605,44 @@ HAPI struct parser *parser_load(const char *pkgname)
 			.handler = secured_handler,
 		},
 		{
-			.name = "livebox_path",
-			.handler = lb_path_handler,
+			.name = "dynamicbox_path",
+			.handler = dbox_path_handler,
 		},
 		{
-			.name = "livebox_group",
-			.handler = lb_group_handler,
+			.name = "dynamicbox_group",
+			.handler = dbox_group_handler,
 		},
 		{
-			.name = "pd_path",
-			.handler = pd_path_handler,
+			.name = "gbar_path",
+			.handler = gbar_path_handler,
 		},
 		{
-			.name = "pd_group",
-			.handler = pd_group_handler,
+			.name = "gbar_group",
+			.handler = gbar_group_handler,
 		},
 		{
-			.name = "pd_size",
-			.handler = pd_size_handler,
+			.name = "gbar_size",
+			.handler = gbar_size_handler,
 		},
 		{
 			.name = "pinup",
 			.handler = pinup_handler,
 		},
 		{
-			.name = "text_livebox",
-			.handler = text_lb_handler,
+			.name = "text_dynamicbox",
+			.handler = text_dbox_handler,
 		},
 		{
-			.name = "text_pd",
-			.handler = text_pd_handler,
+			.name = "text_gbar",
+			.handler = text_gbar_handler,
 		},
 		{
-			.name = "buffer_livebox",
-			.handler = buffer_lb_handler,
+			.name = "buffer_dynamicbox",
+			.handler = buffer_dbox_handler,
 		},
 		{
-			.name = "buffer_pd",
-			.handler = buffer_pd_handler,
+			.name = "buffer_gbar",
+			.handler = buffer_gbar_handler,
 		},
 		{
 			.name = "script",
@@ -664,7 +665,7 @@ HAPI struct parser *parser_load(const char *pkgname)
 	}
 
 	/* live-, .conf */
-	len = strlen(CONF_PATH) + strlen(pkgname) * 2;
+	len = strlen(DYNAMICBOX_CONF_CONF_PATH) + strlen(pkgname) * 2;
 	item->filename = malloc(len);
 	if (!item->filename) {
 		ErrPrint("Error: %s\n", strerror(errno));
@@ -672,7 +673,7 @@ HAPI struct parser *parser_load(const char *pkgname)
 		return 0;
 	}
 
-	ret = snprintf(item->filename, len, CONF_PATH, pkgname, pkgname);
+	ret = snprintf(item->filename, len, DYNAMICBOX_CONF_CONF_PATH, pkgname, pkgname);
 	if (ret < 0) {
 		ErrPrint("Error: %s\n", strerror(errno));
 		DbgFree(item->filename);
@@ -680,10 +681,10 @@ HAPI struct parser *parser_load(const char *pkgname)
 		return 0;
 	}
 
-	item->lb_path = NULL;
-	item->lb_group = NULL;
-	item->pd_width = 0;
-	item->pd_height = 0;
+	item->dbox_path = NULL;
+	item->dbox_group = NULL;
+	item->gbar_width = 0;
+	item->gbar_height = 0;
 	item->auto_launch = NULL;
 	item->size = 0x00000001;
 	item->group = NULL;
@@ -861,7 +862,7 @@ HAPI struct parser *parser_load(const char *pkgname)
 		}
 
 		linelen++;
-	 } while (c != EOF);
+	} while (c != EOF);
 
 	if (fclose(fp) != 0) {
 		ErrPrint("fclose: %s\n", strerror(errno));
@@ -879,13 +880,13 @@ HAPI int parser_unload(struct parser *item)
 	DbgFree(item->abi);
 	DbgFree(item->script);
 	DbgFree(item->group);
-	DbgFree(item->pd_group);
-	DbgFree(item->pd_path);
-	DbgFree(item->lb_group);
-	DbgFree(item->lb_path);
+	DbgFree(item->gbar_group);
+	DbgFree(item->gbar_path);
+	DbgFree(item->dbox_group);
+	DbgFree(item->dbox_path);
 	DbgFree(item->filename);
 	DbgFree(item);
-	return LB_STATUS_SUCCESS;
+	return DBOX_STATUS_ERROR_NONE;
 }
 
 /* End of a file */

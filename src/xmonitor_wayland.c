@@ -28,7 +28,7 @@
 
 #include <gio/gio.h>
 #include <dlog.h>
-#include <livebox-errno.h>
+#include <dynamicbox_errno.h>
 
 #include "conf.h"
 #include "debug.h"
@@ -126,7 +126,7 @@ HAPI int xmonitor_update_state(int target_pid)
 	struct client_node *client;
 
 	if (!USE_XMONITOR || target_pid < 0) {
-		return LB_STATUS_SUCCESS;
+		return DBOX_STATUS_ERROR_NONE;
 	}
 
 	/*!
@@ -138,7 +138,7 @@ HAPI int xmonitor_update_state(int target_pid)
 	 */
 
 	xmonitor_handle_state_changes();
-	return LB_STATUS_SUCCESS;
+	return DBOX_STATUS_ERROR_NONE;
 }
 
 HAPI int xmonitor_pause(struct client_node *client)
@@ -146,7 +146,7 @@ HAPI int xmonitor_pause(struct client_node *client)
 	DbgPrint("%d is paused\n", client_pid(client));
 	client_paused(client);
 	xmonitor_handle_state_changes();
-	return LB_STATUS_SUCCESS;
+	return DBOX_STATUS_ERROR_NONE;
 }
 
 HAPI int xmonitor_resume(struct client_node *client)
@@ -154,13 +154,13 @@ HAPI int xmonitor_resume(struct client_node *client)
 	DbgPrint("%d is resumed\n", client_pid(client));
 	client_resumed(client);
 	xmonitor_handle_state_changes();
-	return LB_STATUS_SUCCESS;
+	return DBOX_STATUS_ERROR_NONE;
 }
 
 HAPI int xmonitor_init(void)
 {
 	if (USE_XMONITOR) {
-		return LB_STATUS_SUCCESS;
+		return DBOX_STATUS_ERROR_NONE;
 	}
 
 	s_info.paused = client_is_all_paused() || setting_is_lcd_off();
@@ -170,7 +170,7 @@ HAPI int xmonitor_init(void)
 		remove_paused_file();
 	}
 
-	return LB_STATUS_SUCCESS;
+	return DBOX_STATUS_ERROR_NONE;
 }
 
 HAPI void xmonitor_fini(void)
@@ -186,7 +186,7 @@ HAPI int xmonitor_add_event_callback(enum xmonitor_event event, int (*cb)(void *
 	item = malloc(sizeof(*item));
 	if (!item) {
 		ErrPrint("Heap: %s\n", strerror(errno));
-		return LB_STATUS_ERROR_MEMORY;
+		return DBOX_STATUS_ERROR_OUT_OF_MEMORY;
 	}
 
 	item->cb = cb;
@@ -202,10 +202,10 @@ HAPI int xmonitor_add_event_callback(enum xmonitor_event event, int (*cb)(void *
 	default:
 		ErrPrint("Invalid event type\n");
 		DbgFree(item);
-		return LB_STATUS_ERROR_INVALID;
+		return DBOX_STATUS_ERROR_INVALID_PARAMETER;
 	}
 
-	return LB_STATUS_SUCCESS;
+	return DBOX_STATUS_ERROR_NONE;
 }
 
 HAPI int xmonitor_del_event_callback(enum xmonitor_event event, int (*cb)(void *user_data), void *user_data)
@@ -220,7 +220,7 @@ HAPI int xmonitor_del_event_callback(enum xmonitor_event event, int (*cb)(void *
 			if (item->cb == cb && item->user_data == user_data) {
 				s_info.pause_list = eina_list_remove(s_info.pause_list, item);
 				DbgFree(item);
-				return LB_STATUS_SUCCESS;
+				return DBOX_STATUS_ERROR_NONE;
 			}
 		}
 		break;
@@ -230,16 +230,16 @@ HAPI int xmonitor_del_event_callback(enum xmonitor_event event, int (*cb)(void *
 			if (item->cb == cb && item->user_data == user_data) {
 				s_info.resume_list = eina_list_remove(s_info.resume_list, item);
 				DbgFree(item);
-				return LB_STATUS_SUCCESS;
+				return DBOX_STATUS_ERROR_NONE;
 			}
 		}
 		break;
 	default:
 		ErrPrint("Invalid event type\n");
-		return LB_STATUS_ERROR_INVALID;
+		return DBOX_STATUS_ERROR_INVALID_PARAMETER;
 	}
 
-	return LB_STATUS_ERROR_NOT_EXIST;
+	return DBOX_STATUS_ERROR_NOT_EXIST;
 }
 
 HAPI int xmonitor_is_paused(void)

@@ -1,6 +1,6 @@
-PROJECT(livebox C)
+PROJECT(dynamicbox C)
 
-INCLUDE_DIRECTORIES(${CMAKE_SOURCE_DIR}/pkgmgr_livebox/include)
+INCLUDE_DIRECTORIES(${CMAKE_SOURCE_DIR}/pkgmgr_dynamicbox/include)
 
 INCLUDE(FindPkgConfig)
 pkg_check_modules(bin_pkgs REQUIRED
@@ -8,7 +8,7 @@ pkg_check_modules(bin_pkgs REQUIRED
 	sqlite3
 	libxml-2.0
 	db-util
-	livebox-service
+	dynamicbox_service
 )
 
 FOREACH(flag ${bin_pkgs_CFLAGS})

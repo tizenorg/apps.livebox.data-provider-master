@@ -30,7 +30,7 @@
 
 #include <dlog.h>
 #include <packet.h>
-#include <livebox-errno.h>
+#include <dynamicbox_errno.h>
 
 #include "debug.h"
 #include "conf.h"
@@ -65,6 +65,7 @@ struct buffer_info
 	int w;
 	int h;
 	int pixel_size;
+	int auto_align;
 	int is_loaded;
 
 	struct inst_info *inst;
@@ -74,11 +75,11 @@ struct buffer_info
 static int destroy_lock_file(struct buffer_info *info)
 {
 	if (!info->inst) {
-		return LB_STATUS_ERROR_INVALID;
+		return DBOX_STATUS_ERROR_INVALID_PARAMETER;
 	}
 
 	if (!info->lock) {
-		return LB_STATUS_ERROR_INVALID;
+		return DBOX_STATUS_ERROR_INVALID_PARAMETER;
 	}
 
 	if (close(info->lock_fd) < 0) {
@@ -92,7 +93,7 @@ static int destroy_lock_file(struct buffer_info *info)
 
 	DbgFree(info->lock);
 	info->lock = NULL;
-	return LB_STATUS_SUCCESS;
+	return DBOX_STATUS_ERROR_NONE;
 }
 
 static int create_lock_file(struct buffer_info *info)
@@ -103,22 +104,22 @@ static int create_lock_file(struct buffer_info *info)
 	char target[3] = "pd";
 
 	if (!info->inst) {
-		return LB_STATUS_ERROR_INVALID;
+		return DBOX_STATUS_ERROR_INVALID_PARAMETER;
 	}
 
 	id = instance_id(info->inst);
 	if (!id) {
-		return LB_STATUS_ERROR_INVALID;
+		return DBOX_STATUS_ERROR_INVALID_PARAMETER;
 	}
 
 	len = strlen(id);
 	file = malloc(len + 20);
 	if (!file) {
 		ErrPrint("Heap: %s\n", strerror(errno));
-		return LB_STATUS_ERROR_MEMORY;
+		return DBOX_STATUS_ERROR_OUT_OF_MEMORY;
 	}
 
-	if (script_handler_buffer_info(instance_pd_script(info->inst)) != info && instance_pd_buffer(info->inst) != info) {
+	if (script_handler_buffer_info(instance_gbar_script(info->inst)) != info && instance_gbar_buffer(info->inst) != info) {
 		target[0] = 'l';
 		target[1] = 'b';
 		/* target[2] = '\0'; // We already have this ;) */
@@ -129,11 +130,11 @@ static int create_lock_file(struct buffer_info *info)
 	if (info->lock_fd < 0) {
 		ErrPrint("open: %s\n", strerror(errno));
 		DbgFree(file);
-		return LB_STATUS_ERROR_IO;
+		return DBOX_STATUS_ERROR_IO_ERROR;
 	}
 
 	info->lock = file;
-	return LB_STATUS_SUCCESS;
+	return DBOX_STATUS_ERROR_NONE;
 }
 
 static int do_buffer_lock(struct buffer_info *buffer)
@@ -142,7 +143,7 @@ static int do_buffer_lock(struct buffer_info *buffer)
 	int ret;
 
 	if (buffer->lock_fd < 0) {
-		return LB_STATUS_SUCCESS;
+		return DBOX_STATUS_ERROR_NONE;
 	}
 
 	flock.l_type = F_WRLCK;
@@ -159,7 +160,7 @@ static int do_buffer_lock(struct buffer_info *buffer)
 		}
 	} while (ret == EINTR);
 
-	return LB_STATUS_SUCCESS;
+	return DBOX_STATUS_ERROR_NONE;
 }
 
 static int do_buffer_unlock(struct buffer_info *buffer)
@@ -168,7 +169,7 @@ static int do_buffer_unlock(struct buffer_info *buffer)
 	int ret;
 
 	if (buffer->lock_fd < 0) {
-		return LB_STATUS_SUCCESS;
+		return DBOX_STATUS_ERROR_NONE;
 	}
 
 	flock.l_type = F_UNLCK;
@@ -185,7 +186,7 @@ static int do_buffer_unlock(struct buffer_info *buffer)
 		}
 	} while (ret == EINTR);
 
-	return LB_STATUS_SUCCESS;
+	return DBOX_STATUS_ERROR_NONE;
 }
 
 static inline int load_file_buffer(struct buffer_info *info)
@@ -200,7 +201,7 @@ static inline int load_file_buffer(struct buffer_info *info)
 	new_id = malloc(len);
 	if (!new_id) {
 		ErrPrint("Heap: %s\n", strerror(errno));
-		return LB_STATUS_ERROR_MEMORY;
+		return DBOX_STATUS_ERROR_OUT_OF_MEMORY;
 	}
 
 	timestamp = util_timestamp();
@@ -210,14 +211,14 @@ static inline int load_file_buffer(struct buffer_info *info)
 	if (!size) {
 		ErrPrint("Canvas buffer size is ZERO\n");
 		DbgFree(new_id);
-		return LB_STATUS_ERROR_INVALID;
+		return DBOX_STATUS_ERROR_INVALID_PARAMETER;
 	}
 
 	buffer = calloc(1, size);
 	if (!buffer) {
 		ErrPrint("Failed to allocate buffer\n");
 		DbgFree(new_id);
-		return LB_STATUS_ERROR_MEMORY;
+		return DBOX_STATUS_ERROR_OUT_OF_MEMORY;
 	}
 
 	buffer->type = BUFFER_TYPE_FILE;
@@ -231,7 +232,7 @@ static inline int load_file_buffer(struct buffer_info *info)
 	info->is_loaded = 1;
 
 	DbgPrint("FILE type %d created\n", size);
-	return LB_STATUS_SUCCESS;
+	return DBOX_STATUS_ERROR_NONE;
 }
 
 static inline int load_shm_buffer(struct buffer_info *info)
@@ -245,13 +246,13 @@ static inline int load_shm_buffer(struct buffer_info *info)
 	size = info->w * info->h * info->pixel_size;
 	if (!size) {
 		ErrPrint("Invalid buffer size\n");
-		return LB_STATUS_ERROR_INVALID;
+		return DBOX_STATUS_ERROR_INVALID_PARAMETER;
 	}
 
 	id = shmget(IPC_PRIVATE, size + sizeof(*buffer), IPC_CREAT | 0666);
 	if (id < 0) {
 		ErrPrint("shmget: %s\n", strerror(errno));
-		return LB_STATUS_ERROR_FAULT;
+		return DBOX_STATUS_ERROR_FAULT;
 	}
 
 	buffer = shmat(id, NULL, 0);
@@ -262,7 +263,7 @@ static inline int load_shm_buffer(struct buffer_info *info)
 			ErrPrint("%s shmctl: %s\n", info->id, strerror(errno));
 		}
 
-		return LB_STATUS_ERROR_FAULT;
+		return DBOX_STATUS_ERROR_FAULT;
 	}
 
 	buffer->type = BUFFER_TYPE_SHM;
@@ -283,7 +284,7 @@ static inline int load_shm_buffer(struct buffer_info *info)
 			ErrPrint("shmctl: %s\n", strerror(errno));
 		}
 
-		return LB_STATUS_ERROR_MEMORY;
+		return DBOX_STATUS_ERROR_OUT_OF_MEMORY;
 	}
 
 	snprintf(new_id, len, SCHEMA_SHM "%d", id);
@@ -292,7 +293,7 @@ static inline int load_shm_buffer(struct buffer_info *info)
 	info->id = new_id;
 	info->buffer = buffer;
 	info->is_loaded = 1;
-	return LB_STATUS_SUCCESS;
+	return DBOX_STATUS_ERROR_NONE;
 }
 
 EAPI int buffer_handler_load(struct buffer_info *info)
@@ -301,12 +302,12 @@ EAPI int buffer_handler_load(struct buffer_info *info)
 
 	if (!info) {
 		ErrPrint("buffer handler is nil\n");
-		return LB_STATUS_ERROR_INVALID;
+		return DBOX_STATUS_ERROR_INVALID_PARAMETER;
 	}
 
 	if (info->is_loaded) {
 		DbgPrint("Buffer is already loaded\n");
-		return LB_STATUS_SUCCESS;
+		return DBOX_STATUS_ERROR_NONE;
 	}
 
 	switch (info->type) {
@@ -321,7 +322,7 @@ EAPI int buffer_handler_load(struct buffer_info *info)
 	case BUFFER_TYPE_PIXMAP:
 	default:
 		ErrPrint("Invalid buffer\n");
-		ret = LB_STATUS_ERROR_INVALID;
+		ret = DBOX_STATUS_ERROR_INVALID_PARAMETER;
 		break;
 	}
 
@@ -336,7 +337,7 @@ static inline int unload_file_buffer(struct buffer_info *info)
 	new_id = strdup(SCHEMA_FILE "/tmp/.live.undefined");
 	if (!new_id) {
 		ErrPrint("Heap: %s\n", strerror(errno));
-		return LB_STATUS_ERROR_MEMORY;
+		return DBOX_STATUS_ERROR_OUT_OF_MEMORY;
 	}
 
 	DbgFree(info->buffer);
@@ -349,7 +350,7 @@ static inline int unload_file_buffer(struct buffer_info *info)
 
 	DbgFree(info->id);
 	info->id = new_id;
-	return LB_STATUS_SUCCESS;
+	return DBOX_STATUS_ERROR_NONE;
 }
 
 static inline int unload_shm_buffer(struct buffer_info *info)
@@ -360,19 +361,19 @@ static inline int unload_shm_buffer(struct buffer_info *info)
 	new_id = strdup(SCHEMA_SHM "-1");
 	if (!new_id) {
 		ErrPrint("Heap: %s\n", strerror(errno));
-		return LB_STATUS_ERROR_MEMORY;
+		return DBOX_STATUS_ERROR_OUT_OF_MEMORY;
 	}
 
 	if (sscanf(info->id, SCHEMA_SHM "%d", &id) != 1) {
 		ErrPrint("%s Invalid ID\n", info->id);
 		DbgFree(new_id);
-		return LB_STATUS_ERROR_INVALID;
+		return DBOX_STATUS_ERROR_INVALID_PARAMETER;
 	}
 
 	if (id < 0) {
 		ErrPrint("(%s) Invalid id: %d\n", info->id, id);
 		DbgFree(new_id);
-		return LB_STATUS_ERROR_INVALID;
+		return DBOX_STATUS_ERROR_INVALID_PARAMETER;
 	}
 
 	if (shmdt(info->buffer) < 0) {
@@ -387,7 +388,7 @@ static inline int unload_shm_buffer(struct buffer_info *info)
 
 	DbgFree(info->id);
 	info->id = new_id;
-	return LB_STATUS_SUCCESS;
+	return DBOX_STATUS_ERROR_NONE;
 }
 
 EAPI int buffer_handler_unload(struct buffer_info *info)
@@ -396,12 +397,12 @@ EAPI int buffer_handler_unload(struct buffer_info *info)
 
 	if (!info) {
 		ErrPrint("buffer handler is NIL\n");
-		return LB_STATUS_ERROR_INVALID;
+		return DBOX_STATUS_ERROR_INVALID_PARAMETER;
 	}
 
 	if (!info->is_loaded) {
 		ErrPrint("Buffer is not loaded\n");
-		return LB_STATUS_ERROR_INVALID;
+		return DBOX_STATUS_ERROR_INVALID_PARAMETER;
 	}
 
 	switch (info->type) {
@@ -416,7 +417,7 @@ EAPI int buffer_handler_unload(struct buffer_info *info)
 	case BUFFER_TYPE_PIXMAP:
 	default:
 		ErrPrint("Invalid buffer\n");
-		ret = LB_STATUS_ERROR_INVALID;
+		ret = DBOX_STATUS_ERROR_INVALID_PARAMETER;
 		break;
 	}
 
@@ -487,7 +488,7 @@ EAPI void *buffer_handler_pixmap_find(int pixmap)
 
 EAPI int buffer_handler_pixmap_release_buffer(void *canvas)
 {
-	return LB_STATUS_ERROR_NOT_EXIST;
+	return DBOX_STATUS_ERROR_NOT_EXIST;
 }
 
 /*!
@@ -498,7 +499,7 @@ EAPI int buffer_handler_pixmap_release_buffer(void *canvas)
  */
 EAPI int buffer_handler_pixmap_unref(void *buffer_ptr)
 {
-	return LB_STATUS_SUCCESS;
+	return DBOX_STATUS_ERROR_NONE;
 }
 
 EAPI int buffer_handler_is_loaded(const struct buffer_info *info)
@@ -522,19 +523,19 @@ EAPI int buffer_handler_resize(struct buffer_info *info, int w, int h)
 
 	if (!info) {
 		ErrPrint("Invalid handler\n");
-		return LB_STATUS_ERROR_INVALID;
+		return DBOX_STATUS_ERROR_INVALID_PARAMETER;
 	}
 
 	if (info->w == w && info->h == h) {
 		DbgPrint("No changes\n");
-		return LB_STATUS_SUCCESS;
+		return DBOX_STATUS_ERROR_NONE;
 	}
 
 	buffer_handler_update_size(info, w, h);
 
 	if (!info->is_loaded) {
 		DbgPrint("Buffer size is updated[%dx%d]\n", w, h);
-		return LB_STATUS_SUCCESS;
+		return DBOX_STATUS_ERROR_NONE;
 	}
 
 	ret = buffer_handler_unload(info);
@@ -547,13 +548,13 @@ EAPI int buffer_handler_resize(struct buffer_info *info, int w, int h)
 		ErrPrint("Load: %d\n", ret);
 	}
 
-	return LB_STATUS_SUCCESS;
+	return DBOX_STATUS_ERROR_NONE;
 }
 
 EAPI int buffer_handler_get_size(struct buffer_info *info, int *w, int *h)
 {
 	if (!info) {
-		return LB_STATUS_ERROR_INVALID;
+		return DBOX_STATUS_ERROR_INVALID_PARAMETER;
 	}
 
 	if (w) {
@@ -563,7 +564,7 @@ EAPI int buffer_handler_get_size(struct buffer_info *info, int *w, int *h)
 		*h = info->h;
 	}
 
-	return LB_STATUS_SUCCESS;
+	return DBOX_STATUS_ERROR_NONE;
 }
 
 EAPI struct inst_info *buffer_handler_instance(struct buffer_info *info)
@@ -618,10 +619,10 @@ HAPI int buffer_handler_init(void)
 	 */
 	if (USE_SW_BACKEND) {
 		DbgPrint("Fallback to the S/W Backend\n");
-		return LB_STATUS_SUCCESS;
+		return DBOX_STATUS_ERROR_NONE;
 	}
 
-	return LB_STATUS_SUCCESS;
+	return DBOX_STATUS_ERROR_NONE;
 }
 
 HAPI int buffer_handler_fini(void)
@@ -630,7 +631,7 @@ HAPI int buffer_handler_fini(void)
 	 * \TODO
 	 * Implement this for wayland
 	 */
-	return LB_STATUS_SUCCESS;
+	return DBOX_STATUS_ERROR_NONE;
 }
 
 static inline struct buffer *raw_open_file(const char *filename)
@@ -745,7 +746,7 @@ EAPI void *buffer_handler_raw_data(struct buffer *buffer)
 EAPI int buffer_handler_raw_size(struct buffer *buffer)
 {
 	if (!buffer || buffer->state != CREATED) {
-		return LB_STATUS_ERROR_INVALID;
+		return DBOX_STATUS_ERROR_INVALID_PARAMETER;
 	}
 
 	return (int)buffer->info;
@@ -784,7 +785,7 @@ EAPI int buffer_handler_raw_close(struct buffer *buffer)
 		break;
 	case BUFFER_TYPE_PIXMAP:
 	default:
-		ret = LB_STATUS_ERROR_INVALID;
+		ret = DBOX_STATUS_ERROR_INVALID_PARAMETER;
 		break;
 	}
 
@@ -794,11 +795,11 @@ EAPI int buffer_handler_raw_close(struct buffer *buffer)
 EAPI int buffer_handler_lock(struct buffer_info *buffer)
 {
 	if (buffer->type == BUFFER_TYPE_PIXMAP) {
-		return LB_STATUS_SUCCESS;
+		return DBOX_STATUS_ERROR_NONE;
 	}
 
 	if (buffer->type == BUFFER_TYPE_FILE) {
-		return LB_STATUS_SUCCESS;
+		return DBOX_STATUS_ERROR_NONE;
 	}
 
 	return do_buffer_lock(buffer);
@@ -807,11 +808,11 @@ EAPI int buffer_handler_lock(struct buffer_info *buffer)
 EAPI int buffer_handler_unlock(struct buffer_info *buffer)
 {
 	if (buffer->type == BUFFER_TYPE_PIXMAP) {
-		return LB_STATUS_SUCCESS;
+		return DBOX_STATUS_ERROR_NONE;
 	}
 
 	if (buffer->type == BUFFER_TYPE_FILE) {
-		return LB_STATUS_SUCCESS;
+		return DBOX_STATUS_ERROR_NONE;
 	}
 
 	return do_buffer_unlock(buffer);
@@ -827,11 +828,11 @@ HAPI int buffer_handler_set_data(struct buffer_info *buffer, void *data)
 {
 	if (!buffer) {
 		ErrPrint("Invalid handle\n");
-		return LB_STATUS_ERROR_INVALID;
+		return DBOX_STATUS_ERROR_INVALID_PARAMETER;
 	}
 
 	buffer->data = data;
-	return LB_STATUS_SUCCESS;
+	return DBOX_STATUS_ERROR_NONE;
 }
 
 HAPI void *buffer_handler_data(struct buffer_info *buffer)
@@ -851,16 +852,16 @@ HAPI int buffer_handler_destroy(struct buffer_info *info)
 
 	if (!info) {
 		DbgPrint("Buffer is not created yet. info is NIL\n");
-		return LB_STATUS_SUCCESS;
+		return DBOX_STATUS_ERROR_NONE;
 	}
 
 	buffer_handler_unload(info);
 	DbgFree(info->id);
 	DbgFree(info);
-	return LB_STATUS_SUCCESS;
+	return DBOX_STATUS_ERROR_NONE;
 }
 
-HAPI struct buffer_info *buffer_handler_create(struct inst_info *inst, enum buffer_type type, int w, int h, int pixel_size)
+HAPI struct buffer_info *buffer_handler_create(struct inst_info *inst, enum buffer_type type, int w, int h, int pixel_size, int auto_align)
 {
 	struct buffer_info *info;
 
@@ -914,6 +915,7 @@ HAPI struct buffer_info *buffer_handler_create(struct inst_info *inst, enum buff
 	info->inst = inst;
 	info->buffer = NULL;
 	info->data = NULL;
+	info->auto_align = auto_align;
 
 	return info;
 }

@@ -36,8 +36,8 @@ extern const char *group_cluster_name_by_category(struct category *category);
 extern int group_add_package(struct category *category, const char *pkgname);
 extern int group_del_package(struct category *category, const char *pkgname);
 
-extern int group_add_livebox(const char *group, const char *pkgname);
-extern int group_del_livebox(const char *pkgname);
+extern int group_add_dynamicbox(const char *group, const char *pkgname);
+extern int group_del_dynamicbox(const char *pkgname);
 
 extern int group_init(void);
 extern int group_fini(void);

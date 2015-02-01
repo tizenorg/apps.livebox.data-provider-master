@@ -1,40 +1,43 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <manifest xmlns="http://tizen.org/ns/packages" package="org.tizen.nicesj" version="1.0" install-location="auto">
 
-<livebox appid="org.tizen.nicesj.livebox" primary="true" secured="false" network="false" abi="c" timeout="20" period="10.0" libexec="/usr/apps/org.tizen.myapp/libexec/liblive-org.tizen.nicesj.so" pinup="false" script="edje" nodisplay="false">
-	<label>My livebox</label>
+<dynamicbox appid="org.tizen.nicesj.dynamicbox" primary="true" secured="false" network="false" abi="c" timeout="20" period="10.0" libexec="/usr/apps/org.tizen.myapp/libexec/liblive-org.tizen.nicesj.so" pinup="false" script="edje" nodisplay="false">
+	<label>My Dynamic Box</label>
 	<icon>/usr/share/icons/small/org.tizen.live-nicesj.png</icon>
 	<label xml:lang="en_US">Sample</label>
 	<label xml:lang="ko_KR">Hangul</label>
-	<content>Content information</content>
+	<content>Content information</content>	<!-- This string will be passed to the dynamicbox_create -->
+	<category name="http://tizen.org/dynamicbox/default"></category>	<!-- Used for categorizing a package -->
 
-	<launch>org.tizen.nicesj</launch>
+	<launch>org.tizen.nicesj</launch> <!-- Launch this app from homescreen directly -->
 
-	<setup>org.tizen.nicesj</setup>
+	<setup>org.tizen.nicesj</setup> <!-- If the box needs to be setting up before adding it to the homscreen, this app will be launched -->
 
-	<box type="image" mouse_event="false">
-		<size touch_effect="true" preview="ABSPATH">1x1</size>
-		<size touch_effect="true" preview="ABSPATH">2x1</size>
-		<size touch_effect="true" need_frame="true">2x2</size>
+	<box type="image" mouse_event="false" count="0">
+		<!-- 1x1 should be exists, mandatory size -->
+		<size touch_effect="true" preview="ABSPATH" mouse_event="false">1x1</size>
+
+		<size touch_effect="true" preview="ABSPATH" mouse_event="false">2x1</size>
+		<size touch_effect="true" need_frame="true" mouse_event="false">2x2</size>
 		<size>4x1</size>
 		<size need_frame="true">4x2</size>
-		<size touch_effect="false" need_frame="true">4x3</size>
-		<size touch_effect="false">4x4</size>
+		<size touch_effect="false" need_frame="true" mouse_event="false">4x3</size>
+		<size touch_effect="false" mouse_event="false">4x4</size>
 
-		<!-- Easy home -->
+		<!-- Only for the Easy home -->
 		<size>21x21</size>
 		<size preview="ABSPATH">23x21</size>
 		<size>23x23</size>
 
-		<!-- Only supported for special livebox - inhouse / commercialization target only -->
+		<!-- Only supported for special Dynamic Box - inhouse / commercialization target only -->
 		<size>0x0</size>
 		<script src="/opt/usr/apps/org.tizen.myapp/res/script/my.edj" group="my_group" />
 	</box>
 
-	<pd type="script">
+	<glancebar type="script">
 		<size>720x100</size>
 		<script src="/opt/usr/apps/org.tizen.myapp/res/script/mypd.edj" group="group_string" />
-	</pd>
+	</glancebar>
 
 	<group>
 		<cluster name="cluster1">
@@ -74,5 +77,5 @@
 		     MUSIC_PLAYED_FREQUENTLY(DATA_PROVIDER, TIME_SPAN, RESULT_SIZE)
 		-->
 	</group>
-</livebox>
+</dynamicbox>
 </manifest>

@@ -18,4 +18,14 @@ extern int setting_is_lcd_off(void);
 extern int setting_init(void);
 extern int setting_fini(void);
 
+enum oom_event_type {
+    OOM_TYPE_NORMAL = 0x00,
+    OOM_TYPE_LOW = 0x01,
+    OOM_ERROR = 0xFF
+};
+
+extern int setting_add_oom_event_callback(int (*handler)(enum oom_event_type type, void *data), void *data);
+extern int setting_del_oom_event_callback(int (*handler)(enum oom_event_type type, void *data), void *data);
+extern enum oom_event_type setting_oom_level(void);
+
 /* End of a file */

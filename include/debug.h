@@ -67,4 +67,6 @@ extern FILE *__file_log_fp;
 #define PERF_MARK(tag)
 #endif
 
+#define HAPI __attribute__((visibility("hidden")))
+
 /* End of a file */

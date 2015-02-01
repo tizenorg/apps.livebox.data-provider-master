@@ -19,7 +19,7 @@
 
 #include <dlog.h>
 #if defined(HAVE_LIVEBOX)
-#include <livebox-errno.h>
+#include <dynamicbox_errno.h>
 #else
 #include "lite-errno.h"
 #endif
@@ -29,9 +29,10 @@
 #include <security-server.h>
 
 #include <vconf.h>
+#include <notification.h>
+#include <notification_internal.h>
 #include <notification_ipc.h>
 #include <notification_noti.h>
-#include <notification_error.h>
 #include <notification_setting_service.h>
 
 #include "service_common.h"
@@ -89,40 +90,158 @@ static inline int _priv_id_get_from_list(int num_data, int *list, int index) {
 
 static inline struct packet *_packet_create_with_list(int op_num, int *list, int start_index) {
 	return packet_create(
-		"del_noti_multiple",
-		"iiiiiiiiiii",
-		((op_num - start_index) > NOTIFICATION_DEL_PACKET_UNIT) ? NOTIFICATION_DEL_PACKET_UNIT : op_num - start_index,
-		_priv_id_get_from_list(op_num, list, start_index),
-		_priv_id_get_from_list(op_num, list, start_index + 1),
-		_priv_id_get_from_list(op_num, list, start_index + 2),
-		_priv_id_get_from_list(op_num, list, start_index + 3),
-		_priv_id_get_from_list(op_num, list, start_index + 4),
-		_priv_id_get_from_list(op_num, list, start_index + 5),
-		_priv_id_get_from_list(op_num, list, start_index + 6),
-		_priv_id_get_from_list(op_num, list, start_index + 7),
-		_priv_id_get_from_list(op_num, list, start_index + 8),
-		_priv_id_get_from_list(op_num, list, start_index + 9)
-		);
+			"del_noti_multiple",
+			"iiiiiiiiiii",
+			((op_num - start_index) > NOTIFICATION_DEL_PACKET_UNIT) ? NOTIFICATION_DEL_PACKET_UNIT : op_num - start_index,
+			_priv_id_get_from_list(op_num, list, start_index),
+			_priv_id_get_from_list(op_num, list, start_index + 1),
+			_priv_id_get_from_list(op_num, list, start_index + 2),
+			_priv_id_get_from_list(op_num, list, start_index + 3),
+			_priv_id_get_from_list(op_num, list, start_index + 4),
+			_priv_id_get_from_list(op_num, list, start_index + 5),
+			_priv_id_get_from_list(op_num, list, start_index + 6),
+			_priv_id_get_from_list(op_num, list, start_index + 7),
+			_priv_id_get_from_list(op_num, list, start_index + 8),
+			_priv_id_get_from_list(op_num, list, start_index + 9)
+			);
 }
 
 /*!
  * SERVICE HANDLER
  */
-static void _handler_insert(struct tcb *tcb, struct packet *packet, void *data)
+static void _handler_insert_noti(struct tcb *tcb, struct packet *packet, notification_h noti, void *data)
 {
 	int ret = 0, ret_p = 0;
 	int priv_id = 0;
 	struct packet *packet_reply = NULL;
 	struct packet *packet_service = NULL;
+
+	ret = notification_noti_insert(noti);
+	notification_get_id(noti, NULL, &priv_id);
+	DbgPrint("priv_id: [%d]\n", priv_id);
+	packet_reply = packet_create_reply(packet, "ii", ret, priv_id);
+	if (packet_reply) {
+		if ((ret_p = service_common_unicast_packet(tcb, packet_reply)) < 0) {
+			ErrPrint("failed to send reply packet: %d\n", ret_p);
+		}
+		packet_destroy(packet_reply);
+	} else {
+		ErrPrint("failed to create a reply packet\n");
+	}
+
+	if (ret != NOTIFICATION_ERROR_NONE) {
+		ErrPrint("failed to insert a notification: %d\n", ret);
+		return ;
+	}
+
+	packet_service = notification_ipc_make_packet_from_noti(noti, "add_noti", 2);
+	if (packet_service != NULL) {
+		if ((ret_p = service_common_multicast_packet(tcb, packet_service, TCB_CLIENT_TYPE_SERVICE)) < 0) {
+			ErrPrint("failed to send a multicast packet: %d\n", ret_p);
+		}
+		packet_destroy(packet_service);
+	} else {
+		ErrPrint("failed to create a multicats packet\n");
+	}
+}
+
+/*static void _handler_insert(struct tcb *tcb, struct packet *packet, void *data) // not used
+  {
+  notification_h noti = NULL;
+
+  noti = notification_create(NOTIFICATION_TYPE_NOTI);
+  if (noti != NULL) {
+  if (notification_ipc_make_noti_from_packet(noti, packet) == NOTIFICATION_ERROR_NONE) {
+  _handler_insert_noti(tcb, packet, noti, data);
+  } else {
+  ErrPrint("Failed to create the packet");
+  }
+  notification_free(noti);
+  }
+  }*/
+
+static void _handler_update_noti(struct tcb *tcb, struct packet *packet, notification_h noti, void *data)
+{
+	int ret = 0, ret_p = 0;
+	int priv_id = 0;
+	struct packet *packet_reply = NULL;
+	struct packet *packet_service = NULL;
+
+	ret = notification_noti_update(noti);
+
+	notification_get_id(noti, NULL, &priv_id);
+	DbgPrint("priv_id: [%d]\n", priv_id);
+	packet_reply = packet_create_reply(packet, "ii", ret, priv_id);
+	if (packet_reply) {
+		if ((ret_p = service_common_unicast_packet(tcb, packet_reply)) < 0) {
+			ErrPrint("failed to send reply packet:%d\n", ret_p);
+		}
+		packet_destroy(packet_reply);
+	} else {
+		ErrPrint("failed to create a reply packet\n");
+	}
+
+	if (ret != NOTIFICATION_ERROR_NONE) {
+		ErrPrint("failed to update a notification:%d\n", ret);
+		return ;
+	}
+
+	packet_service = notification_ipc_make_packet_from_noti(noti, "update_noti", 2);
+	if (packet_service != NULL) {
+		if ((ret_p = service_common_multicast_packet(tcb, packet_service, TCB_CLIENT_TYPE_SERVICE)) < 0) {
+			ErrPrint("failed to send a multicast packet: %d\n", ret_p);
+		}
+		packet_destroy(packet_service);
+	}
+}
+
+static void _handler_update(struct tcb *tcb, struct packet *packet, void *data)
+{
 	notification_h noti = NULL;
 
 	noti = notification_create(NOTIFICATION_TYPE_NOTI);
 	if (noti != NULL) {
 		if (notification_ipc_make_noti_from_packet(noti, packet) == NOTIFICATION_ERROR_NONE) {
-			ret = notification_noti_insert(noti);
-			notification_get_id(noti, NULL, &priv_id);
-			DbgPrint("priv_id: [%d]\n", priv_id);
-			packet_reply = packet_create_reply(packet, "ii", ret, priv_id);
+			_handler_update_noti(tcb, packet, noti, data);
+		} else {
+			ErrPrint("Failed to create the packet");
+		}
+		notification_free(noti);
+	}
+}
+
+static void _handler_check_noti_by_tag(struct tcb *tcb, struct packet *packet, void *data)
+{
+	int ret = 0;
+	notification_h noti = NULL;
+
+	noti = notification_create(NOTIFICATION_TYPE_NOTI);
+	if (noti != NULL) {
+		if (notification_ipc_make_noti_from_packet(noti, packet) == NOTIFICATION_ERROR_NONE) {
+			ret = notification_noti_check_tag(noti);
+			if (ret == NOTIFICATION_ERROR_NOT_EXIST_ID) {
+				_handler_insert_noti(tcb, packet, noti, data);
+			} else if (ret == NOTIFICATION_ERROR_ALREADY_EXIST_ID) {
+				_handler_update_noti(tcb, packet, noti, data);
+			}
+		}
+		notification_free(noti);
+	}
+}
+
+static void _handler_load_noti_by_tag(struct tcb *tcb, struct packet *packet, void *data)
+{
+	int ret = 0, ret_p = 0;
+	char* tag;
+	char* pkgname;
+	struct packet *packet_reply = NULL;
+	notification_h noti = NULL;
+
+	noti = notification_create(NOTIFICATION_TYPE_NOTI);
+	if (noti != NULL) {
+		if (packet_get(packet, "ss", &pkgname, &tag) == 2) {
+			ret = notification_noti_get_by_tag(noti, pkgname, tag);
+			packet_reply = notification_ipc_make_reply_packet_from_noti(noti, packet);
 			if (packet_reply) {
 				if ((ret_p = service_common_unicast_packet(tcb, packet_reply)) < 0) {
 					ErrPrint("failed to send reply packet: %d\n", ret_p);
@@ -133,19 +252,9 @@ static void _handler_insert(struct tcb *tcb, struct packet *packet, void *data)
 			}
 
 			if (ret != NOTIFICATION_ERROR_NONE) {
-				ErrPrint("failed to insert a notification: %d\n", ret);
+				ErrPrint("failed to load_noti_by_tag : %d\n", ret);
 				notification_free(noti);
 				return ;
-			}
-
-			packet_service = notification_ipc_make_packet_from_noti(noti, "add_noti", 2);
-			if (packet_service != NULL) {
-				if ((ret_p = service_common_multicast_packet(tcb, packet_service, TCB_CLIENT_TYPE_SERVICE)) < 0) {
-					ErrPrint("failed to send a multicast packet: %d\n", ret_p);
-				}
-				packet_destroy(packet_service);
-			} else {
-				ErrPrint("failed to create a multicats packet\n");
 			}
 		} else {
 			ErrPrint("Failed to create the packet");
@@ -154,50 +263,6 @@ static void _handler_insert(struct tcb *tcb, struct packet *packet, void *data)
 	}
 }
 
-static void _handler_update(struct tcb *tcb, struct packet *packet, void *data)
-{
-	int ret = 0, ret_p = 0;
-	int priv_id = 0;
-	struct packet *packet_reply = NULL;
-	struct packet *packet_service = NULL;
-	notification_h noti = NULL;
-
-	noti = notification_create(NOTIFICATION_TYPE_NOTI);
-	if (noti != NULL) {
-		if (notification_ipc_make_noti_from_packet(noti, packet) == NOTIFICATION_ERROR_NONE) {
-			ret = notification_noti_update(noti);
-
-			notification_get_id(noti, NULL, &priv_id);
-			DbgPrint("priv_id: [%d]\n", priv_id);
-			packet_reply = packet_create_reply(packet, "ii", ret, priv_id);
-			if (packet_reply) {
-				if ((ret_p = service_common_unicast_packet(tcb, packet_reply)) < 0) {
-					ErrPrint("failed to send reply packet:%d\n", ret_p);
-				}
-				packet_destroy(packet_reply);
-			} else {
-				ErrPrint("failed to create a reply packet\n");
-			}
-
-			if (ret != NOTIFICATION_ERROR_NONE) {
-				ErrPrint("failed to update a notification:%d\n", ret);
-				notification_free(noti);
-				return ;
-			}
-
-			packet_service = notification_ipc_make_packet_from_noti(noti, "update_noti", 2);
-			if (packet_service != NULL) {
-				if ((ret_p = service_common_multicast_packet(tcb, packet_service, TCB_CLIENT_TYPE_SERVICE)) < 0) {
-					ErrPrint("failed to send a multicast packet: %d\n", ret_p);
-				}
-				packet_destroy(packet_service);
-			}
-		} else {
-			ErrPrint("Failed to create the packet");
-		}
-		notification_free(noti);
-	}
-}
 
 static void _handler_refresh(struct tcb *tcb, struct packet *packet, void *data)
 {
@@ -418,6 +483,27 @@ static void _handler_service_register(struct tcb *tcb, struct packet *packet, vo
 	}
 }
 
+static void _handler_post_toast_message(struct tcb *tcb, struct packet *packet, void *data)
+{
+	int ret = 0;
+	struct packet *packet_reply = NULL;
+
+	packet_reply = packet_create_reply(packet, "i", ret);
+	if (packet_reply) {
+		if ((ret = service_common_unicast_packet(tcb, packet_reply)) < 0) {
+			ErrPrint("failed to send reply packet:%d\n", ret);
+		}
+		packet_destroy(packet_reply);
+	} else {
+		ErrPrint("failed to create a reply packet\n");
+	}
+
+	if ((ret = service_common_multicast_packet(tcb, packet, TCB_CLIENT_TYPE_SERVICE)) < 0) {
+		ErrPrint("failed to send a multicast packet:%d\n", ret);
+	}
+
+}
+
 /*!
  * SERVICE PERMISSION CHECK
  */
@@ -538,10 +624,11 @@ static int service_thread_main(struct tcb *tcb, struct packet *packet, void *dat
 {
 	int i = 0;
 	const char *command;
+
 	static struct noti_service service_req_table[] = {
 		{
 			.cmd = "add_noti",
-			.handler = _handler_insert,
+			.handler = _handler_check_noti_by_tag,
 			.rule = "data-provider-master::notification.client",
 			.access = "w",
 			.handler_access_error = _permission_check_common,
@@ -551,6 +638,13 @@ static int service_thread_main(struct tcb *tcb, struct packet *packet, void *dat
 			.handler = _handler_update,
 			.rule = "data-provider-master::notification.client",
 			.access = "w",
+			.handler_access_error = _permission_check_common,
+		},
+		{
+			.cmd = "load_noti_by_tag",
+			.handler = _handler_load_noti_by_tag,
+			.rule = "data-provider-master::notification.client",
+			.access = "r",
 			.handler_access_error = _permission_check_common,
 		},
 		{
@@ -591,6 +685,13 @@ static int service_thread_main(struct tcb *tcb, struct packet *packet, void *dat
 		{
 			.cmd = "service_register",
 			.handler = _handler_service_register,
+			.rule = NULL,
+			.access = NULL,
+			.handler_access_error = NULL,
+		},
+		{
+			.cmd = "post_toast",
+			.handler = _handler_post_toast_message,
 			.rule = NULL,
 			.access = NULL,
 			.handler_access_error = NULL,
@@ -661,7 +762,7 @@ HAPI int notification_service_init(void)
 {
 	if (s_info.svc_ctx) {
 		ErrPrint("Already initialized\n");
-		return LB_STATUS_ERROR_ALREADY;
+		return DBOX_STATUS_ERROR_ALREADY;
 	}
 
 	_notification_init();
@@ -669,7 +770,7 @@ HAPI int notification_service_init(void)
 	s_info.svc_ctx = service_common_create(NOTIFICATION_SOCKET, service_thread_main, NULL);
 	if (!s_info.svc_ctx) {
 		ErrPrint("Unable to activate service thread\n");
-		return LB_STATUS_ERROR_FAULT;
+		return DBOX_STATUS_ERROR_FAULT;
 	}
 
 	if (smack_fsetlabel(service_common_fd(s_info.svc_ctx), NOTIFICATION_SMACK_LABEL, SMACK_LABEL_IPOUT) != 0) {
@@ -677,7 +778,7 @@ HAPI int notification_service_init(void)
 			ErrPrint("Unable to set SMACK label(%d)\n", errno);
 			service_common_destroy(s_info.svc_ctx);
 			s_info.svc_ctx = NULL;
-			return LB_STATUS_ERROR_FAULT;
+			return DBOX_STATUS_ERROR_FAULT;
 		}
 	}
 
@@ -686,24 +787,24 @@ HAPI int notification_service_init(void)
 			ErrPrint("Unable to set SMACK label(%d)\n", errno);
 			service_common_destroy(s_info.svc_ctx);
 			s_info.svc_ctx = NULL;
-			return LB_STATUS_ERROR_FAULT;
+			return DBOX_STATUS_ERROR_FAULT;
 		}
 	}
 
 	DbgPrint("Successfully initiated\n");
-	return LB_STATUS_SUCCESS;
+	return DBOX_STATUS_ERROR_NONE;
 }
 
 HAPI int notification_service_fini(void)
 {
 	if (!s_info.svc_ctx) {
-		return LB_STATUS_ERROR_INVALID;
+		return DBOX_STATUS_ERROR_INVALID_PARAMETER;
 	}
 
 	service_common_destroy(s_info.svc_ctx);
 	s_info.svc_ctx = NULL;
 	DbgPrint("Successfully Finalized\n");
-	return LB_STATUS_SUCCESS;
+	return DBOX_STATUS_ERROR_NONE;
 }
 
 /* End of a file */

@@ -15,6 +15,9 @@
 			<label name="data-provider-master::notification" />
 			<label name="data-provider-master::notification.client" />
 			<label name="data-provider-master::utility" />
+			<label name="data-provider-master::client" />
+			<label name="data-provider-master::provider" />
+			<label name="data-provider-master::bin" />
 		</provide>
 		<request>
 			<smack request="sys-assert::core" type="rwxat" />
@@ -34,19 +37,33 @@
 
 	<assign>
 		<!-- Executable file -->
-		<filesystem path="/usr/bin/data-provider-master" label="data-provider-master" exec_label="data-provider-master" />
-		<filesystem path="/opt/usr/devel/usr/bin/liveinfo" label="data-provider-master" exec_label="data-provider-master" />
+		<filesystem path="/usr/bin/data-provider-master" label="data-provider-master::bin" exec_label="data-provider-master::bin" />
+		<filesystem path="/opt/usr/devel/usr/bin/liveinfo" label="data-provider-master::bin" exec_label="data-provider-master::bin" />
 		<filesystem path="/opt/usr/devel/usr/bin" label="_" />
 
 		<!-- Configuration data -->
 		<filesystem path="/usr/share/data-provider-master" label="data-provider-master::data" />
 		<filesystem path="/usr/share/data-provider-master/abi.ini" label="data-provider-master::data" />
 
-		<!-- livebox-service is able to access the resolution.ini file -->
+		<!-- dynamicbox_service is able to access the resolution.ini file -->
 		<filesystem path="/usr/share/data-provider-master/resolution.ini" label="_" />
+		<filesystem path="/usr/share/data-provider-master/320x480/resolution.ini" label="_" />
+		<filesystem path="/usr/share/data-provider-master/800x480/resolution.ini" label="_" />
+		<filesystem path="/usr/share/data-provider-master/360x480/resolution.ini" label="_" />
+		<filesystem path="/usr/share/data-provider-master/720x1280/resolution.ini" label="_" />
+		<filesystem path="/usr/share/data-provider-master/320x320/resolution.ini" label="_" />
+		<filesystem path="/usr/share/data-provider-master/360x360/resolution.ini" label="_" />
+		<filesystem path="/usr/share/data-provider-master/480x800/resolution.ini" label="_" />
 
 		<!-- Slave provider and the master provider are able to access the conf.ini file -->
 		<filesystem path="/usr/share/data-provider-master/conf.ini" label="data-provider-master::data" />
+		<filesystem path="/usr/share/data-provider-master/320x480/conf.ini" label="data-provider-master::data" />
+		<filesystem path="/usr/share/data-provider-master/800x480/conf.ini" label="data-provider-master::data" />
+		<filesystem path="/usr/share/data-provider-master/360x480/conf.ini" label="data-provider-master::data" />
+		<filesystem path="/usr/share/data-provider-master/720x1280/conf.ini" label="data-provider-master::data" />
+		<filesystem path="/usr/share/data-provider-master/320x320/conf.ini" label="data-provider-master::data" />
+		<filesystem path="/usr/share/data-provider-master/360x360/conf.ini" label="data-provider-master::data" />
+		<filesystem path="/usr/share/data-provider-master/480x800/conf.ini" label="data-provider-master::data" />
 
 		<!-- Shared data folder -->
 		<filesystem path="/opt/usr/share/live_magazine" label="data-provider-master::share" type="transmutable" />
@@ -55,16 +72,16 @@
 		<filesystem path="/opt/usr/share/live_magazine/always" label="data-provider-master::share" type="transmutable" />
 
 		<!-- Database -->
-		<filesystem path="/opt/dbspace/.livebox.db" label="data-provider-master::db" />
-		<filesystem path="/opt/dbspace/.livebox.db-journal" label="data-provider-master::db" />
+		<filesystem path="/opt/dbspace/.dynamicbox.db" label="data-provider-master::db" />
+		<filesystem path="/opt/dbspace/.dynamicbox.db-journal" label="data-provider-master::db" />
 
 		<filesystem path="/usr/lib/systemd/system/data-provider-master.service" label="_" />
 		<filesystem path="/usr/lib/systemd/system/multi-user.target.wants/data-provider-master.service" label="_" />
 
 		<!-- Package manager plugin -->
-		<filesystem path="/usr/etc/package-manager/parserlib/liblivebox.so" label="_" />
+		<filesystem path="/usr/etc/package-manager/parserlib/libdynamicbox.so" label="_" />
 
 		<!-- Logdump script -->
-		<filesystem path="/opt/etc/dump.d/module.d/dump_livebox.sh" label="_" exec_label="_" />
+		<filesystem path="/opt/etc/dump.d/module.d/dump_dynamicbox.sh" label="_" exec_label="_" />
 	</assign>
 </manifest>

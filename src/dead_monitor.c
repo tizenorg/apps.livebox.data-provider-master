@@ -23,6 +23,7 @@
 #include <dlog.h>
 
 #include <Eina.h>
+#include <dynamicbox_service.h> /* destroy_type for instance.h */
 
 #include "slave_life.h"
 #include "client_life.h"

@@ -18,12 +18,7 @@ struct buffer_info;
 struct inst_info;
 struct buffer;
 
-enum buffer_type { /*!< Must have to be sync with libprovider, liblivebox-viewer, liblivebox-edje */
-	BUFFER_TYPE_FILE,
-	BUFFER_TYPE_SHM,
-	BUFFER_TYPE_PIXMAP,
-	BUFFER_TYPE_ERROR
-};
+#include <dynamicbox_buffer.h>
 
 /*!
  * \brief
@@ -33,7 +28,7 @@ enum buffer_type { /*!< Must have to be sync with libprovider, liblivebox-viewer
  * \param[in] pixel_size
  * \return buffer_info
  */
-extern struct buffer_info *buffer_handler_create(struct inst_info *inst, enum buffer_type type, int w, int h, int pixel_size);
+extern struct buffer_info *buffer_handler_create(struct inst_info *inst, enum dynamicbox_fb_type type, int w, int h, int pixel_size);
 
 /*!
  * \brief
@@ -90,9 +85,9 @@ extern const char *buffer_handler_id(const struct buffer_info *info);
 
 /*!
  * \param[in] info
- * \return buffer_type
+ * \return dynamicbox_fb_type
  */
-extern enum buffer_type buffer_handler_type(const struct buffer_info *info);
+extern enum dynamicbox_fb_type buffer_handler_type(const struct buffer_info *info);
 
 /*!
  * \brief This API is not supported for Pixmap.
@@ -137,6 +132,27 @@ extern void *buffer_handler_pixmap_acquire_buffer(struct buffer_info *info);
  * \return int
  */
 extern int buffer_handler_pixmap_release_buffer(void *canvas);
+
+/*!
+ * \brief
+ * \param[in] info
+ * \return int
+ */
+extern int buffer_handler_stride(struct buffer_info *info);
+
+/*!
+ * \brief
+ * \param[in] info
+ * \return int
+ */
+extern int buffer_handler_pixels(struct buffer_info *info);
+
+/*!
+ * \brief
+ * \param[in] info
+ * \return int
+ */
+extern int buffer_handler_auto_align(void);
 
 /*!
  * \brief
@@ -228,14 +244,14 @@ extern struct inst_info *buffer_handler_instance(struct buffer_info *info);
  * \remarks
  * \param[in] type
  * \param[in] resource
- * \return struct buffer *
+ * \return dynamicbox_fb_t 
  * \retval NULL
  * \retval address
  * \pre
  * \post
  * \sa
  */
-extern struct buffer *buffer_handler_raw_open(enum buffer_type type, void *resource);
+extern dynamicbox_fb_t buffer_handler_raw_open(enum dynamicbox_fb_type type, void *resource);
 
 /*!
  * \brief
@@ -248,7 +264,7 @@ extern struct buffer *buffer_handler_raw_open(enum buffer_type type, void *resou
  * \post
  * \sa
  */
-extern int buffer_handler_raw_close(struct buffer *buffer);
+extern int buffer_handler_raw_close(dynamicbox_fb_t buffer);
 
 /*!
  * \brief
@@ -261,7 +277,7 @@ extern int buffer_handler_raw_close(struct buffer *buffer);
  * \post
  * \sa
  */
-extern void *buffer_handler_raw_data(struct buffer *buffer);
+extern void *buffer_handler_raw_data(dynamicbox_fb_t buffer);
 
 /*!
  * \brief
@@ -274,7 +290,7 @@ extern void *buffer_handler_raw_data(struct buffer *buffer);
  * \post
  * \sa
  */
-extern int buffer_handler_raw_size(struct buffer *buffer);
+extern int buffer_handler_raw_size(dynamicbox_fb_t buffer);
 
 /*!
  * \brief

@@ -1,5 +1,0 @@
-data-provider-master notification::db rw
-data-provider-master ail::db rw
-data-provider-master svi-data x
-data-provider-master data-provider-master::db rw
-data-provider-master system::vconf_system rwxat

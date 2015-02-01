@@ -27,7 +27,8 @@
 
 #include <dlog.h>
 
-#include <livebox-errno.h>
+#include <dynamicbox_errno.h>
+#include <dynamicbox_service.h>
 #include <packet.h>
 #include <com-core.h>
 
@@ -139,11 +140,11 @@ static inline int destroy_request_item(struct request_item *item)
 	case REQUEST_TYPE_PIXMAP:
 		break;
 	default:
-		return LB_STATUS_ERROR_INVALID;
+		return DBOX_STATUS_ERROR_INVALID_PARAMETER;
 	}
 
 	DbgFree(item);
-	return LB_STATUS_SUCCESS;
+	return DBOX_STATUS_ERROR_NONE;
 }
 
 static int request_file_handler(struct tcb *tcb, struct packet *packet, struct request_item **item)
@@ -152,11 +153,11 @@ static int request_file_handler(struct tcb *tcb, struct packet *packet, struct r
 
 	if (packet_get(packet, "s", &filename) != 1) {
 		ErrPrint("Invalid packet\n");
-		return LB_STATUS_ERROR_INVALID;
+		return DBOX_STATUS_ERROR_INVALID_PARAMETER;
 	}
 
 	*item = create_request_item(tcb, REQUEST_TYPE_FILE, (void *)filename);
-	return *item ? LB_STATUS_SUCCESS : LB_STATUS_ERROR_MEMORY;
+	return *item ? DBOX_STATUS_ERROR_NONE : DBOX_STATUS_ERROR_OUT_OF_MEMORY;
 }
 
 static int request_pixmap_handler(struct tcb *tcb, struct packet *packet, struct request_item **item)
@@ -165,12 +166,12 @@ static int request_pixmap_handler(struct tcb *tcb, struct packet *packet, struct
 
 	if (packet_get(packet, "i", &pixmap) != 1) {
 		ErrPrint("Invalid packet\n");
-		return LB_STATUS_ERROR_INVALID;
+		return DBOX_STATUS_ERROR_INVALID_PARAMETER;
 	}
 
 	if (pixmap == 0) {
 		ErrPrint("pixmap is not valid\n");
-		return LB_STATUS_ERROR_INVALID;
+		return DBOX_STATUS_ERROR_INVALID_PARAMETER;
 	}
 
 	/*!
@@ -178,7 +179,7 @@ static int request_pixmap_handler(struct tcb *tcb, struct packet *packet, struct
 	 * Attach to pixmap and copy its data to the client
 	 */
 	*item = create_request_item(tcb, REQUEST_TYPE_PIXMAP, (void *)pixmap);
-	return *item ? LB_STATUS_SUCCESS : LB_STATUS_ERROR_MEMORY;
+	return *item ? DBOX_STATUS_ERROR_NONE : DBOX_STATUS_ERROR_OUT_OF_MEMORY;
 }
 
 static int request_shm_handler(struct tcb *tcb, struct packet *packet, struct request_item **item)
@@ -187,12 +188,12 @@ static int request_shm_handler(struct tcb *tcb, struct packet *packet, struct re
 
 	if (packet_get(packet, "i", &shm) != 1) {
 		ErrPrint("Invalid packet\n");
-		return LB_STATUS_ERROR_INVALID;
+		return DBOX_STATUS_ERROR_INVALID_PARAMETER;
 	}
 
 	if (shm < 0) {
 		ErrPrint("shm is not valid: %d\n", shm);
-		return LB_STATUS_ERROR_INVALID;
+		return DBOX_STATUS_ERROR_INVALID_PARAMETER;
 	}
 
 	/*!
@@ -200,7 +201,7 @@ static int request_shm_handler(struct tcb *tcb, struct packet *packet, struct re
 	 * Attach to SHM and copy its buffer to the client
 	 */
 	*item = create_request_item(tcb, REQUEST_TYPE_SHM, (void *)shm);
-	return *item ? LB_STATUS_SUCCESS : LB_STATUS_ERROR_MEMORY;
+	return *item ? DBOX_STATUS_ERROR_NONE : DBOX_STATUS_ERROR_OUT_OF_MEMORY;
 }
 
 /* SERVER THREAD */
@@ -236,13 +237,13 @@ static int service_thread_main(struct tcb *tcb, struct packet *packet, void *dat
 
 	if (!packet) {
 		DbgPrint("TCB %p is disconnected\n", tcb);
-		return LB_STATUS_SUCCESS;
+		return DBOX_STATUS_ERROR_NONE;
 	}
 
 	cmd = packet_command(packet);
 	if (!cmd) {
 		ErrPrint("Invalid packet. cmd is not valid\n");
-		return LB_STATUS_ERROR_INVALID;
+		return DBOX_STATUS_ERROR_INVALID_PARAMETER;
 	}
 
 	switch (packet_type(packet)) {
@@ -279,7 +280,7 @@ static int service_thread_main(struct tcb *tcb, struct packet *packet, void *dat
 			 * \note
 			 * After send the reply packet, file push thread can sending a file
 			 */
-			if (ret != LB_STATUS_SUCCESS || !item) {
+			if (ret != DBOX_STATUS_ERROR_NONE || !item) {
 				break;
 			}
 
@@ -316,7 +317,7 @@ static int service_thread_main(struct tcb *tcb, struct packet *packet, void *dat
 		break;
 	}
 
-	return LB_STATUS_SUCCESS;
+	return DBOX_STATUS_ERROR_NONE;
 }
 
 static int send_file(int handle, const struct request_item *item)
@@ -445,7 +446,7 @@ errout:
 
 static int send_buffer(int handle, const struct request_item *item)
 {
-	struct buffer *buffer;
+	dynamicbox_fb_t buffer;
 	struct burst_head *head;
 	struct burst_data *body;
 	char *data;
@@ -456,9 +457,9 @@ static int send_buffer(int handle, const struct request_item *item)
 	int type;
 
 	if (item->type == REQUEST_TYPE_SHM) {
-		type = BUFFER_TYPE_SHM;
+		type = DBOX_FB_TYPE_SHM;
 	} else {
-		type = BUFFER_TYPE_PIXMAP;
+		type = DBOX_FB_TYPE_PIXMAP;
 	}
 
 	buffer = buffer_handler_raw_open(type, (void *)item->data.shm);
@@ -615,19 +616,19 @@ int file_service_init(void)
 
 	if (s_info.svc_ctx) {
 		ErrPrint("Already initialized\n");
-		return LB_STATUS_ERROR_ALREADY;
+		return DBOX_STATUS_ERROR_ALREADY;
 	}
 
 	if (pipe2(s_info.request_pipe, O_CLOEXEC) < 0) {
 		ErrPrint("pipe: %s\n", strerror(errno));
-		return LB_STATUS_ERROR_FAULT;
+		return DBOX_STATUS_ERROR_FAULT;
 	}
 
 	status = pthread_mutex_init(&s_info.request_list_lock, NULL);
 	if (status != 0) {
 		ErrPrint("Failed to create lock: %s\n", strerror(status));
 		CLOSE_PIPE(s_info.request_pipe);
-		return LB_STATUS_ERROR_FAULT;
+		return DBOX_STATUS_ERROR_FAULT;
 	}
 
 	s_info.svc_ctx = service_common_create(FILE_SERVICE_ADDR, service_thread_main, NULL);
@@ -640,7 +641,7 @@ int file_service_init(void)
 		}
 
 		CLOSE_PIPE(s_info.request_pipe);
-		return LB_STATUS_ERROR_FAULT;
+		return DBOX_STATUS_ERROR_FAULT;
 	}
 
 	status = pthread_create(&s_info.push_thid, NULL, push_main, NULL);
@@ -656,7 +657,7 @@ int file_service_init(void)
 		}
 
 		CLOSE_PIPE(s_info.request_pipe);
-		return LB_STATUS_ERROR_FAULT;
+		return DBOX_STATUS_ERROR_FAULT;
 	}
 
 	/*!
@@ -665,7 +666,7 @@ int file_service_init(void)
 	 */
 
 	DbgPrint("Successfully initiated\n");
-	return LB_STATUS_SUCCESS;
+	return DBOX_STATUS_ERROR_NONE;
 }
 
 /* MAIN THREAD */
@@ -677,7 +678,7 @@ int file_service_fini(void)
 	void *retval;
 
 	if (!s_info.svc_ctx) {
-		return LB_STATUS_ERROR_INVALID;
+		return DBOX_STATUS_ERROR_INVALID_PARAMETER;
 	}
 
 	ch = PUSH_EXIT;
@@ -713,7 +714,7 @@ int file_service_fini(void)
 	CLOSE_PIPE(s_info.request_pipe);
 
 	DbgPrint("Successfully Finalized\n");
-	return LB_STATUS_SUCCESS;
+	return DBOX_STATUS_ERROR_NONE;
 }
 
 /* End of a file */

@@ -10,7 +10,7 @@ pkg_check_modules(info_pkgs REQUIRED
 	ecore
 	glib-2.0
 	gio-2.0
-	livebox-service
+	dynamicbox_service
 	xdamage
 	xfixes
 	x11

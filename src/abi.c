@@ -20,7 +20,7 @@
 
 #include <Eina.h>
 #include <dlog.h>
-#include <livebox-errno.h>
+#include <dynamicbox_errno.h>
 
 #include "util.h"
 #include "debug.h"
@@ -46,14 +46,14 @@ HAPI int abi_add_entry(const char *abi, const char *pkgname)
 	item = malloc(sizeof(*item));
 	if (!item) {
 		ErrPrint("Failed to add a new entry for abi[%s - %s]\n", abi, pkgname);
-		return LB_STATUS_ERROR_MEMORY;
+		return DBOX_STATUS_ERROR_OUT_OF_MEMORY;
 	}
 
 	item->abi = strdup(abi);
 	if (!item->abi) {
 		ErrPrint("Heap: %s\n", strerror(errno));
 		DbgFree(item);
-		return LB_STATUS_ERROR_MEMORY;
+		return DBOX_STATUS_ERROR_OUT_OF_MEMORY;
 	}
 
 	item->pkgname = strdup(pkgname);
@@ -61,11 +61,11 @@ HAPI int abi_add_entry(const char *abi, const char *pkgname)
 		ErrPrint("Heap: %s\n", strerror(errno));
 		DbgFree(item->abi);
 		DbgFree(item);
-		return LB_STATUS_ERROR_MEMORY;
+		return DBOX_STATUS_ERROR_OUT_OF_MEMORY;
 	}
 
 	s_abi.list = eina_list_append(s_abi.list, item);
-	return LB_STATUS_SUCCESS;
+	return DBOX_STATUS_ERROR_NONE;
 }
 
 HAPI int abi_update_entry(const char *abi, const char *pkgname)
@@ -78,7 +78,7 @@ HAPI int abi_update_entry(const char *abi, const char *pkgname)
 	_pkgname = strdup(pkgname);
 	if (!_pkgname) {
 		ErrPrint("Heap: %s\n", strerror(errno));
-		return LB_STATUS_ERROR_MEMORY;
+		return DBOX_STATUS_ERROR_OUT_OF_MEMORY;
 	}
 
 	EINA_LIST_FOREACH_SAFE(s_abi.list, l, n, item) {
@@ -90,7 +90,7 @@ HAPI int abi_update_entry(const char *abi, const char *pkgname)
 	}
 
 	DbgFree(_pkgname);
-	return LB_STATUS_ERROR_NOT_EXIST;
+	return DBOX_STATUS_ERROR_NOT_EXIST;
 }
 
 HAPI int abi_del_entry(const char *abi)
@@ -105,11 +105,11 @@ HAPI int abi_del_entry(const char *abi)
 			DbgFree(item->abi);
 			DbgFree(item->pkgname);
 			DbgFree(item);
-			return LB_STATUS_SUCCESS;
+			return DBOX_STATUS_ERROR_NONE;
 		}
 	}
 
-	return LB_STATUS_ERROR_NOT_EXIST;
+	return DBOX_STATUS_ERROR_NOT_EXIST;
 }
 
 HAPI void abi_del_all(void)

@@ -23,22 +23,22 @@ extern int parser_network(struct parser *handle);
 extern int parser_timeout(struct parser *handle);
 extern const char *parser_auto_launch(struct parser *handle);
 extern unsigned int parser_size(struct parser *handle);
-extern void parser_get_pdsize(struct parser *handle, unsigned int *width, unsigned int *height);
+extern void parser_get_gbar_size(struct parser *handle, unsigned int *width, unsigned int *height);
 extern const char *parser_group_str(struct parser *handle);
 extern int parser_secured(struct parser *handle);
 extern int parser_pinup(struct parser *handler);
 
-extern const char *parser_lb_path(struct parser *handle);
-extern const char *parser_lb_group(struct parser *handle);
-extern const char *parser_pd_path(struct parser *handle);
-extern const char *parser_pd_group(struct parser *handle);
+extern const char *parser_dbox_path(struct parser *handle);
+extern const char *parser_dbox_group(struct parser *handle);
+extern const char *parser_gbar_path(struct parser *handle);
+extern const char *parser_gbar_group(struct parser *handle);
 
 extern const char *parser_abi(struct parser *handle);
 
-extern int parser_text_pd(struct parser *handle);
-extern int parser_text_lb(struct parser *handle);
-extern int parser_buffer_lb(struct parser *handle);
-extern int parser_buffer_pd(struct parser *handle);
+extern int parser_text_gbar(struct parser *handle);
+extern int parser_text_dbox(struct parser *handle);
+extern int parser_buffer_dbox(struct parser *handle);
+extern int parser_buffer_gbar(struct parser *handle);
 
 extern const char *parser_script(struct parser *handle);
 

@@ -23,8 +23,10 @@
 #include <Eina.h>
 
 #include <packet.h>
-#include <livebox-errno.h>
-#include <livebox-service.h>
+#include <dynamicbox_errno.h>
+#include <dynamicbox_service.h>
+#include <dynamicbox_conf.h>
+#include <pkgmgr-info.h>
 #include <ail.h>
 
 #include "critical_log.h"
@@ -59,10 +61,10 @@ struct fault_info {
 
 struct pkg_info {
 	char *pkgid;
-	char *lbid;
+	char *dbox_id;
 
 	struct {
-		enum lb_type type;
+		enum dynamicbox_dbox_type type;
 
 		union {
 			struct {
@@ -89,10 +91,10 @@ struct pkg_info {
 		int timeout;
 		double period;
 		char *libexec;
-	} lb;
+	} dbox;
 
 	struct {
-		enum pd_type type;
+		enum dynamicbox_gbar_type type;
 
 		union {
 			struct {
@@ -111,12 +113,14 @@ struct pkg_info {
 
 		unsigned int width;
 		unsigned int height;
-	} pd;
+	} gbar;
 
 	int network;
 	int secured;
+	int direct_input;
 	char *script; /* script type: edje, ... */
 	char *abi;
+	char *hw_acceleration;
 
 	int fault_count;
 	struct fault_info *fault_info;
@@ -183,7 +187,7 @@ static int slave_fault_cb(struct slave_node *slave, void *data)
 	DbgPrint("Slave critical fault - package: %s (by slave fault %s\n", package_name(info), slave_name(slave));
 	EINA_LIST_FOREACH_SAFE(info->inst_list, l, n, inst) {
 		DbgPrint("Destroy instance %p\n", inst);
-		instance_destroyed(inst, LB_STATUS_ERROR_FAULT);
+		instance_destroyed(inst, DBOX_STATUS_ERROR_FAULT);
 	}
 
 	return 0;
@@ -199,7 +203,7 @@ static int slave_deactivated_cb(struct slave_node *slave, void *data)
 
 	if (info->fault_info) {
 		EINA_LIST_FOREACH_SAFE(info->inst_list, l, n, inst) {
-			instance_destroyed(inst, LB_STATUS_ERROR_FAULT);
+			instance_destroyed(inst, DBOX_STATUS_ERROR_FAULT);
 		}
 	} else {
 		EINA_LIST_FOREACH_SAFE(info->inst_list, l, n, inst) {
@@ -282,30 +286,31 @@ static int slave_resumed_cb(struct slave_node *slave, void *data)
 static inline void destroy_package(struct pkg_info *info)
 {
 	eina_list_free(info->ctx_list);
-	/* This items will be deleted from group_del_livebox */
+	/* This items will be deleted from group_del_dynamicbox */
 	info->ctx_list = NULL;
 
-	group_del_livebox(info->lbid);
+	group_del_dynamicbox(info->dbox_id);
 	package_clear_fault(info);
 
 	s_info.pkg_list = eina_list_remove(s_info.pkg_list, info);
 
-	if (info->lb.type == LB_TYPE_SCRIPT) {
-		DbgFree(info->lb.info.script.path);
-		DbgFree(info->lb.info.script.group);
+	if (info->dbox.type == DBOX_TYPE_SCRIPT) {
+		DbgFree(info->dbox.info.script.path);
+		DbgFree(info->dbox.info.script.group);
 	}
 
-	if (info->pd.type == PD_TYPE_SCRIPT) {
-		DbgFree(info->pd.info.script.path);
-		DbgFree(info->pd.info.script.group);
+	if (info->gbar.type == GBAR_TYPE_SCRIPT) {
+		DbgFree(info->gbar.info.script.path);
+		DbgFree(info->gbar.info.script.group);
 	}
 
 	DbgFree(info->script);
 	DbgFree(info->abi);
-	DbgFree(info->lbid);
-	DbgFree(info->lb.libexec);
-	DbgFree(info->lb.auto_launch);
+	DbgFree(info->dbox_id);
+	DbgFree(info->dbox.libexec);
+	DbgFree(info->dbox.auto_launch);
 	DbgFree(info->pkgid);
+	DbgFree(info->hw_acceleration);
 
 	DbgFree(info);
 }
@@ -316,181 +321,181 @@ static inline int load_conf(struct pkg_info *info)
 	const char *str;
 	const char *group;
 
-	parser = parser_load(info->lbid);
+	parser = parser_load(info->dbox_id);
 	if (!parser) {
-		info->lb.size_list = 0x01; /* Default */
+		info->dbox.size_list = 0x01; /* Default */
 
-		info->script = strdup(DEFAULT_SCRIPT);
+		info->script = strdup(DYNAMICBOX_CONF_DEFAULT_SCRIPT);
 		if (!info->script) {
 			ErrPrint("Heap: %s\n", strerror(errno));
-			return LB_STATUS_ERROR_MEMORY;
+			return DBOX_STATUS_ERROR_OUT_OF_MEMORY;
 		}
 
-		info->abi = strdup(DEFAULT_ABI);
+		info->abi = strdup(DYNAMICBOX_CONF_DEFAULT_ABI);
 		if (!info->abi) {
 			ErrPrint("Heap: %s\n", strerror(errno));
 			DbgFree(info->script);
 			info->script = NULL;
-			return LB_STATUS_ERROR_MEMORY;
+			return DBOX_STATUS_ERROR_OUT_OF_MEMORY;
 		}
 
-		info->pd.width = g_conf.width;
-		info->pd.height = g_conf.height >> 2;
-		info->lb.pinup = 1;
-		return LB_STATUS_SUCCESS;
+		info->gbar.width = DYNAMICBOX_CONF_BASE_W;
+		info->gbar.height = DYNAMICBOX_CONF_BASE_H >> 2;
+		info->dbox.pinup = 1;
+		return DBOX_STATUS_ERROR_NONE;
 	}
 
-	info->lb.type = LB_TYPE_FILE;
-	if (parser_text_lb(parser)) {
-		info->lb.type = LB_TYPE_TEXT;
-	} else if (parser_buffer_lb(parser)) {
-		info->lb.type = LB_TYPE_BUFFER;
+	info->dbox.type = DBOX_TYPE_FILE;
+	if (parser_text_dbox(parser)) {
+		info->dbox.type = DBOX_TYPE_TEXT;
+	} else if (parser_buffer_dbox(parser)) {
+		info->dbox.type = DBOX_TYPE_BUFFER;
 	} else {
-		str = parser_lb_path(parser);
+		str = parser_dbox_path(parser);
 		if (str) {
-			info->lb.type = LB_TYPE_SCRIPT;
+			info->dbox.type = DBOX_TYPE_SCRIPT;
 
-			info->lb.info.script.path = strdup(str);
-			if (!info->lb.info.script.path) {
+			info->dbox.info.script.path = strdup(str);
+			if (!info->dbox.info.script.path) {
 				ErrPrint("Heap: %s\n", strerror(errno));
 				parser_unload(parser);
-				return LB_STATUS_ERROR_MEMORY;
+				return DBOX_STATUS_ERROR_OUT_OF_MEMORY;
 			}
 
-			str = parser_lb_group(parser);
+			str = parser_dbox_group(parser);
 			if (str) {
-				info->lb.info.script.group = strdup(str);
-				if (!info->lb.info.script.group) {
+				info->dbox.info.script.group = strdup(str);
+				if (!info->dbox.info.script.group) {
 					ErrPrint("Heap: %s\n", strerror(errno));
-					DbgFree(info->lb.info.script.path);
+					DbgFree(info->dbox.info.script.path);
 					parser_unload(parser);
-					return LB_STATUS_ERROR_MEMORY;
+					return DBOX_STATUS_ERROR_OUT_OF_MEMORY;
 				}
 			}
 		}
 	}
 
-	if (parser_text_pd(parser)) {
-		info->pd.type = PD_TYPE_TEXT;
-	} else if (parser_buffer_pd(parser)) {
-		info->pd.type = PD_TYPE_BUFFER;
+	if (parser_text_gbar(parser)) {
+		info->gbar.type = GBAR_TYPE_TEXT;
+	} else if (parser_buffer_gbar(parser)) {
+		info->gbar.type = GBAR_TYPE_BUFFER;
 	} else {
-		str = parser_pd_path(parser);
+		str = parser_gbar_path(parser);
 		if (str) {
-			info->pd.type = PD_TYPE_SCRIPT;
-			info->pd.info.script.path = strdup(str);
-			if (!info->pd.info.script.path) {
+			info->gbar.type = GBAR_TYPE_SCRIPT;
+			info->gbar.info.script.path = strdup(str);
+			if (!info->gbar.info.script.path) {
 				ErrPrint("Heap: %s\n", strerror(errno));
-				if (info->lb.type == LB_TYPE_SCRIPT) {
-					DbgFree(info->lb.info.script.path);
-					DbgFree(info->lb.info.script.group);
+				if (info->dbox.type == DBOX_TYPE_SCRIPT) {
+					DbgFree(info->dbox.info.script.path);
+					DbgFree(info->dbox.info.script.group);
 				}
 				parser_unload(parser);
-				return LB_STATUS_ERROR_MEMORY;
+				return DBOX_STATUS_ERROR_OUT_OF_MEMORY;
 			}
 
-			str = parser_pd_group(parser);
+			str = parser_gbar_group(parser);
 			if (str) {
-				info->pd.info.script.group = strdup(str);
-				if (!info->pd.info.script.group) {
+				info->gbar.info.script.group = strdup(str);
+				if (!info->gbar.info.script.group) {
 					ErrPrint("Heap: %s\n", strerror(errno));
-					DbgFree(info->pd.info.script.path);
-					if (info->lb.type == LB_TYPE_SCRIPT) {
-						DbgFree(info->lb.info.script.path);
-						DbgFree(info->lb.info.script.group);
+					DbgFree(info->gbar.info.script.path);
+					if (info->dbox.type == DBOX_TYPE_SCRIPT) {
+						DbgFree(info->dbox.info.script.path);
+						DbgFree(info->dbox.info.script.group);
 					}
 					parser_unload(parser);
-					return LB_STATUS_ERROR_MEMORY;
+					return DBOX_STATUS_ERROR_OUT_OF_MEMORY;
 				}
 			}
 		}
 	}
 
 	str = parser_script(parser);
-	str = str ? str : DEFAULT_SCRIPT;
+	str = str ? str : DYNAMICBOX_CONF_DEFAULT_SCRIPT;
 	info->script = strdup(str);
 	if (!info->script) {
 		ErrPrint("Heap: %s\n", strerror(errno));
-		if (info->pd.type == PD_TYPE_SCRIPT) {
-			DbgFree(info->pd.info.script.path);
-			DbgFree(info->pd.info.script.group);
+		if (info->gbar.type == GBAR_TYPE_SCRIPT) {
+			DbgFree(info->gbar.info.script.path);
+			DbgFree(info->gbar.info.script.group);
 		}
 
-		if (info->lb.type == LB_TYPE_SCRIPT) {
-			DbgFree(info->lb.info.script.path);
-			DbgFree(info->lb.info.script.group);
+		if (info->dbox.type == DBOX_TYPE_SCRIPT) {
+			DbgFree(info->dbox.info.script.path);
+			DbgFree(info->dbox.info.script.group);
 		}
 
 		parser_unload(parser);
-		return LB_STATUS_ERROR_MEMORY;
+		return DBOX_STATUS_ERROR_OUT_OF_MEMORY;
 	}
 
 	str = parser_abi(parser);
-	str = str ? str : DEFAULT_ABI;
+	str = str ? str : DYNAMICBOX_CONF_DEFAULT_ABI;
 	info->abi = strdup(str);
 	if (!info->abi) {
 		ErrPrint("Heap: %s\n", strerror(errno));
 		DbgFree(info->script);
-		if (info->pd.type == PD_TYPE_SCRIPT) {
-			DbgFree(info->pd.info.script.path);
-			DbgFree(info->pd.info.script.group);
+		if (info->gbar.type == GBAR_TYPE_SCRIPT) {
+			DbgFree(info->gbar.info.script.path);
+			DbgFree(info->gbar.info.script.group);
 		}
 
-		if (info->lb.type == LB_TYPE_SCRIPT) {
-			DbgFree(info->lb.info.script.path);
-			DbgFree(info->lb.info.script.group);
+		if (info->dbox.type == DBOX_TYPE_SCRIPT) {
+			DbgFree(info->dbox.info.script.path);
+			DbgFree(info->dbox.info.script.group);
 		}
 		parser_unload(parser);
-		return LB_STATUS_ERROR_MEMORY;
+		return DBOX_STATUS_ERROR_OUT_OF_MEMORY;
 	}
 
-	info->lb.timeout = parser_timeout(parser);
+	info->dbox.timeout = parser_timeout(parser);
 	info->network = parser_network(parser);
 
-	info->lb.period = parser_period(parser);
-	if (info->lb.period < 0.0f) {
-		info->lb.period = 0.0f;
-	} else if (info->lb.period > 0.0f && info->lb.period < MINIMUM_PERIOD) {
-		info->lb.period = MINIMUM_PERIOD;
+	info->dbox.period = parser_period(parser);
+	if (info->dbox.period < 0.0f) {
+		info->dbox.period = 0.0f;
+	} else if (info->dbox.period > 0.0f && info->dbox.period < DYNAMICBOX_CONF_MINIMUM_PERIOD) {
+		info->dbox.period = DYNAMICBOX_CONF_MINIMUM_PERIOD;
 	}
 
-	info->lb.size_list = parser_size(parser);
+	info->dbox.size_list = parser_size(parser);
 
 	str = parser_auto_launch(parser);
 	str = str ? str : "";
-	info->lb.auto_launch = strdup(str);
-	if (!info->lb.auto_launch) {
+	info->dbox.auto_launch = strdup(str);
+	if (!info->dbox.auto_launch) {
 		ErrPrint("Heap: %s\n", strerror(errno));
 		DbgFree(info->abi);
 		DbgFree(info->script);
-		if (info->pd.type == PD_TYPE_SCRIPT) {
-			DbgFree(info->pd.info.script.path);
-			DbgFree(info->pd.info.script.group);
+		if (info->gbar.type == GBAR_TYPE_SCRIPT) {
+			DbgFree(info->gbar.info.script.path);
+			DbgFree(info->gbar.info.script.group);
 		}
 
-		if (info->lb.type == LB_TYPE_SCRIPT) {
-			DbgFree(info->lb.info.script.path);
-			DbgFree(info->lb.info.script.group);
+		if (info->dbox.type == DBOX_TYPE_SCRIPT) {
+			DbgFree(info->dbox.info.script.path);
+			DbgFree(info->dbox.info.script.group);
 		}
 		parser_unload(parser);
-		return LB_STATUS_ERROR_MEMORY;
+		return DBOX_STATUS_ERROR_OUT_OF_MEMORY;
 	}
 
 	info->secured = parser_secured(parser);
-	info->lb.pinup = parser_pinup(parser);
+	info->dbox.pinup = parser_pinup(parser);
 
-	parser_get_pdsize(parser, &info->pd.width, &info->pd.height);
+	parser_get_gbar_size(parser, &info->gbar.width, &info->gbar.height);
 
 	group = parser_group_str(parser);
-	if (group && group_add_livebox(group, info->lbid) < 0) {
-		ErrPrint("Failed to build cluster tree for %s{%s}\n", info->lbid, group);
+	if (group && group_add_dynamicbox(group, info->dbox_id) < 0) {
+		ErrPrint("Failed to build cluster tree for %s{%s}\n", info->dbox_id, group);
 	}
 
 	parser_unload(parser);
-	return LB_STATUS_SUCCESS;
+	return DBOX_STATUS_ERROR_NONE;
 }
 
-HAPI struct pkg_info *package_create(const char *pkgid, const char *lbid)
+HAPI struct pkg_info *package_create(const char *pkgid, const char *dbox_id)
 {
 	struct pkg_info *pkginfo;
 
@@ -507,18 +512,11 @@ HAPI struct pkg_info *package_create(const char *pkgid, const char *lbid)
 		return NULL;
 	}
 
-	pkginfo->lbid = io_livebox_pkgname(lbid);
-	if (!pkginfo->lbid) {
+	pkginfo->dbox_id = io_dynamicbox_pkgname(dbox_id);
+	if (!pkginfo->dbox_id) {
 		ErrPrint("Failed to get pkgname, fallback to fs checker\n");
-		if (util_validate_livebox_package(lbid) < 0) {
-			ErrPrint("Invalid package name: %s\n", lbid);
-			DbgFree(pkginfo->pkgid);
-			DbgFree(pkginfo);
-			return NULL;
-		}
-
-		pkginfo->lbid = strdup(lbid);
-		if (!pkginfo->lbid) {
+		pkginfo->dbox_id = strdup(dbox_id);
+		if (!pkginfo->dbox_id) {
 			ErrPrint("Heap: %s\n", strerror(errno));
 			DbgFree(pkginfo->pkgid);
 			DbgFree(pkginfo);
@@ -530,7 +528,7 @@ HAPI struct pkg_info *package_create(const char *pkgid, const char *lbid)
 		ErrPrint("Failed to load DB, fall back to conf file loader\n");
 		if (load_conf(pkginfo) < 0) {
 			ErrPrint("Failed to initiate the conf file loader\n");
-			DbgFree(pkginfo->lbid);
+			DbgFree(pkginfo->dbox_id);
 			DbgFree(pkginfo->pkgid);
 			DbgFree(pkginfo);
 			return NULL;
@@ -547,7 +545,7 @@ HAPI struct pkg_info *package_create(const char *pkgid, const char *lbid)
 HAPI int package_destroy(struct pkg_info *info)
 {
 	package_unref(info);
-	return LB_STATUS_SUCCESS;
+	return DBOX_STATUS_ERROR_NONE;
 }
 
 HAPI Eina_List *package_ctx_info(struct pkg_info *pkginfo)
@@ -565,49 +563,45 @@ HAPI void package_del_ctx_info(struct pkg_info *pkginfo, struct context_info *in
 	pkginfo->ctx_list = eina_list_remove(pkginfo->ctx_list, info);
 }
 
-HAPI char *package_lb_pkgname(const char *pkgname)
+HAPI char *package_dbox_pkgname(const char *pkgname)
 {
-	char *lbid;
+	char *dbox_id;
 
-	lbid = io_livebox_pkgname(pkgname);
-	if (!lbid) {
-		if (util_validate_livebox_package(pkgname) < 0) {
-			return NULL;
-		}
-
-		lbid = strdup(pkgname);
-		if (!lbid) {
+	dbox_id = io_dynamicbox_pkgname(pkgname);
+	if (!dbox_id) {
+		dbox_id = strdup(pkgname);
+		if (!dbox_id) {
 			ErrPrint("Heap: %s\n", strerror(errno));
 			return NULL;
 		}
 	}
 
-	return lbid;
+	return dbox_id;
 }
 
-HAPI int package_is_lb_pkgname(const char *pkgname)
+HAPI int package_is_dbox_pkgname(const char *pkgname)
 {
-	char *lbid;
+	char *dbox_id;
 	int ret;
 
-	lbid = package_lb_pkgname(pkgname);
-	ret = !!lbid;
-	DbgFree(lbid);
+	dbox_id = package_dbox_pkgname(pkgname);
+	ret = !!dbox_id;
+	DbgFree(dbox_id);
 
 	return ret;
 }
 
-HAPI struct pkg_info *package_find(const char *lbid)
+HAPI struct pkg_info *package_find(const char *dbox_id)
 {
 	Eina_List *l;
 	struct pkg_info *info;
 
-	if (!lbid) {
+	if (!dbox_id) {
 		return NULL;
 	}
 
 	EINA_LIST_FOREACH(s_info.pkg_list, l, info) {
-		if (!strcmp(info->lbid, lbid)) {
+		if (!strcmp(info->dbox_id, dbox_id)) {
 			return info;
 		}
 	}
@@ -615,15 +609,15 @@ HAPI struct pkg_info *package_find(const char *lbid)
 	return NULL;
 }
 
-HAPI struct inst_info *package_find_instance_by_id(const char *lbid, const char *id)
+HAPI struct inst_info *package_find_instance_by_id(const char *dbox_id, const char *id)
 {
 	Eina_List *l;
 	struct inst_info *inst;
 	struct pkg_info *info;
 
-	info = package_find(lbid);
+	info = package_find(dbox_id);
 	if (!info) {
-		ErrPrint("Package %s is not exists\n", lbid);
+		ErrPrint("Package %s is not exists\n", dbox_id);
 		return NULL;
 	}
 
@@ -636,15 +630,15 @@ HAPI struct inst_info *package_find_instance_by_id(const char *lbid, const char 
 	return NULL;
 }
 
-HAPI struct inst_info *package_find_instance_by_timestamp(const char *lbid, double timestamp)
+HAPI struct inst_info *package_find_instance_by_timestamp(const char *dbox_id, double timestamp)
 {
 	Eina_List *l;
 	struct inst_info *inst;
 	struct pkg_info *info;
 
-	info = package_find(lbid);
+	info = package_find(dbox_id);
 	if (!info) {
-		ErrPrint("Package %s is not exists\n", lbid);
+		ErrPrint("Package %s is not exists\n", dbox_id);
 		return NULL;
 	}
 
@@ -660,27 +654,27 @@ HAPI struct inst_info *package_find_instance_by_timestamp(const char *lbid, doub
 HAPI int package_dump_fault_info(struct pkg_info *info)
 {
 	if (!info->fault_info) {
-		return LB_STATUS_ERROR_NOT_EXIST;
+		return DBOX_STATUS_ERROR_NOT_EXIST;
 	}
 
 	CRITICAL_LOG("=============\n");
 	CRITICAL_LOG("faulted at %lf\n", info->fault_info->timestamp);
-	CRITICAL_LOG("Package: %s\n", info->lbid);
+	CRITICAL_LOG("Package: %s\n", info->dbox_id);
 	CRITICAL_LOG("Function: %s\n", info->fault_info->function);
 	CRITICAL_LOG("InstanceID: %s\n", info->fault_info->filename);
-	return LB_STATUS_SUCCESS;
+	return DBOX_STATUS_ERROR_NONE;
 }
 
 HAPI int package_get_fault_info(struct pkg_info *info, double *timestamp, const char **filename, const char **function)
 {
 	if (!info->fault_info) {
-		return LB_STATUS_ERROR_NOT_EXIST;
+		return DBOX_STATUS_ERROR_NOT_EXIST;
 	}
 
 	*timestamp = info->fault_info->timestamp;
 	*filename = info->fault_info->filename;
 	*function = info->fault_info->function;
-	return LB_STATUS_SUCCESS;
+	return DBOX_STATUS_ERROR_NONE;
 }
 
 HAPI int package_set_fault_info(struct pkg_info *info, double timestamp, const char *filename, const char *function)
@@ -692,7 +686,7 @@ HAPI int package_set_fault_info(struct pkg_info *info, double timestamp, const c
 	fault = calloc(1, sizeof(*fault));
 	if (!fault) {
 		ErrPrint("Heap: %s\n", strerror(errno));
-		return LB_STATUS_ERROR_MEMORY;
+		return DBOX_STATUS_ERROR_OUT_OF_MEMORY;
 	}
 
 	fault->timestamp = timestamp;
@@ -707,7 +701,7 @@ HAPI int package_set_fault_info(struct pkg_info *info, double timestamp, const c
 	if (!fault->filename) {
 		ErrPrint("Heap: %s\n", strerror(errno));
 		DbgFree(fault);
-		return LB_STATUS_ERROR_MEMORY;
+		return DBOX_STATUS_ERROR_OUT_OF_MEMORY;
 	}
 
 	fault->function = strdup(function);
@@ -715,27 +709,27 @@ HAPI int package_set_fault_info(struct pkg_info *info, double timestamp, const c
 		ErrPrint("Heap: %s\n", strerror(errno));
 		DbgFree(fault->filename);
 		DbgFree(fault);
-		return LB_STATUS_ERROR_MEMORY;
+		return DBOX_STATUS_ERROR_OUT_OF_MEMORY;
 	}
 
 	info->fault_info = fault;
 	info->fault_count++;
-	return LB_STATUS_SUCCESS;
+	return DBOX_STATUS_ERROR_NONE;
 }
 
 HAPI int package_clear_fault(struct pkg_info *info)
 {
 	if (!info->fault_info) {
-		return LB_STATUS_ERROR_INVALID;
+		return DBOX_STATUS_ERROR_INVALID_PARAMETER;
 	}
-	
+
 	package_dump_fault_info(info);
 
 	DbgFree(info->fault_info->function);
 	DbgFree(info->fault_info->filename);
 	DbgFree(info->fault_info);
 	info->fault_info = NULL;
-	return LB_STATUS_SUCCESS;
+	return DBOX_STATUS_ERROR_NONE;
 }
 
 HAPI const int const package_is_fault(const struct pkg_info *info)
@@ -750,22 +744,22 @@ HAPI struct slave_node * const package_slave(const struct pkg_info *info)
 
 HAPI const int const package_timeout(const struct pkg_info *info)
 {
-	return info->lb.timeout;
+	return info->dbox.timeout;
 }
 
 HAPI void package_set_timeout(struct pkg_info *info, int timeout)
 {
-	info->lb.timeout = timeout;
+	info->dbox.timeout = timeout;
 }
 
 HAPI const double const package_period(const struct pkg_info *info)
 {
-	return info->lb.period;
+	return info->dbox.period;
 }
 
 HAPI void package_set_period(struct pkg_info *info, double period)
 {
-	info->lb.period = period;
+	info->dbox.period = period;
 }
 
 HAPI const int const package_secured(const struct pkg_info *info)
@@ -790,12 +784,12 @@ HAPI int package_set_script(struct pkg_info *info, const char *script)
 	tmp = strdup(script);
 	if (!tmp) {
 		ErrPrint("Heap: %s\n", strerror(errno));
-		return LB_STATUS_ERROR_MEMORY;
+		return DBOX_STATUS_ERROR_OUT_OF_MEMORY;
 	}
 
 	DbgFree(info->script);
 	info->script = tmp;
-	return LB_STATUS_SUCCESS;
+	return DBOX_STATUS_ERROR_NONE;
 }
 
 HAPI const char * const package_abi(const struct pkg_info *info)
@@ -809,139 +803,139 @@ HAPI int package_set_abi(struct pkg_info *info, const char *abi)
 	tmp = strdup(abi);
 	if (!tmp) {
 		ErrPrint("Heap: %s\n", strerror(errno));
-		return LB_STATUS_ERROR_MEMORY;
+		return DBOX_STATUS_ERROR_OUT_OF_MEMORY;
 	}
 
 	DbgFree(info->abi);
 	info->abi = tmp;
-	return LB_STATUS_SUCCESS;
+	return DBOX_STATUS_ERROR_NONE;
 }
 
-HAPI const char * const package_lb_path(const struct pkg_info *info)
+HAPI const char * const package_dbox_path(const struct pkg_info *info)
 {
-	if (info->lb.type != LB_TYPE_SCRIPT) {
+	if (info->dbox.type != DBOX_TYPE_SCRIPT) {
 		return NULL;
 	}
 
-	return info->lb.info.script.path;
+	return info->dbox.info.script.path;
 }
 
-HAPI int package_set_lb_path(struct pkg_info *info, const char *path)
+HAPI int package_set_dbox_path(struct pkg_info *info, const char *path)
 {
 	char *tmp;
 
-	if (info->lb.type != LB_TYPE_SCRIPT) {
-		return LB_STATUS_ERROR_INVALID;
+	if (info->dbox.type != DBOX_TYPE_SCRIPT) {
+		return DBOX_STATUS_ERROR_INVALID_PARAMETER;
 	}
 
 	tmp = strdup(path);
 	if (!tmp) {
 		ErrPrint("Heap: %s\n", strerror(errno));
-		return LB_STATUS_ERROR_MEMORY;
+		return DBOX_STATUS_ERROR_OUT_OF_MEMORY;
 	}
 
-	DbgFree(info->lb.info.script.path);
-	info->lb.info.script.path = tmp;
-	return LB_STATUS_SUCCESS;
+	DbgFree(info->dbox.info.script.path);
+	info->dbox.info.script.path = tmp;
+	return DBOX_STATUS_ERROR_NONE;
 }
 
-HAPI const char * const package_lb_group(const struct pkg_info *info)
+HAPI const char * const package_dbox_group(const struct pkg_info *info)
 {
-	if (info->lb.type != LB_TYPE_SCRIPT) {
+	if (info->dbox.type != DBOX_TYPE_SCRIPT) {
 		return NULL;
 	}
 
-	return info->lb.info.script.group;
+	return info->dbox.info.script.group;
 }
 
-HAPI int package_set_lb_group(struct pkg_info *info, const char *group)
+HAPI int package_set_dbox_group(struct pkg_info *info, const char *group)
 {
 	char *tmp;
 
-	if (info->lb.type != LB_TYPE_SCRIPT) {
-		return LB_STATUS_ERROR_INVALID;
+	if (info->dbox.type != DBOX_TYPE_SCRIPT) {
+		return DBOX_STATUS_ERROR_INVALID_PARAMETER;
 	}
 
 	tmp = strdup(group);
 	if (!tmp) {
 		ErrPrint("Heap: %s\n", strerror(errno));
-		return LB_STATUS_ERROR_MEMORY;
+		return DBOX_STATUS_ERROR_OUT_OF_MEMORY;
 	}
 
-	DbgFree(info->lb.info.script.group);
-	info->lb.info.script.group = tmp;
-	return LB_STATUS_SUCCESS;
+	DbgFree(info->dbox.info.script.group);
+	info->dbox.info.script.group = tmp;
+	return DBOX_STATUS_ERROR_NONE;
 }
 
-HAPI const char * const package_pd_path(const struct pkg_info *info)
+HAPI const char * const package_gbar_path(const struct pkg_info *info)
 {
-	if (info->pd.type != PD_TYPE_SCRIPT) {
+	if (info->gbar.type != GBAR_TYPE_SCRIPT) {
 		return NULL;
 	}
 
-	return info->pd.info.script.path;
+	return info->gbar.info.script.path;
 }
 
-HAPI int package_set_pd_path(struct pkg_info *info, const char *path)
+HAPI int package_set_gbar_path(struct pkg_info *info, const char *path)
 {
 	char *tmp;
 
-	if (info->pd.type != PD_TYPE_SCRIPT) {
-		return LB_STATUS_ERROR_INVALID;
+	if (info->gbar.type != GBAR_TYPE_SCRIPT) {
+		return DBOX_STATUS_ERROR_INVALID_PARAMETER;
 	}
 
 	tmp = strdup(path);
 	if (!tmp) {
 		ErrPrint("Heap: %s\n", strerror(errno));
-		return LB_STATUS_ERROR_MEMORY;
+		return DBOX_STATUS_ERROR_OUT_OF_MEMORY;
 	}
 
-	DbgFree(info->pd.info.script.path);
-	info->pd.info.script.path = tmp;
-	return LB_STATUS_SUCCESS;
+	DbgFree(info->gbar.info.script.path);
+	info->gbar.info.script.path = tmp;
+	return DBOX_STATUS_ERROR_NONE;
 }
 
-HAPI const char * const package_pd_group(const struct pkg_info *info)
+HAPI const char * const package_gbar_group(const struct pkg_info *info)
 {
-	if (info->pd.type != PD_TYPE_SCRIPT) {
+	if (info->gbar.type != GBAR_TYPE_SCRIPT) {
 		return NULL;
 	}
 
-	return info->pd.info.script.group;
+	return info->gbar.info.script.group;
 }
 
-HAPI int package_set_pd_group(struct pkg_info *info, const char *group)
+HAPI int package_set_gbar_group(struct pkg_info *info, const char *group)
 {
 	char *tmp;
 
-	if (info->pd.type != PD_TYPE_SCRIPT) {
-		return LB_STATUS_ERROR_INVALID;
+	if (info->gbar.type != GBAR_TYPE_SCRIPT) {
+		return DBOX_STATUS_ERROR_INVALID_PARAMETER;
 	}
 
 	tmp = strdup(group);
 	if (!tmp) {
 		ErrPrint("Heap: %s\n", strerror(errno));
-		return LB_STATUS_ERROR_MEMORY;
+		return DBOX_STATUS_ERROR_OUT_OF_MEMORY;
 	}
 
-	DbgFree(info->pd.info.script.group);
-	info->pd.info.script.group = tmp;
-	return LB_STATUS_SUCCESS;
+	DbgFree(info->gbar.info.script.group);
+	info->gbar.info.script.group = tmp;
+	return DBOX_STATUS_ERROR_NONE;
 }
 
 HAPI const int const package_pinup(const struct pkg_info *info)
 {
-	return info->lb.pinup;
+	return info->dbox.pinup;
 }
 
 HAPI void package_set_pinup(struct pkg_info *info, int pinup)
 {
-	info->lb.pinup = pinup;
+	info->dbox.pinup = pinup;
 }
 
 HAPI const char * const package_auto_launch(const struct pkg_info *info)
 {
-	return info->lb.auto_launch;
+	return info->dbox.auto_launch;
 }
 
 HAPI void package_set_auto_launch(struct pkg_info *info, const char *auto_launch)
@@ -950,8 +944,8 @@ HAPI void package_set_auto_launch(struct pkg_info *info, const char *auto_launch
 		auto_launch = "";
 	}
 
-	info->lb.auto_launch = strdup(auto_launch);
-	if (!info->lb.auto_launch) {
+	info->dbox.auto_launch = strdup(auto_launch);
+	if (!info->dbox.auto_launch) {
 		ErrPrint("Heap: %s\n", strerror(errno));
 		return;
 	}
@@ -959,32 +953,32 @@ HAPI void package_set_auto_launch(struct pkg_info *info, const char *auto_launch
 
 HAPI const unsigned int const package_size_list(const struct pkg_info *info)
 {
-	return info->lb.size_list;
+	return info->dbox.size_list;
 }
 
 HAPI void package_set_size_list(struct pkg_info *info, unsigned int size_list)
 {
-	info->lb.size_list = size_list;
+	info->dbox.size_list = size_list;
 }
 
-HAPI const int const package_pd_width(const struct pkg_info *info)
+HAPI const int const package_gbar_width(const struct pkg_info *info)
 {
-	return info->pd.width;
+	return info->gbar.width;
 }
 
-HAPI void package_set_pd_width(struct pkg_info *info, int width)
+HAPI void package_set_gbar_width(struct pkg_info *info, int width)
 {
-	info->pd.width = width;
+	info->gbar.width = width;
 }
 
-HAPI const int const package_pd_height(const struct pkg_info *info)
+HAPI const int const package_gbar_height(const struct pkg_info *info)
 {
-	return info->pd.height;
+	return info->gbar.height;
 }
 
-HAPI void package_set_pd_height(struct pkg_info *info, int height)
+HAPI void package_set_gbar_height(struct pkg_info *info, int height)
 {
-	info->pd.height = height;
+	info->gbar.height = height;
 }
 
 HAPI struct pkg_info * const package_ref(struct pkg_info *info)
@@ -1014,19 +1008,19 @@ HAPI const int const package_refcnt(const struct pkg_info *info)
 	return info->refcnt;
 }
 
-HAPI const enum lb_type package_lb_type(const struct pkg_info *info)
+HAPI const enum dynamicbox_dbox_type package_dbox_type(const struct pkg_info *info)
 {
-	return info ? info->lb.type : LB_TYPE_NONE;
+	return info ? info->dbox.type : DBOX_TYPE_NONE;
 }
 
-HAPI void package_set_lb_type(struct pkg_info *info, enum lb_type type)
+HAPI void package_set_dbox_type(struct pkg_info *info, enum dynamicbox_dbox_type type)
 {
-	info->lb.type = type;
+	info->dbox.type = type;
 }
 
 HAPI const char * const package_libexec(struct pkg_info *info)
 {
-	return info->lb.libexec;
+	return info->dbox.libexec;
 }
 
 HAPI int package_set_libexec(struct pkg_info *info, const char *libexec)
@@ -1036,12 +1030,12 @@ HAPI int package_set_libexec(struct pkg_info *info, const char *libexec)
 	tmp = strdup(libexec);
 	if (!tmp) {
 		ErrPrint("Heap: %s\n", strerror(errno));
-		return LB_STATUS_ERROR_MEMORY;
+		return DBOX_STATUS_ERROR_OUT_OF_MEMORY;
 	}
 
-	DbgFree(info->lb.libexec);
-	info->lb.libexec = tmp;
-	return LB_STATUS_SUCCESS;
+	DbgFree(info->dbox.libexec);
+	info->dbox.libexec = tmp;
+	return DBOX_STATUS_ERROR_NONE;
 }
 
 HAPI int package_network(struct pkg_info *info)
@@ -1054,14 +1048,48 @@ HAPI void package_set_network(struct pkg_info *info, int network)
 	info->network = network;
 }
 
-HAPI const enum pd_type const package_pd_type(const struct pkg_info *info)
+HAPI void package_set_direct_input(struct pkg_info *info, int direct_input)
 {
-	return info ? info->pd.type : PD_TYPE_NONE;
+	info->direct_input = direct_input;
 }
 
-HAPI void package_set_pd_type(struct pkg_info *info, enum pd_type type)
+HAPI int package_direct_input(const struct pkg_info *info)
 {
-	info->pd.type = type;
+	return info->direct_input;
+}
+
+HAPI const enum dynamicbox_gbar_type const package_gbar_type(const struct pkg_info *info)
+{
+	return info ? info->gbar.type : GBAR_TYPE_NONE;
+}
+
+HAPI void package_set_gbar_type(struct pkg_info *info, enum dynamicbox_gbar_type type)
+{
+	info->gbar.type = type;
+}
+
+HAPI const char *package_hw_acceleration(struct pkg_info *info)
+{
+	return info->hw_acceleration;
+}
+
+HAPI int package_set_hw_acceleration(struct pkg_info *info, const char *hw_acceleration)
+{
+	char *tmp;
+
+	if (!hw_acceleration || !info) {
+		return DBOX_STATUS_ERROR_INVALID_PARAMETER;
+	}
+
+	tmp = strdup(hw_acceleration);
+	if (!tmp) {
+		ErrPrint("strdup: %s\n", strerror(errno));
+		return DBOX_STATUS_ERROR_OUT_OF_MEMORY;
+	}
+
+	DbgFree(info->hw_acceleration);
+	info->hw_acceleration = tmp;
+	return DBOX_STATUS_ERROR_NONE;
 }
 
 /*!
@@ -1069,41 +1097,20 @@ HAPI void package_set_pd_type(struct pkg_info *info, enum pd_type type)
  * Add the instance to the package info.
  * If a package has no slave, assign a new slave.
  */
-static inline int assign_new_slave(struct pkg_info *info)
+static inline int assign_new_slave(const char *slave_pkgname, struct pkg_info *info)
 {
 	char *s_name;
-	char *s_pkgname;
-	const char *tmp;
 
 	s_name = util_slavename();
 	if (!s_name) {
 		ErrPrint("Failed to get a new slave name\n");
-		return LB_STATUS_ERROR_FAULT;
+		return DBOX_STATUS_ERROR_FAULT;
 	}
 
-	tmp = abi_find_slave(info->abi);
-	if (!tmp) {
-		DbgFree(s_name);
-		ErrPrint("Failed to find a proper pkgname of a slave\n");
-		return LB_STATUS_ERROR_INVALID;
-	}
-
-	s_pkgname = util_replace_string(tmp, REPLACE_TAG_APPID, info->lbid);
-	if (!s_pkgname) {
-		DbgPrint("Failed to get replaced string\n");
-		s_pkgname = strdup(tmp);
-		if (!s_pkgname) {
-			ErrPrint("Heap: %s\n", strerror(errno));
-			DbgFree(s_name);
-			return LB_STATUS_ERROR_MEMORY;
-		}
-	}
-
-	DbgPrint("New slave[%s] is assigned for %s (using %s / abi[%s])\n", s_name, info->lbid, s_pkgname, info->abi);
-	info->slave = slave_create(s_name, info->secured, info->abi, s_pkgname, info->network);
+	DbgPrint("New slave[%s] is assigned for %s (using %s / abi[%s] / accel[%s])\n", s_name, info->dbox_id, slave_pkgname, info->abi, info->hw_acceleration);
+	info->slave = slave_create(s_name, info->secured, info->abi, slave_pkgname, info->network, info->hw_acceleration);
 
 	DbgFree(s_name);
-	DbgFree(s_pkgname);
 
 	if (!info->slave) {
 		/*!
@@ -1113,29 +1120,37 @@ static inline int assign_new_slave(struct pkg_info *info)
 		 * If the list method couldn't find an "info" from the list,
 		 * it just do nothing so I'll leave this.
 		 */
-		return LB_STATUS_ERROR_FAULT;
+		return DBOX_STATUS_ERROR_FAULT;
 	}
 	/*!
 	 * \note
 	 * Slave is not activated yet.
 	 */
-	return LB_STATUS_SUCCESS;
+	return DBOX_STATUS_ERROR_NONE;
 }
 
 HAPI int package_add_instance(struct pkg_info *info, struct inst_info *inst)
 {
 	if (!info->inst_list) {
-		info->slave = slave_find_available(info->abi, info->secured, info->network);
+		char *slave_pkgname;
 
+		slave_pkgname = slave_package_name(info->abi, info->dbox_id);
+		if (!slave_pkgname) {
+			return DBOX_STATUS_ERROR_OUT_OF_MEMORY;
+		}
+
+		info->slave = slave_find_available(slave_pkgname, info->abi, info->secured, info->network, info->hw_acceleration);
 		if (!info->slave) {
 			int ret;
 
-			ret = assign_new_slave(info);
+			ret = assign_new_slave(slave_pkgname, info);
+			DbgFree(slave_pkgname);
 			if (ret < 0) {
 				return ret;
 			}
 		} else {
-			DbgPrint("Slave %s is used for %s\n", slave_name(info->slave), info->lbid);
+			DbgFree(slave_pkgname);
+			DbgPrint("Slave %s is used for %s\n", slave_name(info->slave), info->dbox_id);
 		}
 
 		(void)slave_ref(info->slave);
@@ -1144,7 +1159,7 @@ HAPI int package_add_instance(struct pkg_info *info, struct inst_info *inst)
 		(void)slave_event_callback_add(info->slave, SLAVE_EVENT_ACTIVATE, slave_activated_cb, info);
 		(void)slave_event_callback_add(info->slave, SLAVE_EVENT_FAULT, slave_fault_cb, info);
 
-		if (info->secured) {
+		if (info->secured || (DBOX_IS_INHOUSE(package_abi(info)) && DYNAMICBOX_CONF_SLAVE_LIMIT_TO_TTL)) {
 			(void)slave_event_callback_add(info->slave, SLAVE_EVENT_PAUSE, slave_paused_cb, info);
 			(void)slave_event_callback_add(info->slave, SLAVE_EVENT_RESUME, slave_resumed_cb, info);
 
@@ -1162,7 +1177,7 @@ HAPI int package_add_instance(struct pkg_info *info, struct inst_info *inst)
 	}
 
 	info->inst_list = eina_list_append(info->inst_list, inst);
-	return LB_STATUS_SUCCESS;
+	return DBOX_STATUS_ERROR_NONE;
 }
 
 HAPI int package_del_instance(struct pkg_info *info, struct inst_info *inst)
@@ -1170,7 +1185,7 @@ HAPI int package_del_instance(struct pkg_info *info, struct inst_info *inst)
 	info->inst_list = eina_list_remove(info->inst_list, inst);
 
 	if (info->inst_list) {
-		return LB_STATUS_SUCCESS;
+		return DBOX_STATUS_ERROR_NONE;
 	}
 
 	if (info->slave) {
@@ -1180,7 +1195,7 @@ HAPI int package_del_instance(struct pkg_info *info, struct inst_info *inst)
 		slave_event_callback_del(info->slave, SLAVE_EVENT_DEACTIVATE, slave_deactivated_cb, info);
 		slave_event_callback_del(info->slave, SLAVE_EVENT_ACTIVATE, slave_activated_cb, info);
 
-		if (info->secured) {
+		if (info->secured || (DBOX_IS_INHOUSE(package_abi(info)) && DYNAMICBOX_CONF_SLAVE_LIMIT_TO_TTL)) {
 			slave_event_callback_del(info->slave, SLAVE_EVENT_PAUSE, slave_paused_cb, info);
 			slave_event_callback_del(info->slave, SLAVE_EVENT_RESUME, slave_resumed_cb, info);
 
@@ -1196,7 +1211,7 @@ HAPI int package_del_instance(struct pkg_info *info, struct inst_info *inst)
 		package_destroy(info);
 	}
 
-	return LB_STATUS_SUCCESS;
+	return DBOX_STATUS_ERROR_NONE;
 }
 
 HAPI Eina_List *package_instance_list(struct pkg_info *info)
@@ -1214,7 +1229,7 @@ static int client_created_cb(struct client_node *client, void *data)
 
 	EINA_LIST_FOREACH(s_info.pkg_list, l, info) {
 		if (info->fault_info) {
-			fault_unicast_info(client, info->lbid, info->fault_info->filename, info->fault_info->function);
+			fault_unicast_info(client, info->dbox_id, info->fault_info->filename, info->fault_info->function);
 			continue;
 		}
 
@@ -1235,7 +1250,7 @@ static int client_created_cb(struct client_node *client, void *data)
 					 */
 					if (client_is_subscribed(client, instance_cluster(inst), instance_category(inst))) {
 						instance_unicast_created_event(inst, client);
-						DbgPrint("(Subscribed) Created package: %s\n", info->lbid);
+						DbgPrint("(Subscribed) Created package: %s\n", info->dbox_id);
 					}
 				}
 
@@ -1251,17 +1266,17 @@ static int client_created_cb(struct client_node *client, void *data)
 	return 0;
 }
 
-static int io_uninstall_cb(const char *pkgid, const char *lbid, int prime, void *data)
+static int io_uninstall_cb(const char *pkgid, const char *dbox_id, int prime, void *data)
 {
 	struct pkg_info *info;
 	Eina_List *l;
 	Eina_List *n;
 	struct inst_info *inst;
 
-	DbgPrint("Package %s is uninstalled\n", lbid);
-	info = package_find(lbid);
+	DbgPrint("Package %s is uninstalled\n", dbox_id);
+	info = package_find(dbox_id);
 	if (!info) {
-		DbgPrint("%s is not yet loaded\n", lbid);
+		DbgPrint("%s is not yet loaded\n", dbox_id);
 		return 0;
 	}
 
@@ -1275,7 +1290,7 @@ static int io_uninstall_cb(const char *pkgid, const char *lbid, int prime, void 
 	 */
 	if (info->inst_list) {
 		EINA_LIST_FOREACH_SAFE(info->inst_list, l, n, inst) {
-			instance_destroy(inst, INSTANCE_DESTROY_UNINSTALL);
+			instance_destroy(inst, DBOX_DESTROY_TYPE_UNINSTALL);
 		}
 	} else {
 		package_destroy(info);
@@ -1296,9 +1311,9 @@ static inline void reload_package_info(struct pkg_info *info)
 
 	DbgPrint("Already exists, try to update it\n");
 
-	old_period = info->lb.period;
+	old_period = info->dbox.period;
 
-	group_del_livebox(info->lbid);
+	group_del_dynamicbox(info->dbox_id);
 	package_clear_fault(info);
 
 	/*!
@@ -1312,25 +1327,25 @@ static inline void reload_package_info(struct pkg_info *info)
 	 * Without "is_uninstalled", the package will be kept
 	 */
 	EINA_LIST_FOREACH_SAFE(info->inst_list, l, n, inst) {
-		width = instance_lb_width(inst);
-		height = instance_lb_height(inst);
-		size_type = livebox_service_size_type(width, height);
-		if (info->lb.size_list & size_type) {
+		width = instance_dbox_width(inst);
+		height = instance_dbox_height(inst);
+		size_type = dynamicbox_service_size_type(width, height);
+		if (info->dbox.size_list & size_type) {
 			if (instance_period(inst) == old_period) {
 				instance_reload_period(inst, package_period(info));
 			}
-			instance_reload(inst, INSTANCE_DESTROY_UPGRADE);
+			instance_reload(inst, DBOX_DESTROY_TYPE_UPGRADE);
 		} else {
-			instance_destroy(inst, INSTANCE_DESTROY_UNINSTALL);
+			instance_destroy(inst, DBOX_DESTROY_TYPE_UNINSTALL);
 		}
 	}
 }
 
-static int io_install_cb(const char *pkgid, const char *lbid, int prime, void *data)
+static int io_install_cb(const char *pkgid, const char *dbox_id, int prime, void *data)
 {
 	struct pkg_info *info;
 
-	info = package_find(lbid);
+	info = package_find(dbox_id);
 	if (info) {
 		/*!
 		 * Already exists. skip to create this.
@@ -1338,11 +1353,11 @@ static int io_install_cb(const char *pkgid, const char *lbid, int prime, void *d
 		return 0;
 	}
 
-	info = package_create(pkgid, lbid);
+	info = package_create(pkgid, dbox_id);
 	if (!info) {
-		ErrPrint("Failed to build an info %s\n", lbid);
+		ErrPrint("Failed to build an info %s\n", dbox_id);
 	} else {
-		DbgPrint("Livebox %s is built\n", lbid);
+		DbgPrint("Dynamicbox %s is built\n", dbox_id);
 	}
 
 	return 0;
@@ -1360,7 +1375,7 @@ static int uninstall_cb(const char *pkgname, enum pkgmgr_status status, double v
 
 	EINA_LIST_FOREACH_SAFE(s_info.pkg_list, l, n, info) {
 		if (!strcmp(info->pkgid, pkgname)) {
-			io_uninstall_cb(pkgname, info->lbid, -1, NULL);
+			io_uninstall_cb(pkgname, info->dbox_id, -1, NULL);
 		}
 	}
 
@@ -1379,28 +1394,28 @@ static int update_cb(const char *pkgname, enum pkgmgr_status status, double valu
 
 	EINA_LIST_FOREACH_SAFE(s_info.pkg_list, l, n, info) {
 		if (!strcmp(info->pkgid, pkgname)) {
-			DbgPrint("Update lbid: %s\n", info->lbid);
-			if (io_is_exists(info->lbid) == 1) {
+			DbgPrint("Update dbox_id: %s\n", info->dbox_id);
+			if (io_is_exists(info->dbox_id) == 1) {
 				reload_package_info(info);
 			} else {
-				io_uninstall_cb(pkgname, info->lbid, -1, NULL);
+				io_uninstall_cb(pkgname, info->dbox_id, -1, NULL);
 			}
 		}
 	}
 
-	(void)io_update_livebox_package(pkgname, io_install_cb, NULL);
+	(void)io_update_dynamicbox_package(pkgname, io_install_cb, NULL);
 	return 0;
 }
 
-static int crawling_liveboxes(const char *pkgid, const char *lbid, int prime, void *data)
+static int crawling_dynamicboxes(const char *pkgid, const char *dbox_id, int prime, void *data)
 {
-	if (package_find(lbid)) {
-		ErrPrint("Information of %s is already built\n", lbid);
+	if (package_find(dbox_id)) {
+		ErrPrint("Information of %s is already built\n", dbox_id);
 	} else {
 		struct pkg_info *info;
-		info = package_create(pkgid, lbid);
+		info = package_create(pkgid, dbox_id);
 		if (info) {
-			DbgPrint("[%s] information is built prime(%d)\n", lbid, prime);
+			DbgPrint("[%s] information is built prime(%d)\n", dbox_id, prime);
 		}
 	}
 
@@ -1416,7 +1431,7 @@ HAPI int package_init(void)
 	pkgmgr_add_event_callback(PKGMGR_EVENT_UNINSTALL, uninstall_cb, NULL);
 	pkgmgr_add_event_callback(PKGMGR_EVENT_UPDATE, update_cb, NULL);
 
-	io_crawling_liveboxes(crawling_liveboxes, NULL);
+	io_crawling_dynamicboxes(crawling_dynamicboxes, NULL);
 	return 0;
 }
 
@@ -1438,7 +1453,7 @@ HAPI int package_fini(void)
 	EINA_LIST_FOREACH_SAFE(s_info.pkg_list, p_l, p_n, info) {
 		EINA_LIST_FOREACH_SAFE(info->inst_list, i_l, i_n, inst) {
 			instance_state_reset(inst);
-			instance_destroy(inst, INSTANCE_DESTROY_TERMINATE);
+			instance_destroy(inst, DBOX_DESTROY_TYPE_TERMINATE);
 		}
 
 		package_destroy(info);
@@ -1458,7 +1473,7 @@ HAPI const char *package_find_by_secured_slave(struct slave_node *slave)
 
 	EINA_LIST_FOREACH(s_info.pkg_list, l, info) {
 		if (info->slave == slave) {
-			return info->lbid;
+			return info->dbox_id;
 		}
 	}
 
@@ -1467,7 +1482,7 @@ HAPI const char *package_find_by_secured_slave(struct slave_node *slave)
 
 HAPI const char * const package_name(const struct pkg_info *info)
 {
-	return info->lbid;
+	return info->dbox_id;
 }
 
 /*!
@@ -1522,12 +1537,12 @@ HAPI int package_alter_instances_to_client(struct client_node *client, enum alte
 					if (!instance_has_client(inst, client)) {
 						instance_unicast_created_event(inst, client);
 						instance_add_client(inst, client);
-						DbgPrint("(Subscribed) Created package: %s\n", info->lbid);
+						DbgPrint("(Subscribed) Created package: %s\n", info->dbox_id);
 					}
 					break;
 				case ALTER_DESTROY:
 					if (instance_has_client(inst, client)) {
-						instance_unicast_deleted_event(inst, client, LB_STATUS_SUCCESS);
+						instance_unicast_deleted_event(inst, client, DBOX_STATUS_ERROR_NONE);
 						instance_del_client(inst, client);
 					}
 					break;
@@ -1559,22 +1574,23 @@ HAPI int const package_fault_count(struct pkg_info *info)
 
 HAPI int package_is_enabled(const char *appid)
 {
-	ail_appinfo_h ai;
+	pkgmgrinfo_appinfo_h handle;
 	bool enabled;
 	int ret;
 
-	ret = ail_get_appinfo(appid, &ai);
-	if (ret != AIL_ERROR_OK) {
-		ErrPrint("Unable to get appinfo: %d\n", ret);
+	ret = pkgmgrinfo_appinfo_get_appinfo(appid, &handle);
+	if (ret != PMINFO_R_OK) {
+		ErrPrint("Failed to get info\n");
 		return 0;
 	}
 
-	if (ail_appinfo_get_bool(ai, AIL_PROP_X_SLP_ENABLED_BOOL, &enabled) != AIL_ERROR_OK) {
+	ret = pkgmgrinfo_appinfo_is_enabled(handle, &enabled);
+	if (ret != PMINFO_R_OK) {
+		ErrPrint("Failed to get info\n");
 		enabled = false;
 	}
 
-	ail_destroy_appinfo(ai);
-
+	pkgmgrinfo_appinfo_destroy_appinfo(handle);
 	return enabled == true;
 }
 
@@ -1588,7 +1604,7 @@ HAPI int package_faulted(struct pkg_info *pkg, int broadcast)
 	slave = package_slave(pkg);
 	if (!slave) {
 		ErrPrint("Package has no slave?\n");
-		return LB_STATUS_ERROR_FAULT;
+		return DBOX_STATUS_ERROR_FAULT;
 	}
 
 	/* Emulated fault routine */
@@ -1600,10 +1616,10 @@ HAPI int package_faulted(struct pkg_info *pkg, int broadcast)
 	DbgPrint("package: %s (forucely faulted %s)\n", package_name(pkg), slave_name(slave));
 	EINA_LIST_FOREACH_SAFE(pkg->inst_list, l, n, inst) {
 		DbgPrint("Destroy instance %p\n", inst);
-		instance_destroy(inst, INSTANCE_DESTROY_FAULT);
+		instance_destroy(inst, DBOX_DESTROY_TYPE_FAULT);
 	}
 
-	return LB_STATUS_SUCCESS;
+	return DBOX_STATUS_ERROR_NONE;
 }
 
 /* End of a file */

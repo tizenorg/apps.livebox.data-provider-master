@@ -34,9 +34,11 @@
 #include <Eina.h>
 #include <Ecore.h>
 #if defined(HAVE_LIVEBOX)
-#include <livebox-errno.h>
+#include <dynamicbox_errno.h>
+#include <dynamicbox_conf.h>
 #else
 #include "lite-errno.h"
+#define DYNAMICBOX_CONF_IMAGE_PATH "/tmp/"
 #endif
 
 #include "util.h"
@@ -87,78 +89,13 @@ HAPI int util_check_ext(const char *filename, const char *check_ptr)
 	name_len = strlen(filename);
 	while (--name_len >= 0 && *check_ptr) {
 		if (filename[name_len] != *check_ptr) {
-			return LB_STATUS_ERROR_INVALID;
+			return DBOX_STATUS_ERROR_INVALID_PARAMETER;
 		}
 
 		check_ptr ++;
 	}
 
-	return LB_STATUS_SUCCESS;
-}
-
-static inline int check_native_livebox(const char *pkgname)
-{
-	int len;
-	char *path;
-
-	len = strlen(pkgname) * 2;
-	len += strlen(ROOT_PATH);
-	len += strlen("%s/libexec/liblive-%s.so");
-
-	path = malloc(len + 1);
-	if (!path) {
-		ErrPrint("Heap: %s\n", strerror(errno));
-		return LB_STATUS_ERROR_MEMORY;
-	}
-
-	snprintf(path, len, "%s%s/libexec/liblive-%s.so", ROOT_PATH, pkgname, pkgname);
-	if (access(path, F_OK | R_OK) != 0) {
-		ErrPrint("%s is not a valid package\n", pkgname);
-		DbgFree(path);
-		return LB_STATUS_ERROR_INVALID;
-	}
-
-	DbgFree(path);
-	return LB_STATUS_SUCCESS;
-}
-
-static inline int check_web_livebox(const char *pkgname)
-{
-	int len;
-	char *path;
-
-	len = strlen(pkgname) * 2;
-	len += strlen("/opt/usr/apps/%s/res/wgt/livebox/index.html");
-
-	path = malloc(len + 1);
-	if (!path) {
-		ErrPrint("Heap: %s\n", strerror(errno));
-		return LB_STATUS_ERROR_MEMORY;
-	}
-
-	snprintf(path, len, "/opt/usr/apps/%s/res/wgt/livebox/index.html", pkgname);
-	if (access(path, F_OK | R_OK) != 0) {
-		ErrPrint("%s is not a valid package\n", pkgname);
-		DbgFree(path);
-		return LB_STATUS_ERROR_INVALID;
-	}
-
-	DbgFree(path);
-	return LB_STATUS_SUCCESS;
-}
-
-HAPI int util_validate_livebox_package(const char *pkgname)
-{
-	if (!pkgname) {
-		ErrPrint("Invalid argument\n");
-		return LB_STATUS_ERROR_INVALID;
-	}
-
-	if (!check_native_livebox(pkgname) || !check_web_livebox(pkgname)) {
-		return LB_STATUS_SUCCESS;
-	}
-
-	return LB_STATUS_ERROR_INVALID;
+	return DBOX_STATUS_ERROR_NONE;
 }
 
 HAPI int util_unlink(const char *filename)
@@ -168,28 +105,28 @@ HAPI int util_unlink(const char *filename)
 	int ret;
 
 	if (!filename) {
-		return LB_STATUS_ERROR_INVALID;
+		return DBOX_STATUS_ERROR_INVALID_PARAMETER;
 	}
 
 	desclen = strlen(filename) + 6; /* .desc */
 	descfile = malloc(desclen);
 	if (!descfile) {
 		ErrPrint("Heap: %s\n", strerror(errno));
-		return LB_STATUS_ERROR_MEMORY;
+		return DBOX_STATUS_ERROR_OUT_OF_MEMORY;
 	}
 
 	ret = snprintf(descfile, desclen, "%s.desc", filename);
 	if (ret < 0) {
 		ErrPrint("Error: %s\n", strerror(errno));
 		DbgFree(descfile);
-		return LB_STATUS_ERROR_FAULT;
+		return DBOX_STATUS_ERROR_FAULT;
 	}
 
 	(void)unlink(descfile);
 	DbgFree(descfile);
 	(void)unlink(filename);
 
-	return LB_STATUS_SUCCESS;
+	return DBOX_STATUS_ERROR_NONE;
 }
 
 HAPI char *util_slavename(void)
@@ -437,18 +374,18 @@ HAPI int util_unlink_files(const char *folder)
 
 	if (lstat(folder, &info) < 0) {
 		ErrPrint("Error: %s\n", strerror(errno));
-		return LB_STATUS_ERROR_IO;
+		return DBOX_STATUS_ERROR_IO_ERROR;
 	}
 
 	if (!S_ISDIR(info.st_mode)) {
 		ErrPrint("Error: %s is not a folder", folder);
-		return LB_STATUS_ERROR_INVALID;
+		return DBOX_STATUS_ERROR_INVALID_PARAMETER;
 	}
 
 	handle = opendir(folder);
 	if (!handle) {
 		ErrPrint("Error: %s\n", strerror(errno));
-		return LB_STATUS_ERROR_IO;
+		return DBOX_STATUS_ERROR_IO_ERROR;
 	}
 
 	while ((entry = readdir(handle))) {
@@ -478,18 +415,18 @@ HAPI int util_unlink_files(const char *folder)
 	if (closedir(handle) < 0) {
 		ErrPrint("closedir: %s\n", strerror(errno));
 	}
-	return LB_STATUS_SUCCESS;
+	return DBOX_STATUS_ERROR_NONE;
 }
 
 HAPI void util_remove_emergency_disk(void)
 {
 	int ret;
-	ret = umount(IMAGE_PATH);
+	ret = umount(DYNAMICBOX_CONF_IMAGE_PATH);
 	if (ret < 0) {
 		ErrPrint("umount: %s\n", strerror(errno));
 	}
 
-	DbgPrint("Try to unmount[%s] %d\n", IMAGE_PATH, ret);
+	DbgPrint("Try to unmount[%s] %d\n", DYNAMICBOX_CONF_IMAGE_PATH, ret);
 	s_info.emergency_mounted = 0;
 }
 
@@ -518,7 +455,7 @@ HAPI void util_prepare_emergency_disk(void)
 		TAG_ERROR
 	};
 
-	buf = strdup(EMERGENCY_DISK);
+	buf = strdup(DYNAMICBOX_CONF_EMERGENCY_DISK);
 	if (!buf) {
 		ErrPrint("Failed to prepare emergency disk info\n");
 		return;
@@ -619,69 +556,67 @@ HAPI void util_prepare_emergency_disk(void)
 
 	DbgPrint("source[%s] type[%s] option[%s]\n", source, type, option);
 
-	ret = mount(source, IMAGE_PATH, type, MS_NOSUID | MS_NOEXEC, option);
+	ret = mount(source, DYNAMICBOX_CONF_IMAGE_PATH, type, MS_NOSUID | MS_NOEXEC, option);
 	DbgFree(buf);
 	if (ret < 0) {
 		ErrPrint("Failed to mount: %s\n", strerror(errno));
 		return;
 	}
 
-	MINIMUM_SPACE = 0;
-
-	ErrPrint("Disk space is not enough, use the tmpfs. Currently required minimum space is %lu bytes\n", MINIMUM_SPACE);
-	if (chmod(IMAGE_PATH, 0750) < 0) {
+	ErrPrint("Disk space is not enough, use the tmpfs. Currently required minimum space is %lu bytes\n", DYNAMICBOX_CONF_MINIMUM_SPACE);
+	if (chmod(DYNAMICBOX_CONF_IMAGE_PATH, 0750) < 0) {
 		ErrPrint("chmod: %s\n", strerror(errno));
 	}
 
-	if (chown(IMAGE_PATH, 5000, 5000) < 0) {
+	if (chown(DYNAMICBOX_CONF_IMAGE_PATH, 5000, 5000) < 0) {
 		ErrPrint("chown: %s\n", strerror(errno));
 	}
 
-	ret = smack_setlabel(IMAGE_PATH, DATA_SHARE_LABEL, SMACK_LABEL_ACCESS);
+	ret = smack_setlabel(DYNAMICBOX_CONF_IMAGE_PATH, DATA_SHARE_LABEL, SMACK_LABEL_ACCESS);
 	if (ret != 0) {
-		ErrPrint("Failed to set SMACK for %s (%d)\n", IMAGE_PATH, ret);
+		ErrPrint("Failed to set SMACK for %s (%d)\n", DYNAMICBOX_CONF_IMAGE_PATH, ret);
 	} else {
-		ret = smack_setlabel(IMAGE_PATH, "1", SMACK_LABEL_TRANSMUTE);
-		DbgPrint("[%s] is successfully created (t: %d)\n", IMAGE_PATH, ret);
+		ret = smack_setlabel(DYNAMICBOX_CONF_IMAGE_PATH, "1", SMACK_LABEL_TRANSMUTE);
+		DbgPrint("[%s] is successfully created (t: %d)\n", DYNAMICBOX_CONF_IMAGE_PATH, ret);
 	}
 
-	if (mkdir(ALWAYS_PATH, 0755) < 0) {
-		ErrPrint("mkdir: (%s) %s\n", ALWAYS_PATH, strerror(errno));
+	if (mkdir(DYNAMICBOX_CONF_ALWAYS_PATH, 0755) < 0) {
+		ErrPrint("mkdir: (%s) %s\n", DYNAMICBOX_CONF_ALWAYS_PATH, strerror(errno));
 	} else {
-		if (chmod(ALWAYS_PATH, 0750) < 0) {
+		if (chmod(DYNAMICBOX_CONF_ALWAYS_PATH, 0750) < 0) {
 			ErrPrint("chmod: %s\n", strerror(errno));
 		}
 
-		if (chown(ALWAYS_PATH, 5000, 5000) < 0) {
+		if (chown(DYNAMICBOX_CONF_ALWAYS_PATH, 5000, 5000) < 0) {
 			ErrPrint("chown: %s\n", strerror(errno));
 		}
 
-		ret = smack_setlabel(ALWAYS_PATH, DATA_SHARE_LABEL, SMACK_LABEL_ACCESS);
+		ret = smack_setlabel(DYNAMICBOX_CONF_ALWAYS_PATH, DATA_SHARE_LABEL, SMACK_LABEL_ACCESS);
 		if (ret != 0) {
-			ErrPrint("Failed to set SMACK for %s (%d)\n", ALWAYS_PATH, ret);
+			ErrPrint("Failed to set SMACK for %s (%d)\n", DYNAMICBOX_CONF_ALWAYS_PATH, ret);
 		} else {
-			ret = smack_setlabel(ALWAYS_PATH, "1", SMACK_LABEL_TRANSMUTE);
-			DbgPrint("[%s] is successfully created (t: %d)\n", ALWAYS_PATH, ret);
+			ret = smack_setlabel(DYNAMICBOX_CONF_ALWAYS_PATH, "1", SMACK_LABEL_TRANSMUTE);
+			DbgPrint("[%s] is successfully created (t: %d)\n", DYNAMICBOX_CONF_ALWAYS_PATH, ret);
 		}
 	}
 
-	if (mkdir(READER_PATH, 0755) < 0) {
-		ErrPrint("mkdir: (%s) %s\n", READER_PATH, strerror(errno));
+	if (mkdir(DYNAMICBOX_CONF_READER_PATH, 0755) < 0) {
+		ErrPrint("mkdir: (%s) %s\n", DYNAMICBOX_CONF_READER_PATH, strerror(errno));
 	} else {
-		if (chmod(READER_PATH, 0750) < 0) {
+		if (chmod(DYNAMICBOX_CONF_READER_PATH, 0750) < 0) {
 			ErrPrint("chmod: %s\n", strerror(errno));
 		}
 
-		if (chown(READER_PATH, 5000, 5000) < 0) {
+		if (chown(DYNAMICBOX_CONF_READER_PATH, 5000, 5000) < 0) {
 			ErrPrint("chown: %s\n", strerror(errno));
 		}
 
-		ret = smack_setlabel(READER_PATH, DATA_SHARE_LABEL, SMACK_LABEL_ACCESS);
+		ret = smack_setlabel(DYNAMICBOX_CONF_READER_PATH, DATA_SHARE_LABEL, SMACK_LABEL_ACCESS);
 		if (ret != 0) {
-			ErrPrint("Failed to set SMACK for %s (%d)\n", READER_PATH, ret);
+			ErrPrint("Failed to set SMACK for %s (%d)\n", DYNAMICBOX_CONF_READER_PATH, ret);
 		} else {
-			ret = smack_setlabel(READER_PATH, "1", SMACK_LABEL_TRANSMUTE);
-			DbgPrint("[%s] is successfully created (t: %d)\n", READER_PATH, ret);
+			ret = smack_setlabel(DYNAMICBOX_CONF_READER_PATH, "1", SMACK_LABEL_TRANSMUTE);
+			DbgPrint("[%s] is successfully created (t: %d)\n", DYNAMICBOX_CONF_READER_PATH, ret);
 		}
 	}
 
@@ -697,36 +632,36 @@ HAPI void util_setup_log_disk(void)
 {
 	int ret;
 
-	if (access(SLAVE_LOG_PATH, R_OK | W_OK | X_OK) == 0) {
-		DbgPrint("[%s] is already accessible\n", SLAVE_LOG_PATH);
+	if (access(DYNAMICBOX_CONF_LOG_PATH, R_OK | W_OK | X_OK) == 0) {
+		DbgPrint("[%s] is already accessible\n", DYNAMICBOX_CONF_LOG_PATH);
 		return;
 	}
 
-	DbgPrint("Initiate the critical log folder [%s]\n", SLAVE_LOG_PATH);
-	if (mkdir(SLAVE_LOG_PATH, 0755) < 0) {
+	DbgPrint("Initiate the critical log folder [%s]\n", DYNAMICBOX_CONF_LOG_PATH);
+	if (mkdir(DYNAMICBOX_CONF_LOG_PATH, 0755) < 0) {
 		ErrPrint("mkdir: %s\n", strerror(errno));
 	} else {
-		if (chmod(SLAVE_LOG_PATH, 0750) < 0) {
+		if (chmod(DYNAMICBOX_CONF_LOG_PATH, 0750) < 0) {
 			ErrPrint("chmod: %s\n", strerror(errno));
 		}
 
-		if (chown(SLAVE_LOG_PATH, 5000, 5000) < 0) {
+		if (chown(DYNAMICBOX_CONF_LOG_PATH, 5000, 5000) < 0) {
 			ErrPrint("chown: %s\n", strerror(errno));
 		}
 
-		ret = smack_setlabel(SLAVE_LOG_PATH, DATA_SHARE_LABEL, SMACK_LABEL_ACCESS);
+		ret = smack_setlabel(DYNAMICBOX_CONF_LOG_PATH, DATA_SHARE_LABEL, SMACK_LABEL_ACCESS);
 		if (ret != 0) {
-			ErrPrint("Failed to set SMACK for %s (%d)\n", SLAVE_LOG_PATH, ret);
+			ErrPrint("Failed to set SMACK for %s (%d)\n", DYNAMICBOX_CONF_LOG_PATH, ret);
 		} else {
-			ret = smack_setlabel(SLAVE_LOG_PATH, "1", SMACK_LABEL_TRANSMUTE);
-			DbgPrint("[%s] is successfully created (t: %d)\n", SLAVE_LOG_PATH, ret);
+			ret = smack_setlabel(DYNAMICBOX_CONF_LOG_PATH, "1", SMACK_LABEL_TRANSMUTE);
+			DbgPrint("[%s] is successfully created (t: %d)\n", DYNAMICBOX_CONF_LOG_PATH, ret);
 		}
 	}
 }
 
 HAPI int util_service_is_enabled(const char *tag)
 {
-	return !!strcasestr(SERVICES, tag);
+	return !!strcasestr(DYNAMICBOX_CONF_SERVICES, tag);
 }
 
 /* End of a file */

@@ -7,12 +7,12 @@ enum node_type {
 
 struct node;
 
-#define NODE_READ	0x01
-#define NODE_WRITE	0x02
-#define NODE_EXEC	0x04
+#define NODE_READ   0x01
+#define NODE_WRITE  0x02
+#define NODE_EXEC   0x04
 
 extern struct node *node_find(const struct node *node, const char *path);
-extern struct node *node_create(struct node *parent, const char *name, enum node_type type);
+extern struct node *node_create(struct node *parent, const char *name, enum node_type type, int mode);
 extern void *node_destroy(struct node *node);
 
 extern struct node * const node_next_sibling(const struct node *node);

@@ -27,7 +27,7 @@
 #include <Eina.h>
 
 #include <dlog.h>
-#include <livebox-errno.h>
+#include <dynamicbox_errno.h>
 
 #include "util.h"
 #include "debug.h"
@@ -151,10 +151,10 @@ HAPI int liveinfo_open_fifo(struct liveinfo *info)
 	info->fp = fopen(info->fifo_name, "w");
 	if (!info->fp) {
 		ErrPrint("open: %s\n", strerror(errno));
-		return LB_STATUS_ERROR_IO;
+		return DBOX_STATUS_ERROR_IO_ERROR;
 	}
 
-	return LB_STATUS_SUCCESS;
+	return DBOX_STATUS_ERROR_NONE;
 }
 
 HAPI void liveinfo_close_fifo(struct liveinfo *info)

@@ -20,7 +20,7 @@
 #include <dlog.h>
 #include <aul.h>
 
-#include <livebox-errno.h>
+#include <dynamicbox_errno.h>
 #include <packet.h>
 
 #include <sys/smack.h>
@@ -89,7 +89,7 @@ static int put_reply_tcb(struct tcb *tcb, double seq)
 	ctx = malloc(sizeof(*ctx));
 	if (!ctx) {
 		ErrPrint("Heap: %s\n", strerror(errno));
-		return LB_STATUS_ERROR_MEMORY;
+		return DBOX_STATUS_ERROR_OUT_OF_MEMORY;
 	}
 
 	ctx->tcb = tcb;
@@ -97,7 +97,7 @@ static int put_reply_tcb(struct tcb *tcb, double seq)
 
 	s_info.context_list = eina_list_append(s_info.context_list, ctx);
 
-	return LB_STATUS_SUCCESS;
+	return DBOX_STATUS_ERROR_NONE;
 }
 
 static inline struct tcb *get_reply_tcb(double seq)
@@ -162,7 +162,7 @@ static inline int put_pended_request(struct tcb *tcb, struct packet *packet)
 	item = malloc(sizeof(*item));
 	if (!item) {
 		ErrPrint("Heap: %s\n", strerror(errno));
-		return LB_STATUS_ERROR_MEMORY;
+		return DBOX_STATUS_ERROR_OUT_OF_MEMORY;
 	}
 
 	item->tcb = tcb;
@@ -170,7 +170,7 @@ static inline int put_pended_request(struct tcb *tcb, struct packet *packet)
 	if (!item->packet) {
 		DbgFree(item);
 		ErrPrint("Unable to ref packet\n");
-		return LB_STATUS_ERROR_FAULT;
+		return DBOX_STATUS_ERROR_FAULT;
 	}
 
 	s_info.pending_list = eina_list_append(s_info.pending_list, item);
@@ -214,20 +214,18 @@ static int launch_timeout_cb(struct service_context *svc_ctx, void *data)
 static int launch_svc(struct service_context *svc_ctx)
 {
 	pid_t pid;
-	int ret = LB_STATUS_SUCCESS;
+	int ret = DBOX_STATUS_ERROR_NONE;
 
 	pid = aul_launch_app(SVC_PKG, NULL);
 	switch (pid) {
-#if defined(WEARABLE)
 	case AUL_R_EHIDDENFORGUEST:	/**< App hidden for guest mode */
-#endif
 	case AUL_R_ENOLAUNCHPAD:	/**< no launchpad */
 	case AUL_R_EILLACC:		/**< Illegal Access */
 	case AUL_R_EINVAL:		/**< Invalid argument */
 	case AUL_R_ENOINIT:		/**< AUL handler NOT initialized */
 	case AUL_R_ERROR:		/**< General error */
 		ErrPrint("Failed to launch an app: %s(%d)\n", SVC_PKG, pid);
-		ret = LB_STATUS_ERROR_FAULT;
+		ret = DBOX_STATUS_ERROR_FAULT;
 		break;
 	case AUL_R_ETIMEOUT:		/**< Timeout */
 	case AUL_R_ECOMM:		/**< Comunication Error */
@@ -239,7 +237,7 @@ static int launch_svc(struct service_context *svc_ctx)
 		s_info.delay_launcher = service_common_add_timer(svc_ctx, LAUNCH_TIMEOUT, lazy_launcher_cb, NULL);
 		if (!s_info.delay_launcher) {
 			ErrPrint("Unable to add delay launcher\n");
-			ret = LB_STATUS_ERROR_FAULT;
+			ret = DBOX_STATUS_ERROR_FAULT;
 		}
 		break;
 	case AUL_R_LOCAL:		/**< Launch by himself */
@@ -268,7 +266,7 @@ static int lazy_launcher_cb(struct service_context *svc_ctx, void *data)
 static int ttl_timer_cb(struct service_context *svc_ctx, void *data)
 {
 	DbgPrint("TTL Timer is expired: PID(%d)\n", s_info.svc_daemon_pid);
-	(void)aul_terminate_pid(s_info.svc_daemon_pid);
+	(void)aul_terminate_pid_async(s_info.svc_daemon_pid);
 
 	s_info.ttl_timer = NULL;
 	s_info.svc_daemon_is_launched = 0;
@@ -297,20 +295,20 @@ static int service_thread_main(struct tcb *tcb, struct packet *packet, void *dat
 			}
 		}
 
-		return LB_STATUS_SUCCESS;
+		return DBOX_STATUS_ERROR_NONE;
 	}
 
 	cmd = packet_command(packet);
 	if (!cmd) {
 		ErrPrint("Invalid packet\n");
-		return LB_STATUS_ERROR_INVALID;
+		return DBOX_STATUS_ERROR_INVALID_PARAMETER;
 	}
 
 	switch (packet_type(packet)) {
 	case PACKET_REQ:
 		if (!s_info.svc_daemon_is_launched) {
 			ret = launch_svc(tcb_svc_ctx(tcb));
-			if (ret != LB_STATUS_SUCCESS) {
+			if (ret != DBOX_STATUS_ERROR_NONE) {
 				goto reply_out;
 			}
 		}
@@ -338,12 +336,12 @@ static int service_thread_main(struct tcb *tcb, struct packet *packet, void *dat
 		if (!strcmp(cmd, "service_register")) {
 			if (!s_info.svc_daemon_is_launched) {
 				ErrPrint("Service daemon is not launched. but something tries to register a service\n");
-				return LB_STATUS_ERROR_INVALID;
+				return DBOX_STATUS_ERROR_INVALID_PARAMETER;
 			}
 
 			if (s_info.svc_daemon) {
 				ErrPrint("Service daemon is already prepared\n");
-				return LB_STATUS_ERROR_INVALID;
+				return DBOX_STATUS_ERROR_INVALID_PARAMETER;
 			}
 
 			if (s_info.launch_timer) {
@@ -355,12 +353,12 @@ static int service_thread_main(struct tcb *tcb, struct packet *packet, void *dat
 			if (!s_info.ttl_timer) {
 				ErrPrint("Failed to add TTL timer\n");
 				if (s_info.svc_daemon_pid > 0) {
-					ret = aul_terminate_pid(s_info.svc_daemon_pid);
+					ret = aul_terminate_pid_async(s_info.svc_daemon_pid);
 					ErrPrint("Terminate: %d\n", ret);
 					s_info.svc_daemon_pid = -1;
 				}
 				s_info.svc_daemon_is_launched = 0;
-				return LB_STATUS_ERROR_FAULT;
+				return DBOX_STATUS_ERROR_FAULT;
 			}
 			DbgPrint("TTL Timer is added: %p\n", s_info.ttl_timer);
 
@@ -387,10 +385,10 @@ static int service_thread_main(struct tcb *tcb, struct packet *packet, void *dat
 		break;
 	default:
 		ErrPrint("Packet type is not valid[%s]\n", cmd);
-		return LB_STATUS_ERROR_INVALID;
+		return DBOX_STATUS_ERROR_INVALID_PARAMETER;
 	}
 
-	return LB_STATUS_SUCCESS;
+	return DBOX_STATUS_ERROR_NONE;
 
 reply_out:
 	ErrPrint("Error: %d\n", ret);
@@ -406,13 +404,13 @@ int utility_service_init(void)
 {
 	if (s_info.svc_ctx) {
 		ErrPrint("Already initialized\n");
-		return LB_STATUS_ERROR_ALREADY;
+		return DBOX_STATUS_ERROR_ALREADY;
 	}
 
 	s_info.svc_ctx = service_common_create(UTILITY_SOCKET, service_thread_main, NULL);
 	if (!s_info.svc_ctx) {
 		ErrPrint("Unable to activate service thread\n");
-		return LB_STATUS_ERROR_FAULT;
+		return DBOX_STATUS_ERROR_FAULT;
 	}
 
 	if (smack_fsetlabel(service_common_fd(s_info.svc_ctx), UTILITY_SMACK_LABEL, SMACK_LABEL_IPOUT) != 0) {
@@ -420,7 +418,7 @@ int utility_service_init(void)
 			ErrPrint("Unable to set SMACK label(%d)\n", errno);
 			service_common_destroy(s_info.svc_ctx);
 			s_info.svc_ctx = NULL;
-			return LB_STATUS_ERROR_FAULT;
+			return DBOX_STATUS_ERROR_FAULT;
 		}
 	}
 
@@ -429,24 +427,24 @@ int utility_service_init(void)
 			ErrPrint("Unable to set SMACK label(%d)\n", errno);
 			service_common_destroy(s_info.svc_ctx);
 			s_info.svc_ctx = NULL;
-			return LB_STATUS_ERROR_FAULT;
+			return DBOX_STATUS_ERROR_FAULT;
 		}
 	}
 
 	DbgPrint("Successfully initiated\n");
-	return LB_STATUS_SUCCESS;
+	return DBOX_STATUS_ERROR_NONE;
 }
 
 int utility_service_fini(void)
 {
 	if (!s_info.svc_ctx) {
-		return LB_STATUS_ERROR_INVALID;
+		return DBOX_STATUS_ERROR_INVALID_PARAMETER;
 	}
 
 	service_common_destroy(s_info.svc_ctx);
 	s_info.svc_ctx = NULL;
 	DbgPrint("Successfully Finalized\n");
-	return LB_STATUS_SUCCESS;
+	return DBOX_STATUS_ERROR_NONE;
 }
 
 /* End of a file */

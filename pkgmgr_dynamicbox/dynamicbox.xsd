@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" elementFormDefault="qualified" targetNamespace="http://tizen.org/ns/packages" xmlns:packages="http://tizen.org/ns/packages">
+
+    <xs:import namespace="http://www.w3.org/XML/1998/namespace" schemaLocation="xml.xsd"/>
+
+    <xs:element name="dynamicbox">
+	<xs:complexType>
+	    <xs:sequence>
+		<xs:element name="label">
+		    <xs:complexType mixed="true">
+			<xs:attribute ref="xml:lang"/>
+		    </xs:complexType>
+		</xs:element>
+		<xs:element name="icon">
+		    <xs:complexType mixed="true">
+			<xs:attribute ref="xml:lang"/>
+		    </xs:complexType>
+		</xs:element>
+		<xs:element name="content"/>
+		<xs:element name="launch"/>
+		<xs:element name="setup"/>
+		<xs:element name="category">
+		    <xs:complexType>
+		      <xs:sequence>
+			<xs:choice maxOccurs="unbounded">
+			  <xs:any minOccurs="0" processContents="lax"/>
+			</xs:choice>
+		      </xs:sequence>
+		      <xs:anyAttribute processContents="lax"/>
+		    </xs:complexType>
+		</xs:element>
+		<xs:element nmae="glancebar">
+		    <xs:complexType>
+			<xs:sequence>
+			    <xs:choice maxOccurs="unbounded" minOccurs="0">
+				<xs:element name="size"/>
+				<xs:element name="script">
+				    <xs:complexType>
+					<xs:attribute name="src" type="xs:string"/>
+					<xs:attribute name="group" type="xs:string"/>
+				    </xs:complexType>
+				</xs:element>
+			    </xs:choice>
+			</xs:sequence>
+		    </xs:complexType>
+		</xs:element>
+		<xs:element name="box">
+		    <xs:complexType>
+			<xs:sequence>
+			    <xs:choice maxOccurs="unbounded" minOccurs="0">
+				<xs:element name="size">
+				    <xs:complexType>
+					<xs:attribute name="touch_effect" type="xs:boolean"/>
+					<xs:attribute name="mouse_event" type="xs:boolean"/>
+					<xs:attribute name="need_frame" type="xs:boolean"/>
+					<xs:attribute name="preview" type="xs:string"/>
+				    </xs:complexType>
+				</xs:element>
+
+				<xs:element name="script">
+				    <xs:complexType>
+					<xs:attribute name="src" type="xs:string"/>
+					<xs:attribute name="group" type="xs:string"/>
+				    </xs:complexType>
+				</xs:element>
+			    </xs:choice>
+			</xs:sequence>
+			<xs:attribute name="type" type="xs:string"/>
+			<xs:attribute name="mouse_event" type="xs:boolean"/>
+			<xs:attribute name="count" type="xs:decimal"/>
+		    </xs:complexType>
+		</xs:element>
+	    </xs:sequence>
+	    <xs:attribute name="appid" use="required" type="xs:string"/>
+	    <xs:attribute name="primary" use="required" type="xs:boolean"/>
+	    <xs:attribute name="secured" type="xs:boolean"/>
+	    <xs:attribute name="network" use="required" type="xs:boolean"/>
+	    <xs:attribute name="abi" type="xs:string"/>
+	    <xs:attribute name="timeout" use="required" type="xs:string"/>
+	    <xs:attribute name="period" use="required" type="xs:string"/>
+	    <xs:attribute name="libexec" type="xs:string"/>
+	    <xs:attribute name="pinup" type="xs:string"/>
+	    <xs:attribute name="script" type="xs:string"/>
+	    <xs:attribute name="nodisplay" type="xs:boolean"/>
+	</xs:complexType>
+    </xs:element>
+
+</xs:schema>

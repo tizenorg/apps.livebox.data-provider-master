@@ -22,6 +22,7 @@
 #include <pthread.h>
 #include <malloc.h>
 #include <sys/time.h>
+#include <sys/resource.h>
 
 #include <Eina.h>
 #include <Ecore.h>
@@ -31,7 +32,10 @@
 #include <bundle.h>
 
 #include <packet.h>
-#include <livebox-errno.h>
+#include <dynamicbox_errno.h>
+#include <dynamicbox_conf.h>
+#include <dynamicbox_cmd_list.h>
+#include <dynamicbox_service.h>
 
 #include "critical_log.h"
 #include "slave_life.h"
@@ -45,13 +49,20 @@
 #include "abi.h"
 #include "xmonitor.h"
 
+#include "package.h"
+#include "instance.h"
+
+#define BUNDLE_SLAVE_SVC_OP_TYPE "__APP_SVC_OP_TYPE__"
+#define APP_CONTROL_OPERATION_MAIN "http://tizen.org/appcontrol/operation/main"
+#define LOW_PRIORITY	10
+
 int errno;
 
 struct slave_node {
 	char *name;
 	char *abi;
 	char *pkgname;
-	int secured;	/* Only A package(livebox) is loaded for security requirements */
+	int secured;	/* Only A package(dynamicbox) is loaded for security requirements */
 	int refcnt;
 	int fault_count;
 	int critical_fault_count;
@@ -97,6 +108,8 @@ struct slave_node {
 #else
 	struct timeval activated_at;
 #endif
+
+	char *hw_acceleration;
 };
 
 struct event {
@@ -120,23 +133,148 @@ static struct {
 	.deactivate_all_refcnt = 0,
 };
 
+static Eina_Bool terminate_timer_cb(void *data)
+{
+	struct slave_node *slave = data;
+	int ret;
+
+	/*!
+	 * \todo
+	 * check the return value of the aul_terminate_pid
+	 */
+	slave->state = SLAVE_REQUEST_TO_TERMINATE;
+	slave->terminate_timer = NULL;
+
+	DbgPrint("Terminate slave: %d (%s)\n", slave_pid(slave), slave_name(slave));
+	ret = aul_terminate_pid_async(slave->pid);
+	if (ret < 0) {
+		ErrPrint("Terminate slave(%s) failed. pid %d (%d)\n", slave_name(slave), slave_pid(slave), ret);
+		slave = slave_deactivated(slave);
+		if (slave == NULL) {
+			DbgPrint("Slave is deleted\n");
+		}
+	}
+
+	return ECORE_CALLBACK_CANCEL;
+}
+
+static struct slave_node *slave_deactivate(struct slave_node *slave, int no_timer)
+{
+	int ret;
+
+	/**
+	 * @note
+	 * The caller must has to check the slave's state.
+	 * If it is not activated, this function must has not to be called.
+	 */
+
+	if (slave_pid(slave) <= 0) {
+		return slave;
+	}
+
+	if (slave->ttl_timer) {
+		/**
+		 * @note
+		 * If there is an activated TTL timer,
+		 * It has to be cleared before deactivate the slave.
+		 */
+		ecore_timer_del(slave->ttl_timer);
+		slave->ttl_timer = NULL;
+	}
+
+	if ((slave->ctrl_option & PROVIDER_CTRL_MANUAL_TERMINATION) == PROVIDER_CTRL_MANUAL_TERMINATION) {
+		/*!
+		 * \note
+		 * In this case,
+		 * The provider requests MANUAL TERMINATION control option.
+		 * Master will not send terminate request in this case, the provider should be terminated by itself.
+		 */
+		DbgPrint("Manual termination is turned on\n");
+		slave->state = SLAVE_REQUEST_TO_DISCONNECT;
+		(void)slave_rpc_disconnect(slave);
+	} else if (slave->terminate_timer) {
+		ErrPrint("Terminate timer is already fired (%d)\n", slave->pid);
+	} else if (!no_timer && !slave->secured) {
+		DbgPrint("Fire the terminate timer: %d\n", slave->pid);
+		slave->terminate_timer = ecore_timer_add(DYNAMICBOX_CONF_SLAVE_ACTIVATE_TIME, terminate_timer_cb, slave);
+		if (!slave->terminate_timer) {
+			/*!
+			 * \note
+			 * Normally, Call the terminate_timer_cb directly from here
+			 * But in this case. if the aul_terminate_pid failed, Call the slave_deactivated function directly.
+			 * Then the "slave" pointer can be changed. To trace it, Copy the body of terminate_timer_cb to here.
+			 */
+			ErrPrint("Failed to add a new timer for terminating\n");
+			DbgPrint("Terminate slave: %d (%s)\n", slave_pid(slave), slave_name(slave));
+			/*!
+			 * \todo
+			 * check the return value of the aul_terminate_pid
+			 */
+			slave->state = SLAVE_REQUEST_TO_TERMINATE;
+
+			ret = aul_terminate_pid_async(slave->pid);
+			if (ret < 0) {
+				ErrPrint("Terminate slave(%s) failed. pid %d (%d)\n", slave_name(slave), slave_pid(slave), ret);
+				slave = slave_deactivated(slave);
+			}
+		}
+	} else {
+		/*!
+		 * \todo
+		 * check the return value of the aul_terminate_pid
+		 */
+		slave->state = SLAVE_REQUEST_TO_TERMINATE;
+
+		DbgPrint("Terminate slave: %d (%s)\n", slave_pid(slave), slave_name(slave));
+		ret = aul_terminate_pid_async(slave->pid);
+		if (ret < 0) {
+			ErrPrint("Terminate slave(%s) failed. pid %d (%d)\n", slave_name(slave), slave_pid(slave), ret);
+			slave = slave_deactivated(slave);
+		}
+	}
+
+	return slave;
+}
+
 static Eina_Bool slave_ttl_cb(void *data)
 {
+	struct pkg_info *info;
 	struct slave_node *slave = (struct slave_node *)data;
+	Eina_List *l;
+	Eina_List *pkg_list;
+
+	pkg_list = (Eina_List *)package_list();
+	EINA_LIST_FOREACH(pkg_list, l, info) {
+		if (package_slave(info) == slave) {
+			struct inst_info *inst;
+			Eina_List *inst_list;
+			Eina_List *n;
+
+			inst_list = (Eina_List *)package_instance_list(info);
+			EINA_LIST_FOREACH(inst_list, n, inst) {
+				if (instance_visible_state(inst) == DBOX_SHOW) {
+					DbgPrint("Instance is in show, give more ttl to %d for %s\n", slave_pid(slave), instance_id(inst));
+					return ECORE_CALLBACK_RENEW;
+				}
+			}
+		}
+	}
 
 	/*!
 	 * \note
 	 * ttl_timer must has to be set to NULL before deactivate the slave
-	 * It will be used for making decision of the expired TTL timer or the fault of a livebox.
+	 * It will be used for making decision of the expired TTL timer or the fault of a dynamicbox.
 	 */
 	slave->ttl_timer = NULL;
 
-	slave_set_reactivation(slave, 0);
-	slave_set_reactivate_instances(slave, 1);
+	if (slave_is_activated(slave)) {
+		slave_set_reactivation(slave, 0);
+		slave_set_reactivate_instances(slave, 1);
 
-	slave = slave_deactivate(slave, 1);
-	if (!slave) {
-		DbgPrint("Slave is deleted\n");
+		slave = slave_deactivate(slave, 1);
+		if (!slave) {
+			DbgPrint("Slave is deleted\n");
+		}
 	}
 
 	/*! To recover all instances state it is activated again */
@@ -146,16 +284,16 @@ static Eina_Bool slave_ttl_cb(void *data)
 static inline int xmonitor_pause_cb(void *data)
 {
 	slave_pause(data);
-	return LB_STATUS_SUCCESS;
+	return DBOX_STATUS_ERROR_NONE;
 }
 
 static inline int xmonitor_resume_cb(void *data)
 {
 	slave_resume(data);
-	return LB_STATUS_SUCCESS;
+	return DBOX_STATUS_ERROR_NONE;
 }
 
-static inline struct slave_node *create_slave_node(const char *name, int is_secured, const char *abi, const char *pkgname, int network)
+static inline struct slave_node *create_slave_node(const char *name, int is_secured, const char *abi, const char *pkgname, int network, const char *hw_acceleration)
 {
 	struct slave_node *slave;
 
@@ -189,11 +327,23 @@ static inline struct slave_node *create_slave_node(const char *name, int is_secu
 		return NULL;
 	}
 
+	if (hw_acceleration) {
+		slave->hw_acceleration = strdup(hw_acceleration);
+		if (!slave->hw_acceleration) {
+			ErrPrint("Heap: %s\n", strerror(errno));
+			DbgFree(slave->pkgname);
+			DbgFree(slave->abi);
+			DbgFree(slave->name);
+			DbgFree(slave);
+			return NULL;
+		}
+	}
+
 	slave->secured = is_secured;
 	slave->pid = (pid_t)-1;
 	slave->state = SLAVE_TERMINATED;
 	slave->network = network;
-	slave->relaunch_count = SLAVE_RELAUNCH_COUNT;
+	slave->relaunch_count = DYNAMICBOX_CONF_SLAVE_RELAUNCH_COUNT;
 
 	xmonitor_add_event_callback(XMONITOR_PAUSED, xmonitor_pause_cb, slave);
 	xmonitor_add_event_callback(XMONITOR_RESUMED, xmonitor_resume_cb, slave);
@@ -272,6 +422,7 @@ static inline void destroy_slave_node(struct slave_node *slave)
 	DbgFree(slave->abi);
 	DbgFree(slave->name);
 	DbgFree(slave->pkgname);
+	DbgFree(slave->hw_acceleration);
 	DbgFree(slave);
 	return;
 }
@@ -286,7 +437,7 @@ static inline struct slave_node *find_slave(const char *name)
 			return slave;
 		}
 	}
-	
+
 	return NULL;
 }
 
@@ -296,7 +447,7 @@ HAPI int slave_expired_ttl(struct slave_node *slave)
 		return 0;
 	}
 
-	if (!slave->secured) {
+	if (!slave->secured && !(DBOX_IS_INHOUSE(slave_abi(slave)) && DYNAMICBOX_CONF_SLAVE_LIMIT_TO_TTL)) {
 		return 0;
 	}
 
@@ -338,7 +489,7 @@ HAPI const int const slave_refcnt(struct slave_node *slave)
 	return slave->refcnt;
 }
 
-HAPI struct slave_node *slave_create(const char *name, int is_secured, const char *abi, const char *pkgname, int network)
+HAPI struct slave_node *slave_create(const char *name, int is_secured, const char *abi, const char *pkgname, int network, const char *hw_acceleration)
 {
 	struct slave_node *slave;
 
@@ -350,7 +501,7 @@ HAPI struct slave_node *slave_create(const char *name, int is_secured, const cha
 		return slave;
 	}
 
-	slave = create_slave_node(name, is_secured, abi, pkgname, network);
+	slave = create_slave_node(name, is_secured, abi, pkgname, network, hw_acceleration);
 	if (!slave) {
 		return NULL;
 	}
@@ -371,12 +522,13 @@ HAPI void slave_destroy(struct slave_node *slave)
 	slave_unref(slave);
 }
 
-static inline void invoke_fault_cb(struct slave_node *slave)
+static inline struct slave_node *invoke_fault_cb(struct slave_node *slave)
 {
 	Eina_List *l;
 	Eina_List *n;
 	struct event *event;
 
+	slave_ref(slave);
 	slave->in_event_process |= SLAVE_EVENT_PROCESS_FAULT;
 	EINA_LIST_FOREACH_SAFE(slave->event_fault_list, l, n, event) {
 		if (event->deleted || event->evt_cb(event->slave, event->cbdata) < 0 || event->deleted) {
@@ -385,6 +537,9 @@ static inline void invoke_fault_cb(struct slave_node *slave)
 		}
 	}
 	slave->in_event_process &= ~SLAVE_EVENT_PROCESS_FAULT;
+	slave = slave_unref(slave);
+
+	return slave;
 }
 
 static inline void invoke_activate_cb(struct slave_node *slave)
@@ -413,7 +568,11 @@ static Eina_Bool activate_timer_cb(void *data)
 	}
 
 	slave->fault_count++;
-	invoke_fault_cb(slave);
+
+	if (invoke_fault_cb(slave) == NULL) {
+		ErrPrint("Slave is deleted while processing fault handler\n");
+		return ECORE_CALLBACK_CANCEL;
+	}
 
 	slave_set_reactivation(slave, 0);
 	slave_set_reactivate_instances(slave, 0);
@@ -422,13 +581,13 @@ static Eina_Bool activate_timer_cb(void *data)
 	if (slave_pid(slave) > 0) {
 		int ret;
 		DbgPrint("Try to terminate PID: %d\n", slave_pid(slave));
-		ret = aul_terminate_pid(slave_pid(slave));
+		ret = aul_terminate_pid_async(slave_pid(slave));
 		if (ret < 0) {
 			ErrPrint("Terminate failed, pid %d (reason: %d)\n", slave_pid(slave), ret);
 		}
 	}
 
-	CRITICAL_LOG("Slave is not activated in %lf sec (slave: %s)\n", SLAVE_ACTIVATE_TIME, slave_name(slave));
+	CRITICAL_LOG("Slave is not activated in %lf sec (slave: %s)\n", DYNAMICBOX_CONF_SLAVE_ACTIVATE_TIME, slave_name(slave));
 	slave = slave_deactivated(slave);
 	return ECORE_CALLBACK_CANCEL;
 }
@@ -436,7 +595,10 @@ static Eina_Bool activate_timer_cb(void *data)
 static inline void invoke_slave_fault_handler(struct slave_node *slave)
 {
 	slave->fault_count++;
-	invoke_fault_cb(slave);
+	if (invoke_fault_cb(slave) == NULL) {
+		ErrPrint("Slave is deleted while processing fault handler\n");
+		return;
+	}
 
 	slave_set_reactivation(slave, 0);
 	slave_set_reactivate_instances(slave, 0);
@@ -448,7 +610,7 @@ static inline void invoke_slave_fault_handler(struct slave_node *slave)
 		} else {
 			int ret;
 			DbgPrint("Try to terminate PID: %d\n", slave_pid(slave));
-			ret = aul_terminate_pid(slave_pid(slave));
+			ret = aul_terminate_pid_async(slave_pid(slave));
 			if (ret < 0) {
 				ErrPrint("Terminate failed, pid %d (reason: %d)\n", slave_pid(slave), ret);
 			}
@@ -489,18 +651,18 @@ static Eina_Bool relaunch_timer_cb(void *data)
 
 			invoke_slave_fault_handler(slave);
 		} else {
-			bundle_add(param, BUNDLE_SLAVE_NAME, slave_name(slave));
-			bundle_add(param, BUNDLE_SLAVE_SECURED, slave->secured ? "true" : "false");
-			bundle_add(param, BUNDLE_SLAVE_ABI, slave->abi);
+			bundle_add(param, BUNDLE_SLAVE_SVC_OP_TYPE, APP_CONTROL_OPERATION_MAIN);
+			bundle_add(param, DYNAMICBOX_CONF_BUNDLE_SLAVE_NAME, slave_name(slave));
+			bundle_add(param, DYNAMICBOX_CONF_BUNDLE_SLAVE_SECURED, ((DBOX_IS_INHOUSE(slave_abi(slave)) && DYNAMICBOX_CONF_SLAVE_LIMIT_TO_TTL) || slave->secured) ? "true" : "false");
+			bundle_add(param, DYNAMICBOX_CONF_BUNDLE_SLAVE_ABI, slave->abi);
+			bundle_add(param, DYNAMICBOX_CONF_BUNDLE_SLAVE_HW_ACCELERATION, slave->hw_acceleration);
 
 			slave->pid = (pid_t)aul_launch_app(slave_pkgname(slave), param);
 
 			bundle_free(param);
 
 			switch (slave->pid) {
-#if defined(WEARABLE)
 			case AUL_R_EHIDDENFORGUEST:	/**< App hidden for guest mode */
-#endif
 			case AUL_R_ENOLAUNCHPAD:	/**< no launchpad */
 			case AUL_R_EILLACC:		/**< Illegal Access */
 			case AUL_R_EINVAL:		/**< Invalid argument */
@@ -545,14 +707,21 @@ static Eina_Bool relaunch_timer_cb(void *data)
 
 HAPI int slave_activate(struct slave_node *slave)
 {
-	/*!
-	 * \note
+	/**
+	 * @todo
+	 * If a slave is deactivated by OOM killer,
+	 * We should not activate it again from here.
+	 * Instead of this, it should be reactivated by user event or oom event(normal)
+	 */
+
+	/**
+	 * @note
 	 * This check code can be replaced with the slave->state check code
 	 * If the slave data has the PID, it means, it is activated
 	 * Even if it is in the termiating sequence, it will have the PID
-	 * before terminated at last.
+	 * until it is terminated at last.
 	 * So we can use this simple code for checking the slave's last state.
-	 * about it is alive? or not.
+	 * whether it is alive or not.
 	 */
 	if (slave_pid(slave) != (pid_t)-1) {
 		if (slave->terminate_timer) {
@@ -562,37 +731,37 @@ HAPI int slave_activate(struct slave_node *slave)
 		} else if (slave_state(slave) == SLAVE_REQUEST_TO_TERMINATE || slave_state(slave) == SLAVE_REQUEST_TO_DISCONNECT) {
 			slave_set_reactivation(slave, 1);
 		}
-		return LB_STATUS_ERROR_ALREADY;
+		return DBOX_STATUS_ERROR_ALREADY;
 	} else if (slave_state(slave) == SLAVE_REQUEST_TO_LAUNCH) {
 		DbgPrint("Slave is already launched: but the AUL is timed out\n");
-		return LB_STATUS_ERROR_ALREADY;
+		return DBOX_STATUS_ERROR_ALREADY;
 	}
 
-	if (DEBUG_MODE) {
+	if (DYNAMICBOX_CONF_DEBUG_MODE || g_conf.debug_mode) {
 		DbgPrint("Debug Mode enabled. name[%s] secured[%d] abi[%s]\n", slave_name(slave), slave->secured, slave->abi);
 	} else {
 		bundle *param;
 
-		slave->relaunch_count = SLAVE_RELAUNCH_COUNT;
+		slave->relaunch_count = DYNAMICBOX_CONF_SLAVE_RELAUNCH_COUNT;
 
 		param = bundle_create();
 		if (!param) {
 			ErrPrint("Failed to create a bundle\n");
-			return LB_STATUS_ERROR_FAULT;
+			return DBOX_STATUS_ERROR_FAULT;
 		}
 
-		bundle_add(param, BUNDLE_SLAVE_NAME, slave_name(slave));
-		bundle_add(param, BUNDLE_SLAVE_SECURED, slave->secured ? "true" : "false");
-		bundle_add(param, BUNDLE_SLAVE_ABI, slave->abi);
+		bundle_add(param, BUNDLE_SLAVE_SVC_OP_TYPE, APP_CONTROL_OPERATION_MAIN);
+		bundle_add(param, DYNAMICBOX_CONF_BUNDLE_SLAVE_NAME, slave_name(slave));
+		bundle_add(param, DYNAMICBOX_CONF_BUNDLE_SLAVE_SECURED, ((DBOX_IS_INHOUSE(slave_abi(slave)) && DYNAMICBOX_CONF_SLAVE_LIMIT_TO_TTL) || slave->secured) ? "true" : "false");
+		bundle_add(param, DYNAMICBOX_CONF_BUNDLE_SLAVE_ABI, slave->abi);
+		bundle_add(param, DYNAMICBOX_CONF_BUNDLE_SLAVE_HW_ACCELERATION, slave->hw_acceleration);
 
 		slave->pid = (pid_t)aul_launch_app(slave_pkgname(slave), param);
 
 		bundle_free(param);
 
 		switch (slave->pid) {
-#if defined(WEARABLE)
 		case AUL_R_EHIDDENFORGUEST:	/**< App hidden for guest mode */
-#endif
 		case AUL_R_ENOLAUNCHPAD:	/**< no launchpad */
 		case AUL_R_EILLACC:		/**< Illegal Access */
 		case AUL_R_EINVAL:		/**< Invalid argument */
@@ -607,11 +776,11 @@ HAPI int slave_activate(struct slave_node *slave)
 		case AUL_R_ECANCELED:		/**< Operation canceled */
 		case AUL_R_ETIMEOUT:		/**< Timeout */
 			CRITICAL_LOG("Try relaunch this soon %s (%d)\n", slave_name(slave), slave->pid);
-			slave->relaunch_timer = ecore_timer_add(SLAVE_RELAUNCH_TIME, relaunch_timer_cb, slave);
+			slave->relaunch_timer = ecore_timer_add(DYNAMICBOX_CONF_SLAVE_RELAUNCH_TIME, relaunch_timer_cb, slave);
 			if (!slave->relaunch_timer) {
 				CRITICAL_LOG("Failed to register a relaunch timer (%s)\n", slave_name(slave));
 				slave->pid = (pid_t)-1;
-				return LB_STATUS_ERROR_FAULT;
+				return DBOX_STATUS_ERROR_FAULT;
 			}
 			/* Try again after a few secs later */
 			break;
@@ -622,7 +791,7 @@ HAPI int slave_activate(struct slave_node *slave)
 			break;
 		}
 
-		slave->activate_timer = ecore_timer_add(SLAVE_ACTIVATE_TIME, activate_timer_cb, slave);
+		slave->activate_timer = ecore_timer_add(DYNAMICBOX_CONF_SLAVE_ACTIVATE_TIME, activate_timer_cb, slave);
 		if (!slave->activate_timer) {
 			ErrPrint("Failed to register an activate timer\n");
 		}
@@ -636,45 +805,45 @@ HAPI int slave_activate(struct slave_node *slave)
 	 */
 	(void)slave_ref(slave);
 
-	return LB_STATUS_SUCCESS;
+	return DBOX_STATUS_ERROR_NONE;
 }
 
 HAPI int slave_give_more_ttl(struct slave_node *slave)
 {
 	double delay;
 
-	if (!slave->secured || !slave->ttl_timer) {
-		return LB_STATUS_ERROR_INVALID;
+	if (!(DBOX_IS_INHOUSE(slave_abi(slave)) && DYNAMICBOX_CONF_SLAVE_LIMIT_TO_TTL) && (!slave->secured || !slave->ttl_timer)) {
+		return DBOX_STATUS_ERROR_INVALID_PARAMETER;
 	}
 
-	delay = SLAVE_TTL - ecore_timer_pending_get(slave->ttl_timer);
+	delay = DYNAMICBOX_CONF_SLAVE_TTL - ecore_timer_pending_get(slave->ttl_timer);
 	ecore_timer_delay(slave->ttl_timer, delay);
-	return LB_STATUS_SUCCESS;
+	return DBOX_STATUS_ERROR_NONE;
 }
 
 HAPI int slave_freeze_ttl(struct slave_node *slave)
 {
-	if (!slave->secured || !slave->ttl_timer) {
-		return LB_STATUS_ERROR_INVALID;
+	if (!(DBOX_IS_INHOUSE(slave_abi(slave)) && DYNAMICBOX_CONF_SLAVE_LIMIT_TO_TTL) && (!slave->secured || !slave->ttl_timer)) {
+		return DBOX_STATUS_ERROR_INVALID_PARAMETER;
 	}
 
 	ecore_timer_freeze(slave->ttl_timer);
-	return LB_STATUS_SUCCESS;
+	return DBOX_STATUS_ERROR_NONE;
 }
 
 HAPI int slave_thaw_ttl(struct slave_node *slave)
 {
 	double delay;
 
-	if (!slave->secured || !slave->ttl_timer) {
-		return LB_STATUS_ERROR_INVALID;
+	if (!(DBOX_IS_INHOUSE(slave_abi(slave)) && DYNAMICBOX_CONF_SLAVE_LIMIT_TO_TTL) && (!slave->secured || !slave->ttl_timer)) {
+		return DBOX_STATUS_ERROR_INVALID_PARAMETER;
 	}
 
 	ecore_timer_thaw(slave->ttl_timer);
 
-	delay = SLAVE_TTL - ecore_timer_pending_get(slave->ttl_timer);
+	delay = DYNAMICBOX_CONF_SLAVE_TTL - ecore_timer_pending_get(slave->ttl_timer);
 	ecore_timer_delay(slave->ttl_timer, delay);
-	return LB_STATUS_SUCCESS;
+	return DBOX_STATUS_ERROR_NONE;
 }
 
 HAPI int slave_activated(struct slave_node *slave)
@@ -685,9 +854,9 @@ HAPI int slave_activated(struct slave_node *slave)
 		slave_pause(slave);
 	}
 
-	if (slave->secured == 1 && SLAVE_TTL > 0.0f) {
-		DbgPrint("Slave deactivation timer is added (%s - %lf)\n", slave_name(slave), SLAVE_TTL);
-		slave->ttl_timer = ecore_timer_add(SLAVE_TTL, slave_ttl_cb, slave);
+	if (((DBOX_IS_INHOUSE(slave_abi(slave)) && DYNAMICBOX_CONF_SLAVE_LIMIT_TO_TTL) || slave->secured == 1) && DYNAMICBOX_CONF_SLAVE_TTL > 0.0f) {
+		DbgPrint("Slave deactivation timer is added (%s - %lf)\n", slave_name(slave), DYNAMICBOX_CONF_SLAVE_TTL);
+		slave->ttl_timer = ecore_timer_add(DYNAMICBOX_CONF_SLAVE_TTL, slave_ttl_cb, slave);
 		if (!slave->ttl_timer) {
 			ErrPrint("Failed to create a TTL timer\n");
 		}
@@ -718,7 +887,8 @@ HAPI int slave_activated(struct slave_node *slave)
 		slave->relaunch_timer = NULL;
 	}
 
-	return LB_STATUS_SUCCESS;
+	slave_set_priority(slave, LOW_PRIORITY);
+	return DBOX_STATUS_ERROR_NONE;
 }
 
 static inline int invoke_deactivate_cb(struct slave_node *slave)
@@ -754,106 +924,6 @@ static inline int invoke_deactivate_cb(struct slave_node *slave)
 	return reactivate;
 }
 
-static Eina_Bool terminate_timer_cb(void *data)
-{
-	struct slave_node *slave = data;
-	int ret;
-
-	/*!
-	 * \todo
-	 * check the return value of the aul_terminate_pid
-	 */
-	slave->state = SLAVE_REQUEST_TO_TERMINATE;
-	slave->terminate_timer = NULL;
-
-	DbgPrint("Terminate slave: %d (%s)\n", slave_pid(slave), slave_name(slave));
-	ret = aul_terminate_pid(slave->pid);
-	if (ret < 0) {
-		ErrPrint("Terminate slave(%s) failed. pid %d (%d)\n", slave_name(slave), slave_pid(slave), ret);
-		slave = slave_deactivated(slave);
-		if (slave == NULL) {
-			DbgPrint("Slave is deleted\n");
-		}
-	}
-
-	return ECORE_CALLBACK_CANCEL;
-}
-
-HAPI struct slave_node *slave_deactivate(struct slave_node *slave, int no_timer)
-{
-	int ret;
-
-	if (!slave_is_activated(slave)) {
-		ErrPrint("Slave is already deactivated\n");
-		if (slave_loaded_instance(slave) == 0) {
-			/*!
-			 * \note
-			 * If a slave has no more instances,
-			 * Destroy it
-			 */
-			slave = slave_unref(slave);
-		}
-		return slave;
-	}
-
-	if (slave_pid(slave) <= 0) {
-		return slave;
-	}
-
-	if ((slave->ctrl_option & PROVIDER_CTRL_MANUAL_TERMINATION) == PROVIDER_CTRL_MANUAL_TERMINATION) {
-		/*!
-		 * \note
-		 * In this case,
-		 * The provider requests MANUAL TERMINATION control option.
-		 * Master will not send terminate request in this case, the provider should be terminated by itself.
-		 */
-		DbgPrint("Manual termination is turned on\n");
-		slave->state = SLAVE_REQUEST_TO_DISCONNECT;
-		(void)slave_rpc_disconnect(slave);
-	} else if (slave->terminate_timer) {
-		ErrPrint("Terminate timer is already fired (%d)\n", slave->pid);
-	} else if (!no_timer) {
-		DbgPrint("Fire the terminate timer: %d\n", slave->pid);
-		slave->terminate_timer = ecore_timer_add(SLAVE_ACTIVATE_TIME, terminate_timer_cb, slave);
-		if (!slave->terminate_timer) {
-			/*!
-			 * \note
-			 * Normally, Call the terminate_timer_cb directly from here
-			 * But in this case. if the aul_terminate_pid failed, Call the slave_deactivated function directly.
-			 * Then the "slave" pointer can be changed. To trace it, Copy the body of terminate_timer_cb to here.
-			 */
-			ErrPrint("Failed to add a new timer for terminating\n");
-			DbgPrint("Terminate slave: %d (%s)\n", slave_pid(slave), slave_name(slave));
-			/*!
-			 * \todo
-			 * check the return value of the aul_terminate_pid
-			 */
-			slave->state = SLAVE_REQUEST_TO_TERMINATE;
-
-			ret = aul_terminate_pid(slave->pid);
-			if (ret < 0) {
-				ErrPrint("Terminate slave(%s) failed. pid %d (%d)\n", slave_name(slave), slave_pid(slave), ret);
-				slave = slave_deactivated(slave);
-			}
-		}
-	} else {
-		/*!
-		 * \todo
-		 * check the return value of the aul_terminate_pid
-		 */
-		slave->state = SLAVE_REQUEST_TO_TERMINATE;
-
-		DbgPrint("Terminate slave: %d (%s)\n", slave_pid(slave), slave_name(slave));
-		ret = aul_terminate_pid(slave->pid);
-		if (ret < 0) {
-			ErrPrint("Terminate slave(%s) failed. pid %d (%d)\n", slave_name(slave), slave_pid(slave), ret);
-			slave = slave_deactivated(slave);
-		}
-	}
-
-	return slave;
-}
-
 HAPI struct slave_node *slave_deactivated(struct slave_node *slave)
 {
 	int reactivate;
@@ -881,7 +951,24 @@ HAPI struct slave_node *slave_deactivated(struct slave_node *slave)
 		slave->terminate_timer = NULL;
 	}
 
+	/**
+	 * @note
+	 * FOR SAFETY
+	 * If the deactivated event callback is called for package.c
+	 * It can delete the instance if it has fault information
+	 * then it also try to delete the slave object again.
+	 * To prevent from unexpected slave object deletetion while handling callback,
+	 * increase the refcnt of slave
+	 * when it get back from callback, try to decrease the refcnt of slave
+	 * At that time, we can delete slave safely.
+	 */
+	slave_ref(slave);
 	reactivate = invoke_deactivate_cb(slave);
+	slave = slave_unref(slave);
+	if (!slave) {
+		ErrPrint("Slave object is deleted\n");
+		return slave;
+	}
 
 	slave = slave_unref(slave);
 	if (!slave) {
@@ -896,12 +983,12 @@ HAPI struct slave_node *slave_deactivated(struct slave_node *slave)
 		 * The master will not reactivate it automatically.
 		 */
 		DbgPrint("Manual reactivate option is turned on\n");
-	} else if (reactivate && slave_need_to_reactivate(slave)) {
+	} else if (reactivate && slave_need_to_reactivate(slave) && setting_oom_level() == OOM_TYPE_NORMAL) {
 		int ret;
 
 		DbgPrint("Need to reactivate a slave\n");
 		ret = slave_activate(slave);
-		if (ret < 0 && ret != LB_STATUS_ERROR_ALREADY) {
+		if (ret < 0 && ret != DBOX_STATUS_ERROR_ALREADY) {
 			ErrPrint("Failed to reactivate a slave\n");
 		}
 	} else if (slave_loaded_instance(slave) == 0) {
@@ -921,6 +1008,13 @@ HAPI struct slave_node *slave_deactivated_by_fault(struct slave_node *slave)
 	int ret;
 	int reactivate = 1;
 	int reactivate_instances = 1;
+	int max_load;
+
+	if (g_conf.slave_max_load < 0) {
+		max_load = DYNAMICBOX_CONF_SLAVE_MAX_LOAD;
+	} else {
+		max_load = g_conf.slave_max_load;
+	}
 
 	if (!slave_is_activated(slave)) {
 		DbgPrint("Deactivating in progress\n");
@@ -937,7 +1031,7 @@ HAPI struct slave_node *slave_deactivated_by_fault(struct slave_node *slave)
 
 	if (slave_pid(slave) > 0) {
 		DbgPrint("Try to terminate PID: %d\n", slave_pid(slave));
-		ret = aul_terminate_pid(slave_pid(slave));
+		ret = aul_terminate_pid_async(slave_pid(slave));
 		if (ret < 0) {
 			ErrPrint("Terminate failed, pid %d\n", slave_pid(slave));
 		}
@@ -947,9 +1041,10 @@ HAPI struct slave_node *slave_deactivated_by_fault(struct slave_node *slave)
 	double faulted_at;
 
 	faulted_at = ecore_time_get();
-	if (faulted_at - slave->activated_at < MINIMUM_REACTIVATION_TIME) {
+	if (faulted_at - slave->activated_at < DYNAMICBOX_CONF_MINIMUM_REACTIVATION_TIME) {
 		slave->critical_fault_count++;
-		if (!slave_loaded_instance(slave) || slave->critical_fault_count >= SLAVE_MAX_LOAD) {
+
+		if (!slave_loaded_instance(slave) || slave->critical_fault_count >= max_load) {
 			ErrPrint("Reactivation time is too fast and frequently occurred - Stop to auto reactivation\n");
 			reactivate = 0;
 			reactivate_instances = 0;
@@ -958,7 +1053,10 @@ HAPI struct slave_node *slave_deactivated_by_fault(struct slave_node *slave)
 			 * \note
 			 * Fault callback can access the slave information.
 			 */
-			invoke_fault_cb(slave);
+			if (invoke_fault_cb(slave) == NULL) {
+				ErrPrint("Slave is deleted while processing fault handler\n");
+				return NULL;
+			}
 		} else {
 			slave->critical_fault_count = 0;
 		}
@@ -970,9 +1068,9 @@ HAPI struct slave_node *slave_deactivated_by_fault(struct slave_node *slave)
 		struct timeval rtv;
 
 		timersub(&faulted_at, &slave->activated_at, &rtv);
-		if (rtv.tv_sec < MINIMUM_REACTIVATION_TIME) {
+		if (rtv.tv_sec < DYNAMICBOX_CONF_MINIMUM_REACTIVATION_TIME) {
 			slave->critical_fault_count++;
-			if (!slave_loaded_instance(slave) || slave->critical_fault_count >= SLAVE_MAX_LOAD) {
+			if (!slave_loaded_instance(slave) || slave->critical_fault_count >= max_load) {
 				ErrPrint("Reactivation time is too fast and frequently occurred - Stop to auto reactivation\n");
 				reactivate = 0;
 				reactivate_instances = 0;
@@ -981,7 +1079,10 @@ HAPI struct slave_node *slave_deactivated_by_fault(struct slave_node *slave)
 				 * \note
 				 * Fault callback can access the slave information.
 				 */
-				invoke_fault_cb(slave);
+				if (invoke_fault_cb(slave) == NULL) {
+					ErrPrint("Slave is deleted while processing fault handler\n");
+					return NULL;
+				}
 			}
 		} else {
 			slave->critical_fault_count = 0;
@@ -1009,7 +1110,7 @@ HAPI const int const slave_is_activated(struct slave_node *slave)
 		 * To send the last request to the provider.
 		 */
 	case SLAVE_REQUEST_TO_LAUNCH:
-		 /* Not yet launched. but the slave incurred an unexpected error */
+		/* Not yet launched. but the slave incurred an unexpected error */
 	case SLAVE_REQUEST_TO_PAUSE:
 	case SLAVE_REQUEST_TO_RESUME:
 	case SLAVE_PAUSED:
@@ -1030,7 +1131,7 @@ HAPI int slave_event_callback_add(struct slave_node *slave, enum slave_event eve
 	ev = calloc(1, sizeof(*ev));
 	if (!ev) {
 		ErrPrint("Heap: %s\n", strerror(errno));
-		return LB_STATUS_ERROR_MEMORY;
+		return DBOX_STATUS_ERROR_OUT_OF_MEMORY;
 	}
 
 	ev->slave = slave;
@@ -1076,10 +1177,10 @@ HAPI int slave_event_callback_add(struct slave_node *slave, enum slave_event eve
 		break;
 	default:
 		DbgFree(ev);
-		return LB_STATUS_ERROR_INVALID;
+		return DBOX_STATUS_ERROR_INVALID_PARAMETER;
 	}
 
-	return LB_STATUS_SUCCESS;
+	return DBOX_STATUS_ERROR_NONE;
 }
 
 HAPI int slave_event_callback_del(struct slave_node *slave, enum slave_event event, int (*cb)(struct slave_node *, void *), void *data)
@@ -1098,7 +1199,7 @@ HAPI int slave_event_callback_del(struct slave_node *slave, enum slave_event eve
 					slave->event_deactivate_list = eina_list_remove(slave->event_deactivate_list, ev);
 					DbgFree(ev);
 				}
-				return LB_STATUS_SUCCESS;
+				return DBOX_STATUS_ERROR_NONE;
 			}
 		}
 		break;
@@ -1111,7 +1212,7 @@ HAPI int slave_event_callback_del(struct slave_node *slave, enum slave_event eve
 					slave->event_delete_list = eina_list_remove(slave->event_delete_list, ev);
 					DbgFree(ev);
 				}
-				return LB_STATUS_SUCCESS;
+				return DBOX_STATUS_ERROR_NONE;
 			}
 		}
 		break;
@@ -1124,7 +1225,7 @@ HAPI int slave_event_callback_del(struct slave_node *slave, enum slave_event eve
 					slave->event_activate_list = eina_list_remove(slave->event_activate_list, ev);
 					DbgFree(ev);
 				}
-				return LB_STATUS_SUCCESS;
+				return DBOX_STATUS_ERROR_NONE;
 			}
 		}
 		break;
@@ -1137,7 +1238,7 @@ HAPI int slave_event_callback_del(struct slave_node *slave, enum slave_event eve
 					slave->event_pause_list = eina_list_remove(slave->event_pause_list, ev);
 					DbgFree(ev);
 				}
-				return LB_STATUS_SUCCESS;
+				return DBOX_STATUS_ERROR_NONE;
 			}
 		}
 		break;
@@ -1150,7 +1251,7 @@ HAPI int slave_event_callback_del(struct slave_node *slave, enum slave_event eve
 					slave->event_resume_list = eina_list_remove(slave->event_resume_list, ev);
 					DbgFree(ev);
 				}
-				return LB_STATUS_SUCCESS;
+				return DBOX_STATUS_ERROR_NONE;
 			}
 		}
 		break;
@@ -1163,15 +1264,15 @@ HAPI int slave_event_callback_del(struct slave_node *slave, enum slave_event eve
 					slave->event_fault_list = eina_list_remove(slave->event_fault_list, ev);
 					DbgFree(ev);
 				}
-				return LB_STATUS_SUCCESS;
+				return DBOX_STATUS_ERROR_NONE;
 			}
 		}
 		break;
 	default:
-		return LB_STATUS_ERROR_INVALID;
+		return DBOX_STATUS_ERROR_INVALID_PARAMETER;
 	}
 
-	return LB_STATUS_ERROR_NOT_EXIST;
+	return DBOX_STATUS_ERROR_NOT_EXIST;
 }
 
 HAPI int slave_set_data(struct slave_node *slave, const char *tag, void *data)
@@ -1181,19 +1282,19 @@ HAPI int slave_set_data(struct slave_node *slave, const char *tag, void *data)
 	priv = calloc(1, sizeof(*priv));
 	if (!priv) {
 		ErrPrint("Heap: %s\n", strerror(errno));
-		return LB_STATUS_ERROR_MEMORY;
+		return DBOX_STATUS_ERROR_OUT_OF_MEMORY;
 	}
 
 	priv->tag = strdup(tag);
 	if (!priv->tag) {
 		ErrPrint("Heap: %s\n", strerror(errno));
 		DbgFree(priv);
-		return LB_STATUS_ERROR_MEMORY;
+		return DBOX_STATUS_ERROR_OUT_OF_MEMORY;
 	}
 
 	priv->data = data;
 	slave->data_list = eina_list_append(slave->data_list, priv);
-	return LB_STATUS_SUCCESS;
+	return DBOX_STATUS_ERROR_NONE;
 }
 
 HAPI void *slave_del_data(struct slave_node *slave, const char *tag)
@@ -1259,7 +1360,7 @@ HAPI struct slave_node *slave_find_by_name(const char *name)
 	return NULL;
 }
 
-HAPI struct slave_node *slave_find_available(const char *abi, int secured, int network)
+HAPI struct slave_node *slave_find_available(const char *slave_pkgname, const char *abi, int secured, int network, const char *hw_acceleration)
 {
 	Eina_List *l;
 	struct slave_node *slave;
@@ -1286,6 +1387,16 @@ HAPI struct slave_node *slave_find_available(const char *abi, int secured, int n
 			continue;
 		}
 
+		if (strcasecmp(slave->pkgname, slave_pkgname)) {
+			continue;
+		}
+
+		if (slave->hw_acceleration != hw_acceleration) {
+			if (!slave->hw_acceleration || !hw_acceleration || strcasecmp(slave->hw_acceleration, hw_acceleration)) {
+				continue;
+			}
+		}
+
 		if (slave->secured) {
 			if (slave->loaded_package == 0) {
 				DbgPrint("Found secured slave - has no instances (%s)\n", slave_name(slave));
@@ -1293,8 +1404,15 @@ HAPI struct slave_node *slave_find_available(const char *abi, int secured, int n
 			}
 		} else if (slave->network == network) {
 			DbgPrint("slave[%s] loaded_package[%d] net: [%d]\n", slave_name(slave), slave->loaded_package, slave->network);
-			if (!strcasecmp(abi, DEFAULT_ABI)) {
-				if (slave->loaded_package < SLAVE_MAX_LOAD) {
+			if (!strcasecmp(abi, DYNAMICBOX_CONF_DEFAULT_ABI)) {
+				int max_load;
+				if (g_conf.slave_max_load < 0) {
+					max_load = DYNAMICBOX_CONF_SLAVE_MAX_LOAD;
+				} else {
+					max_load = g_conf.slave_max_load;
+				}
+
+				if (slave->loaded_package < max_load) {
 					return slave;
 				}
 			} else {
@@ -1342,6 +1460,30 @@ HAPI struct slave_node *slave_find_by_rpc_handle(int handle)
 	return NULL;
 }
 
+HAPI char *slave_package_name(const char *abi, const char *lbid)
+{
+	char *s_pkgname;
+	const char *tmp;
+
+	tmp = abi_find_slave(abi);
+	if (!tmp) {
+		ErrPrint("Failed to find a proper pkgname of a slave\n");
+		return NULL;
+	}
+
+	s_pkgname = util_replace_string(tmp, DYNAMICBOX_CONF_REPLACE_TAG_APPID, lbid);
+	if (!s_pkgname) {
+		DbgPrint("Failed to get replaced string\n");
+		s_pkgname = strdup(tmp);
+		if (!s_pkgname) {
+			ErrPrint("Heap: %s\n", strerror(errno));
+			return NULL;
+		}
+	}
+
+	return s_pkgname;
+}
+
 HAPI void slave_load_package(struct slave_node *slave)
 {
 	slave->loaded_package++;
@@ -1353,7 +1495,7 @@ HAPI void slave_unload_package(struct slave_node *slave)
 		ErrPrint("Slave loaded package is not correct\n");
 		return;
 	}
-		
+
 	slave->loaded_package--;
 }
 
@@ -1415,13 +1557,13 @@ HAPI const pid_t const slave_pid(const struct slave_node *slave)
 HAPI int slave_set_pid(struct slave_node *slave, pid_t pid)
 {
 	if (!slave) {
-		return LB_STATUS_ERROR_INVALID;
+		return DBOX_STATUS_ERROR_INVALID_PARAMETER;
 	}
 
 	DbgPrint("Slave PID is updated to %d from %d\n", pid, slave_pid(slave));
 
 	slave->pid = pid;
-	return LB_STATUS_SUCCESS;
+	return DBOX_STATUS_ERROR_NONE;
 }
 
 static inline void invoke_resumed_cb(struct slave_node *slave)
@@ -1514,26 +1656,27 @@ HAPI int slave_resume(struct slave_node *slave)
 {
 	double timestamp;
 	struct packet *packet;
+	unsigned int cmd = CMD_RESUME;
 
 	switch (slave->state) {
 	case SLAVE_REQUEST_TO_DISCONNECT:
 	case SLAVE_REQUEST_TO_LAUNCH:
 	case SLAVE_REQUEST_TO_TERMINATE:
 	case SLAVE_TERMINATED:
-		return LB_STATUS_ERROR_INVALID;
+		return DBOX_STATUS_ERROR_INVALID_PARAMETER;
 	case SLAVE_RESUMED:
 	case SLAVE_REQUEST_TO_RESUME:
-		return LB_STATUS_SUCCESS;
+		return DBOX_STATUS_ERROR_NONE;
 	default:
 		break;
 	}
 
 	timestamp = util_timestamp();
 
-	packet = packet_create("resume", "d", timestamp);
+	packet = packet_create((const char *)&cmd, "d", timestamp);
 	if (!packet) {
 		ErrPrint("Failed to prepare param\n");
-		return LB_STATUS_ERROR_FAULT;
+		return DBOX_STATUS_ERROR_FAULT;
 	}
 
 	slave->state = SLAVE_REQUEST_TO_RESUME;
@@ -1544,26 +1687,27 @@ HAPI int slave_pause(struct slave_node *slave)
 {
 	double timestamp;
 	struct packet *packet;
+	unsigned int cmd = CMD_PAUSE;
 
 	switch (slave->state) {
 	case SLAVE_REQUEST_TO_DISCONNECT:
 	case SLAVE_REQUEST_TO_LAUNCH:
 	case SLAVE_REQUEST_TO_TERMINATE:
 	case SLAVE_TERMINATED:
-		return LB_STATUS_ERROR_INVALID;
+		return DBOX_STATUS_ERROR_INVALID_PARAMETER;
 	case SLAVE_PAUSED:
 	case SLAVE_REQUEST_TO_PAUSE:
-		return LB_STATUS_SUCCESS;
+		return DBOX_STATUS_ERROR_NONE;
 	default:
 		break;
 	}
 
 	timestamp = util_timestamp();
 
-	packet = packet_create("pause", "d", timestamp);
+	packet = packet_create((const char *)&cmd, "d", timestamp);
 	if (!packet) {
 		ErrPrint("Failed to prepare param\n");
-		return LB_STATUS_ERROR_FAULT;
+		return DBOX_STATUS_ERROR_FAULT;
 	}
 
 	slave->state = SLAVE_REQUEST_TO_PAUSE;
@@ -1671,11 +1815,13 @@ HAPI int slave_deactivate_all(int reactivate, int reactivate_instances, int no_t
 	DbgPrint("Deactivate all\n");
 
 	EINA_LIST_FOREACH_SAFE(s_info.slave_list, l, n, slave) {
-		slave_set_reactivate_instances(slave, reactivate_instances);
-		slave_set_reactivation(slave, reactivate);
+		if (slave_is_activated(slave)) {
+			slave_set_reactivate_instances(slave, reactivate_instances);
+			slave_set_reactivation(slave, reactivate);
 
-		if (!slave_deactivate(slave, no_timer)) {
-			s_info.slave_list = eina_list_remove(s_info.slave_list, slave);
+			if (!slave_deactivate(slave, no_timer)) {
+				s_info.slave_list = eina_list_remove(s_info.slave_list, slave);
+			}
 		}
 
 		cnt++;
@@ -1712,6 +1858,50 @@ HAPI void slave_set_control_option(struct slave_node *slave, int ctrl)
 HAPI int slave_control_option(struct slave_node *slave)
 {
 	return slave->ctrl_option;
+}
+
+HAPI int slave_set_priority(struct slave_node *slave, int priority)
+{
+	pid_t pid;
+
+	if (!slave) {
+		return DBOX_STATUS_ERROR_INVALID_PARAMETER;
+	}
+
+	pid = slave_pid(slave);
+	if (pid < 0) {
+		return DBOX_STATUS_ERROR_INVALID_PARAMETER;
+	}
+
+	if (setpriority(PRIO_PROCESS, slave_pid(slave), priority) < 0) {
+		ErrPrint("setpriority: %s\n", strerror(errno));
+		return DBOX_STATUS_ERROR_FAULT;
+	}
+
+	return DBOX_STATUS_ERROR_NONE;
+}
+
+HAPI int slave_priority(struct slave_node *slave)
+{
+	pid_t pid;
+	int priority;
+
+	if (!slave) {
+		return DBOX_STATUS_ERROR_INVALID_PARAMETER;
+	}
+
+	pid = slave_pid(slave);
+	if (pid < 0) {
+		return DBOX_STATUS_ERROR_INVALID_PARAMETER;
+	}
+
+	priority = getpriority(PRIO_PROCESS, pid);
+	if (priority < 0) {
+		ErrPrint("getpriority: %s\n", strerror(errno));
+		return DBOX_STATUS_ERROR_FAULT;
+	}
+
+	return priority;
 }
 
 /* End of a file */

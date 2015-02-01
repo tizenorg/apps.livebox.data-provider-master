@@ -16,20 +16,12 @@
 
 [Unit]
 Description=Data Provider daemon
-DefaultDependencies=no
-After=check-mount.service
+After=xorg.target
 
 [Service]
-Environment=MULTISENSE_SND_PLAYER=tizen_snd_player
-Environment=ELM_MODULES=ctxpopup_copypasteUI>entry/api:datetime_input_popup>datetime/api:object_dump>win/api:access_output_tts>access/api
-Environment=EINA_LOG_LEVEL=1
-Environment=ECORE_INPUT_TIMEOUT_FIX=0
-Environment=EINA_LOG_LEVELS=ecore_x:4,evas_main:1
 Environment=BUFMGR_LOCK_TYPE="once"
 Environment=BUFMGR_MAP_CACHE="true"
-Environment=ELM_PROFILE=mobile
-EnvironmentFile=-/run/tizen-mobile-env
-Type=simple
+Type=notify
 ExecStart=/usr/bin/data-provider-master
 RestartSec=1
 Restart=always

@@ -26,7 +26,7 @@
  * After master successfully allocate heap for an instance,
  * It will send a load request to a specified slave
  * (The slave will be specified when a package informaion is
- * prepared via configuration file of each livebox packages.)
+ * prepared via configuration file of each dynamicbox packages.)
  * We defined this as "REQUEST_TO_ACTIVATE" state.
  *
  * After the slave create a new instance, it will sends back
@@ -37,21 +37,21 @@
  * Sometimes, slaves can meet some unexpected problems then
  * it will tries to clear all problems and tries to keep them in safe env.
  * To do this, master or slave can be terminated.
- * In this case, the master has to find the fault module(crashed livebox)
+ * In this case, the master has to find the fault module(crashed dynamicbox)
  * and prevent it from loading at the slave.
- * And it will send requests for re-creating all other normal liveboxes.
+ * And it will send requests for re-creating all other normal dynamicboxes.
  * We defined this as "REQUEST_TO_REACTIVATE".
  *
  * After slave is launched again(recovered from fault situation), it will
  * receives "re-create" event from the master, then it will create all
- * instances of requested liveboxes.
+ * instances of requested dynamicboxes.
  *
  * When the master receives "created" event from the slaves,
  * It will change the instance's state to "ACTIVATED"
  * But now, the master will not send "created" event to the clients.
  *
- * Because the clients don't want to know the re-created liveboxes.
- * They just want to know about fault liveboxes to display deactivated
+ * Because the clients don't want to know the re-created dynamicboxes.
+ * They just want to know about fault dynamicboxes to display deactivated
  * message.
  *
  * Sometimes the master can send requests to the slave to unload instances.
@@ -80,7 +80,7 @@
  * It will change the state of an master to "DESTROYED"
  *
  * There is one more event to change the state of an instance to "DESTROYED".
- * In case of system created livebox, it could be destroyed itself.
+ * In case of system created dynamicbox, it could be destroyed itself.
  * So the slave will send "deleted" event to the master directly.
  * Even if the master doesn't requests to delete it.
  *
@@ -92,16 +92,6 @@
 enum instance_event {
 	INSTANCE_EVENT_DESTROY,
 	INSTNACE_EVENT_UNKNOWN
-};
-
-enum instance_destroy_type {
-	INSTANCE_DESTROY_DEFAULT = 0x00,
-	INSTANCE_DESTROY_UPGRADE = 0x01,
-	INSTANCE_DESTROY_UNINSTALL = 0x02,
-	INSTANCE_DESTROY_TERMINATE = 0x03,
-	INSTANCE_DESTROY_FAULT = 0x04,
-	INSTANCE_DESTROY_TEMPORARY = 0x05,
-	INSTANCE_DESTROY_UNKNOWN = 0x06
 };
 
 enum instance_state {
@@ -119,17 +109,17 @@ enum instance_state {
 	INST_REQUEST_TO_DESTROY /*!< Sent a request to a slave, when the master receives deleted event, the master will delete this */
 };
 
-enum livebox_visible_state { /*!< Must be sync'd with livebox-viewer */
-	LB_SHOW = 0x00, /*!< Livebox is showed. Default state */
-	LB_HIDE = 0x01, /*!< Livebox is hide, with no update event, but keep update timer */
+enum dynamicbox_visible_state { /*!< Must be sync'd with dynamicbox-viewer */
+	DBOX_SHOW = 0x00, /*!< Dynamicbox is showed. Default state */
+	DBOX_HIDE = 0x01, /*!< Dynamicbox is hide, with no update event, but keep update timer */
 
-	LB_HIDE_WITH_PAUSE = 0x02, /*!< Livebix is hide, it needs to be paused (with freezed update timer) */
+	DBOX_HIDE_WITH_PAUSE = 0x02, /*!< Dynamicbox is hide, it needs to be paused (with freezed update timer) */
 
-	LB_VISIBLE_ERROR = 0xFFFFFFFF /* To enlarge the size of this enumeration type */
+	DBOX_VISIBLE_ERROR = 0xFFFFFFFF /* To enlarge the size of this enumeration type */
 };
 
-#define IS_PD	1
-#define IS_LB	0
+#define IS_GBAR 1
+#define IS_DBOX 0
 
 struct inst_info;
 struct pkg_info;
@@ -137,8 +127,8 @@ struct script_handle;
 struct client_node;
 
 extern struct inst_info *instance_create(struct client_node *client, double timestamp, const char *pkgname, const char *content, const char *cluster, const char *category, double period, int width, int height);
-extern int instance_destroy(struct inst_info *inst, enum instance_destroy_type type);
-extern int instance_reload(struct inst_info *inst, enum instance_destroy_type type);
+extern int instance_destroy(struct inst_info *inst, dynamicbox_destroy_type_e type);
+extern int instance_reload(struct inst_info *inst, dynamicbox_destroy_type_e type);
 
 extern struct inst_info * instance_ref(struct inst_info *inst);
 extern struct inst_info * instance_unref(struct inst_info *inst);
@@ -152,9 +142,9 @@ extern int instance_activate(struct inst_info *inst);
 extern int instance_recover_state(struct inst_info *inst);
 extern int instance_need_slave(struct inst_info *inst);
 
-extern void instance_set_lb_info(struct inst_info *inst, double priority, const char *content, const char *title);
-extern void instance_set_lb_size(struct inst_info *inst, int w, int h);
-extern void instance_set_pd_size(struct inst_info *inst, int w, int h);
+extern void instance_set_dbox_info(struct inst_info *inst, double priority, const char *content, const char *title);
+extern void instance_set_dbox_size(struct inst_info *inst, int w, int h);
+extern void instance_set_gbar_size(struct inst_info *inst, int w, int h);
 extern void instance_set_alt_info(struct inst_info *inst, const char *icon, const char *name);
 
 extern int instance_set_pinup(struct inst_info *inst, int pinup);
@@ -165,8 +155,8 @@ extern int instance_clicked(struct inst_info *inst, const char *event, double ti
 extern int instance_text_signal_emit(struct inst_info *inst, const char *emission, const char *source, double sx, double sy, double ex, double ey);
 extern int instance_signal_emit(struct inst_info *inst, const char *emission, const char *source, double sx, double sy, double ex, double ey, double x, double y, int down);
 extern int instance_change_group(struct inst_info *inst, const char *cluster, const char *category);
-extern int instance_set_visible_state(struct inst_info *inst, enum livebox_visible_state state);
-extern enum livebox_visible_state instance_visible_state(struct inst_info *inst);
+extern int instance_set_visible_state(struct inst_info *inst, enum dynamicbox_visible_state state);
+extern enum dynamicbox_visible_state instance_visible_state(struct inst_info *inst);
 extern int instance_set_update_mode(struct inst_info *inst, int active_update);
 extern int instance_active_update(struct inst_info *inst);
 
@@ -176,10 +166,12 @@ extern int instance_active_update(struct inst_info *inst);
  */
 extern const double const instance_timestamp(const struct inst_info *inst);
 extern struct pkg_info * const instance_package(const struct inst_info *inst);
-extern struct script_info * const instance_lb_script(const struct inst_info *inst);
-extern struct script_info * const instance_pd_script(const struct inst_info *inst);
-extern struct buffer_info * const instance_pd_buffer(const struct inst_info *inst);
-extern struct buffer_info * const instance_lb_buffer(const struct inst_info *inst);
+extern struct script_info * const instance_dbox_script(const struct inst_info *inst);
+extern struct script_info * const instance_gbar_script(const struct inst_info *inst);
+extern struct buffer_info * const instance_gbar_buffer(const struct inst_info *inst);
+extern struct buffer_info * const instance_gbar_extra_buffer(const struct inst_info *inst, int idx);
+extern struct buffer_info * const instance_dbox_buffer(const struct inst_info *inst);
+extern struct buffer_info * const instance_dbox_extra_buffer(const struct inst_info *inst, int idx);
 extern const char * const instance_id(const struct inst_info *inst);
 extern const char * const instance_content(const struct inst_info *inst);
 extern const char * const instance_category(const struct inst_info *inst);
@@ -190,10 +182,10 @@ extern const int const instance_priority(const struct inst_info *inst);
 extern const struct client_node * const instance_client(const struct inst_info *inst);
 extern const double const instance_period(const struct inst_info *inst);
 extern const int const instance_timeout(const struct inst_info *inst);
-extern const int const instance_lb_width(const struct inst_info *inst);
-extern const int const instance_lb_height(const struct inst_info *inst);
-extern const int const instance_pd_width(const struct inst_info *inst);
-extern const int const instance_pd_height(const struct inst_info *inst);
+extern const int const instance_dbox_width(const struct inst_info *inst);
+extern const int const instance_dbox_height(const struct inst_info *inst);
+extern const int const instance_gbar_width(const struct inst_info *inst);
+extern const int const instance_gbar_height(const struct inst_info *inst);
 extern const enum instance_state const instance_state(const struct inst_info *inst);
 
 /*!
@@ -202,43 +194,53 @@ extern const enum instance_state const instance_state(const struct inst_info *in
 extern int instance_unicast_created_event(struct inst_info *inst, struct client_node *client);
 extern int instance_unicast_deleted_event(struct inst_info *inst, struct client_node *client, int reason);
 
-extern int instance_create_lb_buffer(struct inst_info *inst, int pixels);
-extern int instance_create_pd_buffer(struct inst_info *inst, int pixels);
+extern int instance_create_dbox_buffer(struct inst_info *inst, int pixels);
+extern int instance_create_dbox_extra_buffer(struct inst_info *inst, int pixels, int idx);
+extern int instance_create_gbar_buffer(struct inst_info *inst, int pixels);
+extern int instance_create_gbar_extra_buffer(struct inst_info *inst, int pixels, int idx);
 
-extern void instance_slave_set_pd_pos(struct inst_info *inst, double x, double y);
-extern void instance_slave_get_pd_pos(struct inst_info *inst, double *x, double *y);
+extern void instance_slave_set_gbar_pos(struct inst_info *inst, double x, double y);
+extern void instance_slave_get_gbar_pos(struct inst_info *inst, double *x, double *y);
 
-extern int instance_slave_open_pd(struct inst_info *inst, struct client_node *client);
-extern int instance_slave_close_pd(struct inst_info *inst, struct client_node *client, int reason);
+extern int instance_slave_open_gbar(struct inst_info *inst, struct client_node *client);
+extern int instance_slave_close_gbar(struct inst_info *inst, struct client_node *client, int reason);
 
 extern int instance_freeze_updator(struct inst_info *inst);
 extern int instance_thaw_updator(struct inst_info *inst);
 
 extern int instance_send_access_event(struct inst_info *inst, int status);
 
-extern int instance_lb_update_begin(struct inst_info *inst, double priority, const char *content, const char *title);
-extern int instance_lb_update_end(struct inst_info *inst);
+extern int instance_dbox_update_begin(struct inst_info *inst, double priority, const char *content, const char *title);
+extern int instance_dbox_update_end(struct inst_info *inst);
 
-extern int instance_pd_update_begin(struct inst_info *inst);
-extern int instance_pd_update_end(struct inst_info *inst);
+extern int instance_gbar_update_begin(struct inst_info *inst);
+extern int instance_gbar_update_end(struct inst_info *inst);
 
-extern void instance_pd_updated(const char *pkgname, const char *id, const char *descfile);
-extern void instance_lb_updated_by_instance(struct inst_info *inst, const char *safe_file);
-extern void instance_pd_updated_by_instance(struct inst_info *inst, const char *descfile);
+extern void instance_gbar_updated(const char *pkgname, const char *id, const char *descfile, int x, int y, int w, int h);
+extern void instance_dbox_updated_by_instance(struct inst_info *inst, const char *safe_file, int x, int y, int w, int h);
+extern void instance_gbar_updated_by_instance(struct inst_info *inst, const char *descfile, int x, int y, int w, int h);
+extern void instance_extra_updated_by_instance(struct inst_info *inst, int is_gbar, int idx, int x, int y, int w, int h);
+extern void instance_extra_info_updated_by_instance(struct inst_info *inst);
 
 /*!
  * \note
- * if the status is LB_STATUS_ERROR_FAULT (slave is faulted)
- * even though the PD is not created, this will forcely send the PD_DESTROYED event to the client.
+ * if the status is DBOX_STATUS_ERROR_FAULT (slave is faulted)
+ * even though the GBAR is not created, this will forcely send the GBAR_DESTROYED event to the client.
  */
-extern int instance_client_pd_destroyed(struct inst_info *inst, int status);
-extern int instance_client_pd_created(struct inst_info *inst, int status);
+extern int instance_client_gbar_destroyed(struct inst_info *inst, int status);
+extern int instance_client_gbar_created(struct inst_info *inst, int status);
+
+extern int instance_client_gbar_extra_buffer_created(struct inst_info *inst, int idx);
+extern int instance_client_gbar_extra_buffer_destroyed(struct inst_info *inst, int idx);
+
+extern int instance_client_dbox_extra_buffer_created(struct inst_info *inst, int idx);
+extern int instance_client_dbox_extra_buffer_destroyed(struct inst_info *inst, int idx);
 
 extern int instance_send_access_status(struct inst_info *inst, int status);
 extern int instance_send_key_status(struct inst_info *inst, int status);
 extern int instance_forward_packet(struct inst_info *inst, struct packet *packet);
 
-extern struct client_node *instance_pd_owner(struct inst_info *inst);
+extern struct client_node *instance_gbar_owner(struct inst_info *inst);
 
 /*!
  * Multiple viewer
@@ -253,6 +255,7 @@ extern int instance_fini(void);
 
 extern int instance_event_callback_add(struct inst_info *inst, enum instance_event type, int (*event_cb)(struct inst_info *inst, void *data), void *data);
 extern int instance_event_callback_del(struct inst_info *inst, enum instance_event type, int (*event_cb)(struct inst_info *inst, void *data), void *data);
+extern int instance_event_callback_is_added(struct inst_info *inst, enum instance_event type, int (*event_cb)(struct inst_info *inst, void *data), void *data);
 
 /*!
  */

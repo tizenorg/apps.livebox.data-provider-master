@@ -42,7 +42,10 @@
 
 #include <dlog.h>
 #include <packet.h>
-#include <livebox-errno.h>
+#include <dynamicbox_errno.h>
+#include <dynamicbox_service.h>
+#include <dynamicbox_buffer.h>
+#include <dynamicbox_conf.h>
 
 #include "debug.h"
 #include "conf.h"
@@ -53,17 +56,6 @@
 #include "client_rpc.h"
 #include "buffer_handler.h"
 #include "script_handler.h" // Reverse dependency. must has to be broken
-
-struct buffer {
-	enum {
-		CREATED = 0x00beef00,
-		DESTROYED = 0x00dead00
-	} state;
-	enum buffer_type type;
-	int refcnt;
-	void *info;
-	char data[];
-};
 
 /*!
  * \brief Allocate this in the buffer->data.
@@ -88,10 +80,9 @@ struct buffer_info
 {
 	void *buffer;
 	char *id;
-	char *lock;
-	int lock_fd;
+	dynamicbox_lock_info_t lock_info;
 
-	enum buffer_type type;
+	enum dynamicbox_fb_type type;
 
 	int w;
 	int h;
@@ -116,127 +107,10 @@ static struct {
 	.pixmap_list = NULL,
 };
 
-static int destroy_lock_file(struct buffer_info *info)
-{
-	if (!info->inst) {
-		return LB_STATUS_ERROR_INVALID;
-	}
-
-	if (!info->lock) {
-		return LB_STATUS_ERROR_INVALID;
-	}
-
-	if (close(info->lock_fd) < 0) {
-		ErrPrint("close: %s\n", strerror(errno));
-	}
-	info->lock_fd = -1;
-
-	if (unlink(info->lock) < 0) {
-		ErrPrint("unlink: %s\n", strerror(errno));
-	}
-
-	DbgFree(info->lock);
-	info->lock = NULL;
-	return LB_STATUS_SUCCESS;
-}
-
-static int create_lock_file(struct buffer_info *info)
-{
-	const char *id;
-	int len;
-	char *file;
-	char target[3] = "pd";
-
-	if (!info->inst) {
-		return LB_STATUS_ERROR_INVALID;
-	}
-
-	id = instance_id(info->inst);
-	if (!id) {
-		return LB_STATUS_ERROR_INVALID;
-	}
-
-	len = strlen(id);
-	file = malloc(len + 20);
-	if (!file) {
-		ErrPrint("Heap: %s\n", strerror(errno));
-		return LB_STATUS_ERROR_MEMORY;
-	}
-
-	if (script_handler_buffer_info(instance_pd_script(info->inst)) != info && instance_pd_buffer(info->inst) != info) {
-		target[0] = 'l';
-		target[1] = 'b';
-		/* target[2] = '\0'; // We already have this ;) */
-	}
-
-	snprintf(file, len + 20, "%s.%s.lck", util_uri_to_path(id), target);
-	info->lock_fd = open(file, O_WRONLY|O_CREAT, 0644);
-	if (info->lock_fd < 0) {
-		ErrPrint("open: %s\n", strerror(errno));
-		DbgFree(file);
-		return LB_STATUS_ERROR_IO;
-	}
-
-	info->lock = file;
-	return LB_STATUS_SUCCESS;
-}
-
-static int do_buffer_lock(struct buffer_info *buffer)
-{
-	struct flock flock;
-	int ret;
-
-	if (buffer->lock_fd < 0) {
-		return LB_STATUS_SUCCESS;
-	}
-
-	flock.l_type = F_WRLCK;
-	flock.l_whence = SEEK_SET;
-	flock.l_start = 0;
-	flock.l_len = 0;
-	flock.l_pid = getpid();
-
-	do {
-		ret = fcntl(buffer->lock_fd, F_SETLKW, &flock);
-		if (ret < 0) {
-			ret = errno;
-			ErrPrint("fcntl: %s\n", strerror(errno));
-		}
-	} while (ret == EINTR);
-
-	return LB_STATUS_SUCCESS;
-}
-
-static int do_buffer_unlock(struct buffer_info *buffer)
-{
-	struct flock flock;
-	int ret;
-
-	if (buffer->lock_fd < 0) {
-		return LB_STATUS_SUCCESS;
-	}
-
-	flock.l_type = F_UNLCK;
-	flock.l_whence = SEEK_SET;
-	flock.l_start = 0;
-	flock.l_len = 0;
-	flock.l_pid = getpid();
-
-	do {
-		ret = fcntl(buffer->lock_fd, F_SETLKW, &flock);
-		if (ret < 0) {
-			ret = errno;
-			ErrPrint("fcntl: %s\n", strerror(errno));
-		}
-	} while (ret == EINTR);
-
-	return LB_STATUS_SUCCESS;
-}
-
-static inline struct buffer *create_pixmap(struct buffer_info *info)
+static inline dynamicbox_fb_t create_pixmap(struct buffer_info *info)
 {
 	struct gem_data *gem;
-	struct buffer *buffer;
+	dynamicbox_fb_t buffer;
 	Display *disp;
 	Window parent;
 	XGCValues gcv;
@@ -257,9 +131,9 @@ static inline struct buffer *create_pixmap(struct buffer_info *info)
 
 	gem = (struct gem_data *)buffer->data;
 
-	buffer->type = BUFFER_TYPE_PIXMAP;
+	buffer->type = DBOX_FB_TYPE_PIXMAP;
 	buffer->refcnt = 1;
-	buffer->state = CREATED;
+	buffer->state = DBOX_FB_STATE_CREATED;
 
 	gem->attachments[0] = DRI2BufferFrontLeft;
 	gem->count = 1;
@@ -297,7 +171,7 @@ static inline struct buffer *create_pixmap(struct buffer_info *info)
 	return buffer;
 }
 
-static inline int create_gem(struct buffer *buffer)
+static inline int create_gem(dynamicbox_fb_t buffer)
 {
 	struct gem_data *gem;
 	Display *disp;
@@ -305,7 +179,7 @@ static inline int create_gem(struct buffer *buffer)
 	disp = ecore_x_display_get();
 	if (!disp) {
 		ErrPrint("Failed to get display\n");
-		return LB_STATUS_ERROR_IO;
+		return DBOX_STATUS_ERROR_IO_ERROR;
 	}
 
 	gem = (struct gem_data *)buffer->data;
@@ -314,21 +188,21 @@ static inline int create_gem(struct buffer *buffer)
 		gem->data = calloc(1, gem->w * gem->h * gem->depth);
 		if (!gem->data) {
 			ErrPrint("Heap: %s\n", strerror(errno));
-			return LB_STATUS_ERROR_MEMORY;
+			return DBOX_STATUS_ERROR_OUT_OF_MEMORY;
 		}
 
 		ErrPrint("DRI2(gem) is not supported - Fallback to the S/W Backend\n");
-		return LB_STATUS_SUCCESS;
+		return DBOX_STATUS_ERROR_NONE;
 	}
 
 	DRI2CreateDrawable(disp, gem->pixmap);
 
 	gem->dri2_buffer = DRI2GetBuffers(disp, gem->pixmap,
-					&gem->w, &gem->h, gem->attachments, gem->count, &gem->buf_count);
+			&gem->w, &gem->h, gem->attachments, gem->count, &gem->buf_count);
 	if (!gem->dri2_buffer || !gem->dri2_buffer->name) {
 		ErrPrint("Failed to get a gem buffer\n");
 		DRI2DestroyDrawable(disp, gem->pixmap);
-		return LB_STATUS_ERROR_FAULT;
+		return DBOX_STATUS_ERROR_FAULT;
 	}
 	/*!
 	 * \How can I destroy this?
@@ -337,24 +211,24 @@ static inline int create_gem(struct buffer *buffer)
 	if (!gem->pixmap_bo) {
 		ErrPrint("Failed to import BO\n");
 		DRI2DestroyDrawable(disp, gem->pixmap);
-		return LB_STATUS_ERROR_FAULT;
+		return DBOX_STATUS_ERROR_FAULT;
 	}
 
-	if (gem->dri2_buffer->pitch != gem->w * gem->depth) {
+	if (DYNAMICBOX_CONF_AUTO_ALIGN && gem->dri2_buffer->pitch != gem->w * gem->depth) {
 		gem->compensate_data = calloc(1, gem->w * gem->h * gem->depth);
 		if (!gem->compensate_data) {
 			ErrPrint("Failed to allocate heap\n");
 		}
 	}
 
-	DbgPrint("dri2_buffer: %p, name: %p, %dx%d, pitch: %d, buf_count: %d, depth: %d, compensate: %p\n",
-				gem->dri2_buffer, gem->dri2_buffer->name, gem->w, gem->h,
-				gem->dri2_buffer->pitch, gem->buf_count, gem->depth, gem->compensate_data);
+	DbgPrint("dri2_buffer: %p, name: %p, %dx%d, pitch: %d, buf_count: %d, depth: %d, compensate: %p (%d)\n",
+			gem->dri2_buffer, gem->dri2_buffer->name, gem->w, gem->h,
+			gem->dri2_buffer->pitch, gem->buf_count, gem->depth, gem->compensate_data, DYNAMICBOX_CONF_AUTO_ALIGN);
 
-	return LB_STATUS_SUCCESS;
+	return DBOX_STATUS_ERROR_NONE;
 }
 
-static inline void *acquire_gem(struct buffer *buffer)
+static inline void *acquire_gem(dynamicbox_fb_t buffer)
 {
 	struct gem_data *gem;
 
@@ -394,7 +268,7 @@ static inline void *acquire_gem(struct buffer *buffer)
 	return gem->compensate_data ? gem->compensate_data : gem->data;
 }
 
-static inline void release_gem(struct buffer *buffer)
+static inline void release_gem(dynamicbox_fb_t buffer)
 {
 	struct gem_data *gem;
 
@@ -453,7 +327,7 @@ static inline void release_gem(struct buffer *buffer)
 	}
 }
 
-static inline int destroy_pixmap(struct buffer *buffer)
+static inline int destroy_pixmap(dynamicbox_fb_t buffer)
 {
 	struct gem_data *gem;
 
@@ -464,24 +338,24 @@ static inline int destroy_pixmap(struct buffer *buffer)
 
 		disp = ecore_x_display_get();
 		if (!disp) {
-			return LB_STATUS_ERROR_IO;
+			return DBOX_STATUS_ERROR_IO_ERROR;
 		}
 
 		DbgPrint("pixmap %lu\n", gem->pixmap);
 		XFreePixmap(disp, gem->pixmap);
 	}
 
-	buffer->state = DESTROYED;
+	buffer->state = DBOX_FB_STATE_DESTROYED;
 	DbgFree(buffer);
-	return LB_STATUS_SUCCESS;
+	return DBOX_STATUS_ERROR_NONE;
 }
 
-static inline int destroy_gem(struct buffer *buffer)
+static inline int destroy_gem(dynamicbox_fb_t buffer)
 {
 	struct gem_data *gem;
 
 	if (!buffer) {
-		return LB_STATUS_ERROR_INVALID;
+		return DBOX_STATUS_ERROR_INVALID_PARAMETER;
 	}
 
 	/*!
@@ -489,7 +363,7 @@ static inline int destroy_gem(struct buffer *buffer)
 	 */
 	gem = (struct gem_data *)buffer->data;
 	if (!gem) {
-		return LB_STATUS_ERROR_FAULT;
+		return DBOX_STATUS_ERROR_FAULT;
 	}
 
 	if (s_info.fd >= 0) {
@@ -512,44 +386,44 @@ static inline int destroy_gem(struct buffer *buffer)
 		gem->data = NULL;
 	}
 
-	return LB_STATUS_SUCCESS;
+	return DBOX_STATUS_ERROR_NONE;
 }
 
 static inline int load_file_buffer(struct buffer_info *info)
 {
-	struct buffer *buffer;
+	dynamicbox_fb_t buffer;
 	double timestamp;
 	int size;
 	char *new_id;
 	int len;
 
-	len = strlen(IMAGE_PATH) + 40;
+	len = strlen(DYNAMICBOX_CONF_IMAGE_PATH) + 40;
 	new_id = malloc(len);
 	if (!new_id) {
 		ErrPrint("Heap: %s\n", strerror(errno));
-		return LB_STATUS_ERROR_MEMORY;
+		return DBOX_STATUS_ERROR_OUT_OF_MEMORY;
 	}
 
 	timestamp = util_timestamp();
-	snprintf(new_id, len, SCHEMA_FILE "%s%lf", IMAGE_PATH, timestamp);
+	snprintf(new_id, len, SCHEMA_FILE "%s%lf", DYNAMICBOX_CONF_IMAGE_PATH, timestamp);
 
 	size = sizeof(*buffer) + info->w * info->h * info->pixel_size;
 	if (!size) {
 		ErrPrint("Canvas buffer size is ZERO\n");
 		DbgFree(new_id);
-		return LB_STATUS_ERROR_INVALID;
+		return DBOX_STATUS_ERROR_INVALID_PARAMETER;
 	}
 
 	buffer = calloc(1, size);
 	if (!buffer) {
 		ErrPrint("Failed to allocate buffer\n");
 		DbgFree(new_id);
-		return LB_STATUS_ERROR_MEMORY;
+		return DBOX_STATUS_ERROR_OUT_OF_MEMORY;
 	}
 
-	buffer->type = BUFFER_TYPE_FILE;
+	buffer->type = DBOX_FB_TYPE_FILE;
 	buffer->refcnt = 0;
-	buffer->state = CREATED;
+	buffer->state = DBOX_FB_STATE_CREATED;
 	buffer->info = info;
 
 	DbgFree(info->id);
@@ -558,27 +432,27 @@ static inline int load_file_buffer(struct buffer_info *info)
 	info->is_loaded = 1;
 
 	DbgPrint("FILE type %d created\n", size);
-	return LB_STATUS_SUCCESS;
+	return DBOX_STATUS_ERROR_NONE;
 }
 
 static inline int load_shm_buffer(struct buffer_info *info)
 {
 	int id;
 	int size;
-	struct buffer *buffer; /* Just for getting a size */
+	dynamicbox_fb_t buffer; /* Just for getting a size */
 	char *new_id;
 	int len;
 
 	size = info->w * info->h * info->pixel_size;
 	if (!size) {
 		ErrPrint("Invalid buffer size\n");
-		return LB_STATUS_ERROR_INVALID;
+		return DBOX_STATUS_ERROR_INVALID_PARAMETER;
 	}
 
 	id = shmget(IPC_PRIVATE, size + sizeof(*buffer), IPC_CREAT | 0666);
 	if (id < 0) {
 		ErrPrint("shmget: %s\n", strerror(errno));
-		return LB_STATUS_ERROR_FAULT;
+		return DBOX_STATUS_ERROR_FAULT;
 	}
 
 	buffer = shmat(id, NULL, 0);
@@ -589,12 +463,12 @@ static inline int load_shm_buffer(struct buffer_info *info)
 			ErrPrint("%s shmctl: %s\n", info->id, strerror(errno));
 		}
 
-		return LB_STATUS_ERROR_FAULT;
+		return DBOX_STATUS_ERROR_FAULT;
 	}
 
-	buffer->type = BUFFER_TYPE_SHM;
+	buffer->type = DBOX_FB_TYPE_SHM;
 	buffer->refcnt = id;
-	buffer->state = CREATED; /*!< Needless */
+	buffer->state = DBOX_FB_STATE_CREATED; /*!< Needless */
 	buffer->info = (void *)size; /*!< Use this field to indicates the size of SHM */
 
 	len = strlen(SCHEMA_SHM) + 30; /* strlen("shm://") + 30 */
@@ -610,7 +484,7 @@ static inline int load_shm_buffer(struct buffer_info *info)
 			ErrPrint("shmctl: %s\n", strerror(errno));
 		}
 
-		return LB_STATUS_ERROR_MEMORY;
+		return DBOX_STATUS_ERROR_OUT_OF_MEMORY;
 	}
 
 	snprintf(new_id, len, SCHEMA_SHM "%d", id);
@@ -619,12 +493,12 @@ static inline int load_shm_buffer(struct buffer_info *info)
 	info->id = new_id;
 	info->buffer = buffer;
 	info->is_loaded = 1;
-	return LB_STATUS_SUCCESS;
+	return DBOX_STATUS_ERROR_NONE;
 }
 
 static inline int load_pixmap_buffer(struct buffer_info *info)
 {
-	struct buffer *buffer;
+	dynamicbox_fb_t buffer;
 	struct gem_data *gem;
 	char *new_id;
 	int len;
@@ -645,7 +519,7 @@ static inline int load_pixmap_buffer(struct buffer_info *info)
 	if (!buffer) {
 		DbgPrint("Failed to make a reference of a pixmap\n");
 		info->is_loaded = 0;
-		return LB_STATUS_ERROR_FAULT;
+		return DBOX_STATUS_ERROR_FAULT;
 	}
 
 	len = strlen(SCHEMA_PIXMAP) + 30; /* strlen("pixmap://") + 30 */
@@ -654,7 +528,7 @@ static inline int load_pixmap_buffer(struct buffer_info *info)
 		ErrPrint("Heap: %s\n", strerror(errno));
 		info->is_loaded = 0;
 		buffer_handler_pixmap_unref(buffer);
-		return LB_STATUS_ERROR_MEMORY;
+		return DBOX_STATUS_ERROR_OUT_OF_MEMORY;
 	}
 
 	DbgFree(info->id);
@@ -664,38 +538,47 @@ static inline int load_pixmap_buffer(struct buffer_info *info)
 
 	snprintf(info->id, len, SCHEMA_PIXMAP "%d:%d", (int)gem->pixmap, info->pixel_size);
 	DbgPrint("Loaded pixmap(info->id): %s\n", info->id);
-	return LB_STATUS_SUCCESS;
+	return DBOX_STATUS_ERROR_NONE;
 }
 
 EAPI int buffer_handler_load(struct buffer_info *info)
 {
 	int ret;
+	dynamicbox_target_type_e type = DBOX_TYPE_GBAR;
 
 	if (!info) {
 		ErrPrint("buffer handler is nil\n");
-		return LB_STATUS_ERROR_INVALID;
+		return DBOX_STATUS_ERROR_INVALID_PARAMETER;
 	}
 
 	if (info->is_loaded) {
 		DbgPrint("Buffer is already loaded\n");
-		return LB_STATUS_SUCCESS;
+		return DBOX_STATUS_ERROR_NONE;
 	}
 
 	switch (info->type) {
-	case BUFFER_TYPE_FILE:
+	case DBOX_FB_TYPE_FILE:
 		ret = load_file_buffer(info);
-		(void)create_lock_file(info);
+
+		if (script_handler_buffer_info(instance_gbar_script(info->inst)) != info && instance_gbar_buffer(info->inst) != info) {
+			type = DBOX_TYPE_DBOX;
+		}
+		info->lock_info = dynamicbox_service_create_lock(instance_id(info->inst), type, DBOX_LOCK_WRITE);
 		break;
-	case BUFFER_TYPE_SHM:
+	case DBOX_FB_TYPE_SHM:
 		ret = load_shm_buffer(info);
-		(void)create_lock_file(info);
+
+		if (script_handler_buffer_info(instance_gbar_script(info->inst)) != info && instance_gbar_buffer(info->inst) != info) {
+			type = DBOX_TYPE_DBOX;
+		}
+		info->lock_info = dynamicbox_service_create_lock(instance_id(info->inst), type, DBOX_LOCK_WRITE);
 		break;
-	case BUFFER_TYPE_PIXMAP:
+	case DBOX_FB_TYPE_PIXMAP:
 		ret = load_pixmap_buffer(info);
 		break;
 	default:
 		ErrPrint("Invalid buffer\n");
-		ret = LB_STATUS_ERROR_INVALID;
+		ret = DBOX_STATUS_ERROR_INVALID_PARAMETER;
 		break;
 	}
 
@@ -710,7 +593,7 @@ static inline int unload_file_buffer(struct buffer_info *info)
 	new_id = strdup(SCHEMA_FILE "/tmp/.live.undefined");
 	if (!new_id) {
 		ErrPrint("Heap: %s\n", strerror(errno));
-		return LB_STATUS_ERROR_MEMORY;
+		return DBOX_STATUS_ERROR_OUT_OF_MEMORY;
 	}
 
 	DbgFree(info->buffer);
@@ -723,7 +606,7 @@ static inline int unload_file_buffer(struct buffer_info *info)
 
 	DbgFree(info->id);
 	info->id = new_id;
-	return LB_STATUS_SUCCESS;
+	return DBOX_STATUS_ERROR_NONE;
 }
 
 static inline int unload_shm_buffer(struct buffer_info *info)
@@ -734,19 +617,19 @@ static inline int unload_shm_buffer(struct buffer_info *info)
 	new_id = strdup(SCHEMA_SHM "-1");
 	if (!new_id) {
 		ErrPrint("Heap: %s\n", strerror(errno));
-		return LB_STATUS_ERROR_MEMORY;
+		return DBOX_STATUS_ERROR_OUT_OF_MEMORY;
 	}
 
 	if (sscanf(info->id, SCHEMA_SHM "%d", &id) != 1) {
 		ErrPrint("%s Invalid ID\n", info->id);
 		DbgFree(new_id);
-		return LB_STATUS_ERROR_INVALID;
+		return DBOX_STATUS_ERROR_INVALID_PARAMETER;
 	}
 
 	if (id < 0) {
 		ErrPrint("(%s) Invalid id: %d\n", info->id, id);
 		DbgFree(new_id);
-		return LB_STATUS_ERROR_INVALID;
+		return DBOX_STATUS_ERROR_INVALID_PARAMETER;
 	}
 
 	if (shmdt(info->buffer) < 0) {
@@ -761,7 +644,7 @@ static inline int unload_shm_buffer(struct buffer_info *info)
 
 	DbgFree(info->id);
 	info->id = new_id;
-	return LB_STATUS_SUCCESS;
+	return DBOX_STATUS_ERROR_NONE;
 }
 
 static inline int unload_pixmap_buffer(struct buffer_info *info)
@@ -773,19 +656,19 @@ static inline int unload_pixmap_buffer(struct buffer_info *info)
 	new_id = strdup(SCHEMA_PIXMAP "0:0");
 	if (!new_id) {
 		ErrPrint("Heap: %s\n", strerror(errno));
-		return LB_STATUS_ERROR_MEMORY;
+		return DBOX_STATUS_ERROR_OUT_OF_MEMORY;
 	}
 
 	if (sscanf(info->id, SCHEMA_PIXMAP "%d:%d", &id, &pixels) != 2) {
 		ErrPrint("Invalid ID (%s)\n", info->id);
 		DbgFree(new_id);
-		return LB_STATUS_ERROR_INVALID;
+		return DBOX_STATUS_ERROR_INVALID_PARAMETER;
 	}
 
 	if (id == 0) {
 		ErrPrint("(%s) Invalid id: %d\n", info->id, id);
 		DbgFree(new_id);
-		return LB_STATUS_ERROR_INVALID;
+		return DBOX_STATUS_ERROR_INVALID_PARAMETER;
 	}
 
 	/*!
@@ -802,7 +685,7 @@ static inline int unload_pixmap_buffer(struct buffer_info *info)
 
 	DbgFree(info->id);
 	info->id = new_id;
-	return LB_STATUS_SUCCESS;
+	return DBOX_STATUS_ERROR_NONE;
 }
 
 EAPI int buffer_handler_unload(struct buffer_info *info)
@@ -811,29 +694,31 @@ EAPI int buffer_handler_unload(struct buffer_info *info)
 
 	if (!info) {
 		ErrPrint("buffer handler is NIL\n");
-		return LB_STATUS_ERROR_INVALID;
+		return DBOX_STATUS_ERROR_INVALID_PARAMETER;
 	}
 
 	if (!info->is_loaded) {
 		ErrPrint("Buffer is not loaded\n");
-		return LB_STATUS_ERROR_INVALID;
+		return DBOX_STATUS_ERROR_INVALID_PARAMETER;
 	}
 
 	switch (info->type) {
-	case BUFFER_TYPE_FILE:
-		(void)destroy_lock_file(info);
+	case DBOX_FB_TYPE_FILE:
+		dynamicbox_service_destroy_lock(info->lock_info);
+		info->lock_info = NULL;
 		ret = unload_file_buffer(info);
 		break;
-	case BUFFER_TYPE_SHM:
-		(void)destroy_lock_file(info);
+	case DBOX_FB_TYPE_SHM:
+		dynamicbox_service_destroy_lock(info->lock_info);
+		info->lock_info = NULL;
 		ret = unload_shm_buffer(info);
 		break;
-	case BUFFER_TYPE_PIXMAP:
+	case DBOX_FB_TYPE_PIXMAP:
 		ret = unload_pixmap_buffer(info);
 		break;
 	default:
 		ErrPrint("Invalid buffer\n");
-		ret = LB_STATUS_ERROR_INVALID;
+		ret = DBOX_STATUS_ERROR_INVALID_PARAMETER;
 		break;
 	}
 
@@ -849,14 +734,14 @@ EAPI const char *buffer_handler_id(const struct buffer_info *info)
 	return info ? info->id : "";
 }
 
-EAPI enum buffer_type buffer_handler_type(const struct buffer_info *info)
+EAPI enum dynamicbox_fb_type buffer_handler_type(const struct buffer_info *info)
 {
-	return info ? info->type : BUFFER_TYPE_ERROR;
+	return info ? info->type : DBOX_FB_TYPE_ERROR;
 }
 
 EAPI void *buffer_handler_fb(struct buffer_info *info)
 {
-	struct buffer *buffer;
+	dynamicbox_fb_t buffer;
 
 	if (!info) {
 		return NULL;
@@ -864,7 +749,7 @@ EAPI void *buffer_handler_fb(struct buffer_info *info)
 
 	buffer = info->buffer;
 
-	if (info->type == BUFFER_TYPE_PIXMAP) {
+	if (info->type == DBOX_FB_TYPE_PIXMAP) {
 		void *canvas;
 		int ret;
 
@@ -885,7 +770,7 @@ EAPI void *buffer_handler_fb(struct buffer_info *info)
 
 EAPI int buffer_handler_pixmap(const struct buffer_info *info)
 {
-	struct buffer *buf;
+	dynamicbox_fb_t buf;
 	struct gem_data *gem;
 
 	if (!info) {
@@ -893,12 +778,12 @@ EAPI int buffer_handler_pixmap(const struct buffer_info *info)
 		return 0;
 	}
 
-	if (info->type != BUFFER_TYPE_PIXMAP) {
+	if (info->type != DBOX_FB_TYPE_PIXMAP) {
 		ErrPrint("Invalid buffer type\n");
 		return 0;
 	}
 
-	buf = (struct buffer *)info->buffer;
+	buf = (dynamicbox_fb_t)info->buffer;
 	if (!buf) {
 		ErrPrint("Invalid buffer data\n");
 		return 0;
@@ -910,7 +795,7 @@ EAPI int buffer_handler_pixmap(const struct buffer_info *info)
 
 EAPI void *buffer_handler_pixmap_acquire_buffer(struct buffer_info *info)
 {
-	struct buffer *buffer;
+	dynamicbox_fb_t buffer;
 
 	if (!info || !info->is_loaded) {
 		ErrPrint("Buffer is not loaded\n");
@@ -927,7 +812,7 @@ EAPI void *buffer_handler_pixmap_acquire_buffer(struct buffer_info *info)
 
 EAPI void *buffer_handler_pixmap_buffer(struct buffer_info *info)
 {
-	struct buffer *buffer;
+	dynamicbox_fb_t buffer;
 	struct gem_data *gem;
 
 	if (!info) {
@@ -948,19 +833,19 @@ EAPI void *buffer_handler_pixmap_buffer(struct buffer_info *info)
 	return gem->compensate_data ? gem->compensate_data : gem->data;
 }
 
-/*!
- * \return "buffer" object (Not the buffer_info)
+/**
+ * @return "buffer" object (Not the buffer_info)
  */
 EAPI void *buffer_handler_pixmap_ref(struct buffer_info *info)
 {
-	struct buffer *buffer;
+	dynamicbox_fb_t buffer;
 
 	if (!info->is_loaded) {
 		ErrPrint("Buffer is not loaded\n");
 		return NULL;
 	}
 
-	if (info->type != BUFFER_TYPE_PIXMAP) {
+	if (info->type != DBOX_FB_TYPE_PIXMAP) {
 		ErrPrint("Buffer type is not matched\n");
 		return NULL;
 	}
@@ -980,24 +865,43 @@ EAPI void *buffer_handler_pixmap_ref(struct buffer_info *info)
 		if (info->inst) {
 			struct pkg_info *pkg;
 
-			if (instance_lb_buffer(info->inst) == info) {
-				pkg = instance_package(info->inst);
-				if (package_lb_type(pkg) == LB_TYPE_BUFFER) {
+			pkg = instance_package(info->inst);
+
+			if (instance_dbox_buffer(info->inst) == info) {
+				if (package_dbox_type(pkg) == DBOX_TYPE_BUFFER) {
 					need_gem = 0;
 				}
-			} else if (instance_pd_buffer(info->inst) == info) {
-				pkg = instance_package(info->inst);
-				if (package_pd_type(pkg) == PD_TYPE_BUFFER) {
+			} else if (instance_gbar_buffer(info->inst) == info) {
+				if (package_gbar_type(pkg) == GBAR_TYPE_BUFFER) {
 					need_gem = 0;
+				}
+			} else {
+				int idx;
+
+				for (idx = 0; idx < DYNAMICBOX_CONF_EXTRA_BUFFER_COUNT; idx++) {
+					if (instance_dbox_extra_buffer(info->inst, idx) == info) {
+						if (package_dbox_type(pkg) == DBOX_TYPE_BUFFER) {
+							need_gem = 0;
+							break;
+						}
+					}
+
+					if (instance_gbar_extra_buffer(info->inst, idx) == info) {
+						if (package_gbar_type(pkg) == GBAR_TYPE_BUFFER) {
+							need_gem = 0;
+							break;
+						}
+					}
 				}
 			}
 		}
 
 		if (need_gem) {
-			create_gem(buffer);
+			if (create_gem(buffer) < 0) {
+				/* okay, something goes wrong */
+			}
 		}
-
-	} else if (buffer->state != CREATED || buffer->type != BUFFER_TYPE_PIXMAP) {
+	} else if (buffer->state != DBOX_FB_STATE_CREATED || buffer->type != DBOX_FB_TYPE_PIXMAP) {
 		ErrPrint("Invalid buffer\n");
 		return NULL;
 	} else if (buffer->refcnt > 0) {
@@ -1014,7 +918,7 @@ EAPI void *buffer_handler_pixmap_ref(struct buffer_info *info)
  */
 EAPI void *buffer_handler_pixmap_find(int pixmap)
 {
-	struct buffer *buffer;
+	dynamicbox_fb_t buffer;
 	struct gem_data *gem;
 	Eina_List *l;
 	Eina_List *n;
@@ -1024,7 +928,7 @@ EAPI void *buffer_handler_pixmap_find(int pixmap)
 	}
 
 	EINA_LIST_FOREACH_SAFE(s_info.pixmap_list, l, n, buffer) {
-		if (!buffer || buffer->state != CREATED || buffer->type != BUFFER_TYPE_PIXMAP) {
+		if (!buffer || buffer->state != DBOX_FB_STATE_CREATED || buffer->type != DBOX_FB_TYPE_PIXMAP) {
 			s_info.pixmap_list = eina_list_remove(s_info.pixmap_list, buffer);
 			DbgPrint("Invalid buffer (List Removed: %p)\n", buffer);
 			continue;
@@ -1041,18 +945,18 @@ EAPI void *buffer_handler_pixmap_find(int pixmap)
 
 EAPI int buffer_handler_pixmap_release_buffer(void *canvas)
 {
-	struct buffer *buffer;
+	dynamicbox_fb_t buffer;
 	struct gem_data *gem;
 	Eina_List *l;
 	Eina_List *n;
 	void *_ptr;
 
 	if (!canvas) {
-		return LB_STATUS_ERROR_INVALID;
+		return DBOX_STATUS_ERROR_INVALID_PARAMETER;
 	}
 
 	EINA_LIST_FOREACH_SAFE(s_info.pixmap_list, l, n, buffer) {
-		if (!buffer || buffer->state != CREATED || buffer->type != BUFFER_TYPE_PIXMAP) {
+		if (!buffer || buffer->state != DBOX_FB_STATE_CREATED || buffer->type != DBOX_FB_TYPE_PIXMAP) {
 			s_info.pixmap_list = eina_list_remove(s_info.pixmap_list, buffer);
 			continue;
 		}
@@ -1067,11 +971,11 @@ EAPI int buffer_handler_pixmap_release_buffer(void *canvas)
 		if (_ptr == canvas) {
 			release_gem(buffer);
 			buffer_handler_pixmap_unref(buffer);
-			return LB_STATUS_SUCCESS;
+			return DBOX_STATUS_ERROR_NONE;
 		}
 	}
 
-	return LB_STATUS_ERROR_NOT_EXIST;
+	return DBOX_STATUS_ERROR_NOT_EXIST;
 }
 
 /*!
@@ -1082,12 +986,12 @@ EAPI int buffer_handler_pixmap_release_buffer(void *canvas)
  */
 EAPI int buffer_handler_pixmap_unref(void *buffer_ptr)
 {
-	struct buffer *buffer = buffer_ptr;
+	dynamicbox_fb_t buffer = buffer_ptr;
 	struct buffer_info *info;
 
 	buffer->refcnt--;
 	if (buffer->refcnt > 0) {
-		return LB_STATUS_SUCCESS; /* Return NULL means, gem buffer still in use */
+		return DBOX_STATUS_ERROR_NONE; /* Return NULL means, gem buffer still in use */
 	}
 
 	s_info.pixmap_list = eina_list_remove(s_info.pixmap_list, buffer);
@@ -1106,7 +1010,7 @@ EAPI int buffer_handler_pixmap_unref(void *buffer_ptr)
 		info->buffer = NULL;
 	}
 
-	return LB_STATUS_SUCCESS;
+	return DBOX_STATUS_ERROR_NONE;
 }
 
 EAPI int buffer_handler_is_loaded(const struct buffer_info *info)
@@ -1130,19 +1034,19 @@ EAPI int buffer_handler_resize(struct buffer_info *info, int w, int h)
 
 	if (!info) {
 		ErrPrint("Invalid handler\n");
-		return LB_STATUS_ERROR_INVALID;
+		return DBOX_STATUS_ERROR_INVALID_PARAMETER;
 	}
 
 	if (info->w == w && info->h == h) {
 		DbgPrint("No changes\n");
-		return LB_STATUS_SUCCESS;
+		return DBOX_STATUS_ERROR_NONE;
 	}
 
 	buffer_handler_update_size(info, w, h);
 
 	if (!info->is_loaded) {
 		DbgPrint("Buffer size is updated[%dx%d]\n", w, h);
-		return LB_STATUS_SUCCESS;
+		return DBOX_STATUS_ERROR_NONE;
 	}
 
 	ret = buffer_handler_unload(info);
@@ -1155,13 +1059,13 @@ EAPI int buffer_handler_resize(struct buffer_info *info, int w, int h)
 		ErrPrint("Load: %d\n", ret);
 	}
 
-	return LB_STATUS_SUCCESS;
+	return DBOX_STATUS_ERROR_NONE;
 }
 
 EAPI int buffer_handler_get_size(struct buffer_info *info, int *w, int *h)
 {
 	if (!info) {
-		return LB_STATUS_ERROR_INVALID;
+		return DBOX_STATUS_ERROR_INVALID_PARAMETER;
 	}
 
 	if (w) {
@@ -1171,7 +1075,7 @@ EAPI int buffer_handler_get_size(struct buffer_info *info, int *w, int *h)
 		*h = info->h;
 	}
 
-	return LB_STATUS_SUCCESS;
+	return DBOX_STATUS_ERROR_NONE;
 }
 
 EAPI struct inst_info *buffer_handler_instance(struct buffer_info *info)
@@ -1183,7 +1087,7 @@ EAPI struct inst_info *buffer_handler_instance(struct buffer_info *info)
  * \note
  * Only for used S/W Backend
  */
-static inline int sync_for_pixmap(struct buffer *buffer)
+static inline int sync_for_pixmap(dynamicbox_fb_t buffer)
 {
 	XShmSegmentInfo si;
 	XImage *xim;
@@ -1193,32 +1097,32 @@ static inline int sync_for_pixmap(struct buffer *buffer)
 	Screen *screen;
 	Visual *visual;
 
-	if (buffer->state != CREATED) {
+	if (buffer->state != DBOX_FB_STATE_CREATED) {
 		ErrPrint("Invalid state of a FB\n");
-		return LB_STATUS_ERROR_INVALID;
+		return DBOX_STATUS_ERROR_INVALID_PARAMETER;
 	}
 
-	if (buffer->type != BUFFER_TYPE_PIXMAP) {
+	if (buffer->type != DBOX_FB_TYPE_PIXMAP) {
 		ErrPrint("Invalid buffer\n");
-		return LB_STATUS_SUCCESS;
+		return DBOX_STATUS_ERROR_NONE;
 	}
 
 	disp = ecore_x_display_get();
 	if (!disp) {
 		ErrPrint("Failed to get a display\n");
-		return LB_STATUS_ERROR_FAULT;
+		return DBOX_STATUS_ERROR_FAULT;
 	}
 
 	gem = (struct gem_data *)buffer->data;
 	if (gem->w == 0 || gem->h == 0) {
 		DbgPrint("Nothing can be sync\n");
-		return LB_STATUS_SUCCESS;
+		return DBOX_STATUS_ERROR_NONE;
 	}
 
 	si.shmid = shmget(IPC_PRIVATE, gem->w * gem->h * gem->depth, IPC_CREAT | 0666);
 	if (si.shmid < 0) {
 		ErrPrint("shmget: %s\n", strerror(errno));
-		return LB_STATUS_ERROR_FAULT;
+		return DBOX_STATUS_ERROR_FAULT;
 	}
 
 	si.readOnly = False;
@@ -1227,7 +1131,7 @@ static inline int sync_for_pixmap(struct buffer *buffer)
 		if (shmctl(si.shmid, IPC_RMID, 0) < 0) {
 			ErrPrint("shmctl: %s\n", strerror(errno));
 		}
-		return LB_STATUS_ERROR_FAULT;
+		return DBOX_STATUS_ERROR_FAULT;
 	}
 
 	screen = DefaultScreenOfDisplay(disp);
@@ -1245,7 +1149,7 @@ static inline int sync_for_pixmap(struct buffer *buffer)
 		if (shmctl(si.shmid, IPC_RMID, 0) < 0) {
 			ErrPrint("shmctl: %s\n", strerror(errno));
 		}
-		return LB_STATUS_ERROR_FAULT;
+		return DBOX_STATUS_ERROR_FAULT;
 	}
 
 	xim->data = si.shmaddr;
@@ -1265,7 +1169,7 @@ static inline int sync_for_pixmap(struct buffer *buffer)
 			ErrPrint("shmctl: %s\n", strerror(errno));
 		}
 
-		return LB_STATUS_ERROR_FAULT;
+		return DBOX_STATUS_ERROR_FAULT;
 	}
 
 	memcpy(xim->data, gem->data, gem->w * gem->h * gem->depth);
@@ -1289,14 +1193,14 @@ static inline int sync_for_pixmap(struct buffer *buffer)
 		ErrPrint("shmctl: %s\n", strerror(errno));
 	}
 
-	return LB_STATUS_SUCCESS;
+	return DBOX_STATUS_ERROR_NONE;
 }
 
 EAPI void buffer_handler_flush(struct buffer_info *info)
 {
 	int fd;
 	int size;
-	struct buffer *buffer;
+	dynamicbox_fb_t buffer;
 
 	if (!info || !info->buffer) {
 		return;
@@ -1304,7 +1208,7 @@ EAPI void buffer_handler_flush(struct buffer_info *info)
 
 	buffer = info->buffer;
 
-	if (buffer->type == BUFFER_TYPE_PIXMAP) {
+	if (buffer->type == DBOX_FB_TYPE_PIXMAP) {
 		if (s_info.fd > 0) {
 			//return;
 			//PERF_INIT();
@@ -1327,7 +1231,7 @@ EAPI void buffer_handler_flush(struct buffer_info *info)
 				ErrPrint("Failed to sync via S/W Backend\n");
 			}
 		}
-	} else if (buffer->type == BUFFER_TYPE_FILE) {
+	} else if (buffer->type == DBOX_FB_TYPE_FILE) {
 		fd = open(util_uri_to_path(info->id), O_WRONLY | O_CREAT, 0644);
 		if (fd < 0) {
 			ErrPrint("%s open falied: %s\n", util_uri_to_path(info->id), strerror(errno));
@@ -1335,11 +1239,11 @@ EAPI void buffer_handler_flush(struct buffer_info *info)
 		}
 
 		size = info->w * info->h * info->pixel_size;
-		do_buffer_lock(info);
+		dynamicbox_service_acquire_lock(info->lock_info);
 		if (write(fd, info->buffer, size) != size) {
 			ErrPrint("Write is not completed: %s\n", strerror(errno));
 		}
-		do_buffer_unlock(info);
+		dynamicbox_service_release_lock(info->lock_info);
 
 		if (close(fd) < 0) {
 			ErrPrint("close: %s\n", strerror(errno));
@@ -1357,30 +1261,30 @@ HAPI int buffer_handler_init(void)
 
 	if (!DRI2QueryExtension(ecore_x_display_get(), &s_info.evt_base, &s_info.err_base)) {
 		ErrPrint("DRI2 is not supported\n");
-		return LB_STATUS_SUCCESS;
+		return DBOX_STATUS_ERROR_NONE;
 	}
 
 	if (!DRI2QueryVersion(ecore_x_display_get(), &dri2Major, &dri2Minor)) {
 		ErrPrint("DRI2 is not supported\n");
 		s_info.evt_base = 0;
 		s_info.err_base = 0;
-		return LB_STATUS_SUCCESS;
+		return DBOX_STATUS_ERROR_NONE;
 	}
 
 	if (!DRI2Connect(ecore_x_display_get(), DefaultRootWindow(ecore_x_display_get()), &driverName, &deviceName)) {
 		ErrPrint("DRI2 is not supported\n");
 		s_info.evt_base = 0;
 		s_info.err_base = 0;
-		return LB_STATUS_SUCCESS;
+		return DBOX_STATUS_ERROR_NONE;
 	}
 
-	if (USE_SW_BACKEND) {
+	if (DYNAMICBOX_CONF_USE_SW_BACKEND) {
 		DbgPrint("Fallback to the S/W Backend\n");
 		s_info.evt_base = 0;
 		s_info.err_base = 0;
 		DbgFree(deviceName);
 		DbgFree(driverName);
-		return LB_STATUS_SUCCESS;
+		return DBOX_STATUS_ERROR_NONE;
 	}
 
 	s_info.fd = open(deviceName, O_RDWR);
@@ -1390,7 +1294,7 @@ HAPI int buffer_handler_init(void)
 		ErrPrint("Failed to open a drm device: (%s)\n", strerror(errno));
 		s_info.evt_base = 0;
 		s_info.err_base = 0;
-		return LB_STATUS_SUCCESS;
+		return DBOX_STATUS_ERROR_NONE;
 	}
 
 	drmGetMagic(s_info.fd, &magic);
@@ -1403,7 +1307,7 @@ HAPI int buffer_handler_init(void)
 		s_info.fd = -1;
 		s_info.evt_base = 0;
 		s_info.err_base = 0;
-		return LB_STATUS_SUCCESS;
+		return DBOX_STATUS_ERROR_NONE;
 	}
 
 	s_info.slp_bufmgr = tbm_bufmgr_init(s_info.fd);
@@ -1415,10 +1319,10 @@ HAPI int buffer_handler_init(void)
 		s_info.fd = -1;
 		s_info.evt_base = 0;
 		s_info.err_base = 0;
-		return LB_STATUS_SUCCESS;
+		return DBOX_STATUS_ERROR_NONE;
 	}
 
-	return LB_STATUS_SUCCESS;
+	return DBOX_STATUS_ERROR_NONE;
 }
 
 HAPI int buffer_handler_fini(void)
@@ -1435,12 +1339,12 @@ HAPI int buffer_handler_fini(void)
 		s_info.slp_bufmgr = NULL;
 	}
 
-	return LB_STATUS_SUCCESS;
+	return DBOX_STATUS_ERROR_NONE;
 }
 
-static inline struct buffer *raw_open_file(const char *filename)
+static inline dynamicbox_fb_t raw_open_file(const char *filename)
 {
-	struct buffer *buffer;
+	dynamicbox_fb_t buffer;
 	int fd;
 	off_t off;
 	int ret;
@@ -1483,8 +1387,8 @@ static inline struct buffer *raw_open_file(const char *filename)
 		return NULL;
 	}
 
-	buffer->state = CREATED;
-	buffer->type = BUFFER_TYPE_FILE;
+	buffer->state = DBOX_FB_STATE_CREATED;
+	buffer->type = DBOX_FB_TYPE_FILE;
 	buffer->refcnt = 0;
 	buffer->info = (void *)off;
 
@@ -1507,18 +1411,18 @@ static inline struct buffer *raw_open_file(const char *filename)
 	return buffer;
 }
 
-static inline int raw_close_file(struct buffer *buffer)
+static inline int raw_close_file(dynamicbox_fb_t buffer)
 {
 	DbgFree(buffer);
 	return 0;
 }
 
-static inline struct buffer *raw_open_shm(int shm)
+static inline dynamicbox_fb_t raw_open_shm(int shm)
 {
-	struct buffer *buffer;
+	dynamicbox_fb_t buffer;
 
-	buffer = (struct buffer *)shmat(shm, NULL, SHM_RDONLY);
-	if (buffer == (struct buffer *)-1) {
+	buffer = (dynamicbox_fb_t)shmat(shm, NULL, SHM_RDONLY);
+	if (buffer == (dynamicbox_fb_t)-1) {
 		ErrPrint("shmat: %s\n", strerror(errno));
 		return NULL;
 	}
@@ -1526,7 +1430,7 @@ static inline struct buffer *raw_open_shm(int shm)
 	return buffer;
 }
 
-static inline int raw_close_shm(struct buffer *buffer)
+static inline int raw_close_shm(dynamicbox_fb_t buffer)
 {
 	int ret;
 
@@ -1538,58 +1442,58 @@ static inline int raw_close_shm(struct buffer *buffer)
 	return ret;
 }
 
-static inline struct buffer *raw_open_pixmap(unsigned int pixmap)
+static inline dynamicbox_fb_t raw_open_pixmap(unsigned int pixmap)
 {
-	struct buffer *buffer;
+	dynamicbox_fb_t buffer;
 
-	buffer = calloc(1, sizeof(*buffer) + DEFAULT_PIXELS);
+	buffer = calloc(1, sizeof(*buffer) + DYNAMICBOX_CONF_DEFAULT_PIXELS);
 	if (!buffer) {
 		ErrPrint("Heap: %s\n", strerror(errno));
 		return NULL;
 	}
 
-	buffer->state = CREATED;
-	buffer->type = BUFFER_TYPE_PIXMAP;
+	buffer->state = DBOX_FB_STATE_CREATED;
+	buffer->type = DBOX_FB_TYPE_PIXMAP;
 
 	return buffer;
 }
 
-static inline int raw_close_pixmap(struct buffer *buffer)
+static inline int raw_close_pixmap(dynamicbox_fb_t buffer)
 {
 	DbgFree(buffer);
 	return 0;
 }
 
-EAPI void *buffer_handler_raw_data(struct buffer *buffer)
+EAPI void *buffer_handler_raw_data(dynamicbox_fb_t buffer)
 {
-	if (!buffer || buffer->state != CREATED) {
+	if (!buffer || buffer->state != DBOX_FB_STATE_CREATED) {
 		return NULL;
 	}
 
 	return buffer->data;
 }
 
-EAPI int buffer_handler_raw_size(struct buffer *buffer)
+EAPI int buffer_handler_raw_size(dynamicbox_fb_t buffer)
 {
-	if (!buffer || buffer->state != CREATED) {
-		return LB_STATUS_ERROR_INVALID;
+	if (!buffer || buffer->state != DBOX_FB_STATE_CREATED) {
+		return DBOX_STATUS_ERROR_INVALID_PARAMETER;
 	}
 
 	return (int)buffer->info;
 }
 
-EAPI struct buffer *buffer_handler_raw_open(enum buffer_type buffer_type, void *resource)
+EAPI dynamicbox_fb_t buffer_handler_raw_open(enum dynamicbox_fb_type dynamicbox_fb_type, void *resource)
 {
-	struct buffer *handle;
+	dynamicbox_fb_t handle;
 
-	switch (buffer_type) {
-	case BUFFER_TYPE_SHM:
+	switch (dynamicbox_fb_type) {
+	case DBOX_FB_TYPE_SHM:
 		handle = raw_open_shm((int)resource);
 		break;
-	case BUFFER_TYPE_FILE:
+	case DBOX_FB_TYPE_FILE:
 		handle = raw_open_file(resource);
 		break;
-	case BUFFER_TYPE_PIXMAP:
+	case DBOX_FB_TYPE_PIXMAP:
 		handle = raw_open_pixmap((unsigned int)resource);
 		break;
 	default:
@@ -1600,52 +1504,125 @@ EAPI struct buffer *buffer_handler_raw_open(enum buffer_type buffer_type, void *
 	return handle;
 }
 
-EAPI int buffer_handler_raw_close(struct buffer *buffer)
+EAPI int buffer_handler_raw_close(dynamicbox_fb_t buffer)
 {
 	int ret;
 
+	if (!buffer || buffer->state != DBOX_FB_STATE_CREATED) {
+		return DBOX_STATUS_ERROR_INVALID_PARAMETER;
+	}
+
 	switch (buffer->type) {
-	case BUFFER_TYPE_SHM:
+	case DBOX_FB_TYPE_SHM:
 		ret = raw_close_shm(buffer);
 		break;
-	case BUFFER_TYPE_FILE:
+	case DBOX_FB_TYPE_FILE:
 		ret = raw_close_file(buffer);
 		break;
-	case BUFFER_TYPE_PIXMAP:
+	case DBOX_FB_TYPE_PIXMAP:
 		ret = raw_close_pixmap(buffer);
 		break;
 	default:
-		ret = LB_STATUS_ERROR_INVALID;
+		ret = DBOX_STATUS_ERROR_INVALID_PARAMETER;
 		break;
 	}
 
 	return ret;
 }
 
-EAPI int buffer_handler_lock(struct buffer_info *buffer)
+EAPI int buffer_handler_lock(struct buffer_info *info)
 {
-	if (buffer->type == BUFFER_TYPE_PIXMAP) {
-		return LB_STATUS_SUCCESS;
+	if (!info) {
+		return DBOX_STATUS_ERROR_INVALID_PARAMETER;
 	}
 
-	if (buffer->type == BUFFER_TYPE_FILE) {
-		return LB_STATUS_SUCCESS;
+	if (info->type == DBOX_FB_TYPE_PIXMAP) {
+		return DBOX_STATUS_ERROR_NONE;
 	}
 
-	return do_buffer_lock(buffer);
+	if (info->type == DBOX_FB_TYPE_FILE) {
+		return DBOX_STATUS_ERROR_NONE;
+	}
+
+	return dynamicbox_service_acquire_lock(info->lock_info);
 }
 
-EAPI int buffer_handler_unlock(struct buffer_info *buffer)
+EAPI int buffer_handler_unlock(struct buffer_info *info)
 {
-	if (buffer->type == BUFFER_TYPE_PIXMAP) {
-		return LB_STATUS_SUCCESS;
+	if (!info) {
+		return DBOX_STATUS_ERROR_INVALID_PARAMETER;
 	}
 
-	if (buffer->type == BUFFER_TYPE_FILE) {
-		return LB_STATUS_SUCCESS;
+	if (info->type == DBOX_FB_TYPE_PIXMAP) {
+		return DBOX_STATUS_ERROR_NONE;
 	}
 
-	return do_buffer_unlock(buffer);
+	if (info->type == DBOX_FB_TYPE_FILE) {
+		return DBOX_STATUS_ERROR_NONE;
+	}
+
+	return dynamicbox_service_release_lock(info->lock_info);
+}
+
+EAPI int buffer_handler_pixels(struct buffer_info *info)
+{
+	if (!info) {
+		return DBOX_STATUS_ERROR_INVALID_PARAMETER;
+	}
+
+	return info->pixel_size;
+}
+
+EAPI int buffer_handler_auto_align(void)
+{
+	return DYNAMICBOX_CONF_AUTO_ALIGN;
+}
+
+EAPI int buffer_handler_stride(struct buffer_info *info)
+{
+	dynamicbox_fb_t buffer;
+	struct gem_data *gem;
+	int stride;
+
+	if (!info) {
+		return DBOX_STATUS_ERROR_INVALID_PARAMETER;
+	}
+
+	switch (info->type) {
+	case DBOX_FB_TYPE_FILE:
+	case DBOX_FB_TYPE_SHM:
+		stride = info->w * info->pixel_size;
+		break;
+	case DBOX_FB_TYPE_PIXMAP:
+		buffer = info->buffer;
+		if (!buffer) {
+			stride = DBOX_STATUS_ERROR_INVALID_PARAMETER;
+			break;
+		}
+
+		gem = (struct gem_data *)buffer->data;
+		if (!gem) {
+			stride = DBOX_STATUS_ERROR_INVALID_PARAMETER;
+			break;
+		}
+
+		if (!gem->dri2_buffer) {
+			/*
+			 * Uhm...
+			 */
+			ErrPrint("dri2_buffer info is not ready yet!\n");
+			stride = DBOX_STATUS_ERROR_INVALID_PARAMETER;
+			break;
+		}
+
+		stride = gem->dri2_buffer->pitch;
+		break;
+	default:
+		stride = DBOX_STATUS_ERROR_INVALID_PARAMETER;
+		break;
+	}
+
+	return stride;
 }
 
 /*!
@@ -1654,35 +1631,35 @@ EAPI int buffer_handler_unlock(struct buffer_info *buffer)
  * Plugin cannot access the user data
  */
 
-HAPI int buffer_handler_set_data(struct buffer_info *buffer, void *data)
+HAPI int buffer_handler_set_data(struct buffer_info *info, void *data)
 {
-	if (!buffer) {
+	if (!info) {
 		ErrPrint("Invalid handle\n");
-		return LB_STATUS_ERROR_INVALID;
+		return DBOX_STATUS_ERROR_INVALID_PARAMETER;
 	}
 
-	buffer->data = data;
-	return LB_STATUS_SUCCESS;
+	info->data = data;
+	return DBOX_STATUS_ERROR_NONE;
 }
 
-HAPI void *buffer_handler_data(struct buffer_info *buffer)
+HAPI void *buffer_handler_data(struct buffer_info *info)
 {
-	if (!buffer) {
+	if (!info) {
 		ErrPrint("Invalid handle\n");
 		return NULL;
 	}
 
-	return buffer->data;
+	return info->data;
 }
 
 HAPI int buffer_handler_destroy(struct buffer_info *info)
 {
 	Eina_List *l;
-	struct buffer *buffer;
+	dynamicbox_fb_t buffer;
 
 	if (!info) {
 		DbgPrint("Buffer is not created yet. info is NIL\n");
-		return LB_STATUS_SUCCESS;
+		return DBOX_STATUS_ERROR_NONE;
 	}
 
 	EINA_LIST_FOREACH(s_info.pixmap_list, l, buffer) {
@@ -1694,10 +1671,10 @@ HAPI int buffer_handler_destroy(struct buffer_info *info)
 	buffer_handler_unload(info);
 	DbgFree(info->id);
 	DbgFree(info);
-	return LB_STATUS_SUCCESS;
+	return DBOX_STATUS_ERROR_NONE;
 }
 
-HAPI struct buffer_info *buffer_handler_create(struct inst_info *inst, enum buffer_type type, int w, int h, int pixel_size)
+HAPI struct buffer_info *buffer_handler_create(struct inst_info *inst, enum dynamicbox_fb_type type, int w, int h, int pixel_size)
 {
 	struct buffer_info *info;
 
@@ -1708,10 +1685,10 @@ HAPI struct buffer_info *buffer_handler_create(struct inst_info *inst, enum buff
 	}
 
 	switch (type) {
-	case BUFFER_TYPE_SHM:
-		if (pixel_size != DEFAULT_PIXELS) {
-			DbgPrint("SHM only supportes %d bytes pixels (requested: %d)\n", DEFAULT_PIXELS, pixel_size);
-			pixel_size = DEFAULT_PIXELS;
+	case DBOX_FB_TYPE_SHM:
+		if (pixel_size != DYNAMICBOX_CONF_DEFAULT_PIXELS) {
+			DbgPrint("SHM only supportes %d bytes pixels (requested: %d)\n", DYNAMICBOX_CONF_DEFAULT_PIXELS, pixel_size);
+			pixel_size = DYNAMICBOX_CONF_DEFAULT_PIXELS;
 		}
 
 		info->id = strdup(SCHEMA_SHM "-1");
@@ -1721,10 +1698,10 @@ HAPI struct buffer_info *buffer_handler_create(struct inst_info *inst, enum buff
 			return NULL;
 		}
 		break;
-	case BUFFER_TYPE_FILE:
-		if (pixel_size != DEFAULT_PIXELS) {
-			DbgPrint("FILE only supportes %d bytes pixels (requested: %d)\n", DEFAULT_PIXELS, pixel_size);
-			pixel_size = DEFAULT_PIXELS;
+	case DBOX_FB_TYPE_FILE:
+		if (pixel_size != DYNAMICBOX_CONF_DEFAULT_PIXELS) {
+			DbgPrint("FILE only supportes %d bytes pixels (requested: %d)\n", DYNAMICBOX_CONF_DEFAULT_PIXELS, pixel_size);
+			pixel_size = DYNAMICBOX_CONF_DEFAULT_PIXELS;
 		}
 
 		info->id = strdup(SCHEMA_FILE "/tmp/.live.undefined");
@@ -1734,7 +1711,7 @@ HAPI struct buffer_info *buffer_handler_create(struct inst_info *inst, enum buff
 			return NULL;
 		}
 		break;
-	case BUFFER_TYPE_PIXMAP:
+	case DBOX_FB_TYPE_PIXMAP:
 		info->id = strdup(SCHEMA_PIXMAP "0:0");
 		if (!info->id) {
 			ErrPrint("Heap: %s\n", strerror(errno));
@@ -1748,8 +1725,7 @@ HAPI struct buffer_info *buffer_handler_create(struct inst_info *inst, enum buff
 		return NULL;
 	}
 
-	info->lock = NULL;
-	info->lock_fd = -1;
+	info->lock_info = NULL;
 	info->w = w;
 	info->h = h;
 	info->pixel_size = pixel_size;

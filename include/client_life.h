@@ -31,7 +31,7 @@ struct packet;
  * \note
  * Create & Destroy
  */
-extern struct client_node *client_create(pid_t pid, int handle);
+extern struct client_node *client_create(pid_t pid, int handle, const char *direct_addr);
 #define client_destroy(client)	client_unref(client)
 
 /*!
@@ -102,4 +102,6 @@ extern int client_browse_list(const char *cluster, const char *category, int (*c
 extern int client_nr_of_subscriber(const char *cluster, const char *category);
 
 extern int client_broadcast(struct inst_info *inst, struct packet *packet);
+
+extern const char *client_direct_addr(const struct client_node *client);
 /* End of a file */
